@@ -1,2 +1,2 @@
 # graph-ql
-Blog Post and pyhton source code for the GraphQL Research
+Blog Post and python source code for the GraphQL Research
