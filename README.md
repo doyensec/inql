@@ -4,6 +4,6 @@ Author:	Paolo Stagno (@Void_Sec)
 
 Version:	1.0
 
-Usage: GraphQL_Introspection.py -t 192.168.1.82/examples/04-bank/graphql -o report.html
+Usage: GraphQL_Introspection.py -t http://192.168.1.82/examples/04-bank/graphql -o report.html
 
 ![Preview](GraphQL_Introspection.png)
