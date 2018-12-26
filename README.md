@@ -11,6 +11,6 @@ A tool to query a GraphQL endpoint with introspection in order to retrieve queri
 
 Usage: `$python GraphQL_Introspection.py -t http://192.168.1.82/examples/04-bank/graphql -o report-graphql`
 
-The resulting HTML page will contain details for available queries and mutations, as shown here:
+The resulting HTML page will contain details for all available Queries, Mutations and Subscriptions as shown here:
 
 ![Preview](Introspection/GraphQL_Introspection_Output.png)
