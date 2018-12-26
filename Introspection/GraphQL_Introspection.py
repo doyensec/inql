@@ -263,8 +263,6 @@ def main():
                                         output_file.write("<ul><li class='type'>{0}</li></ul>\n".format(
                                             rt[i]['fields'][j]['type']['ofType']['name']))
                                 x = 0
-                                """if (rt[i]['fields'][j]['args'] is not None and (rt[i]['name'] not in primitives) and (
-                                        rt[i]['kind'] not in advanced_kind)):"""
                                 if ((custom is False and ((rt[i]['fields'][j]['args'] is not None) and (
                                         rt[i]['name'] not in primitives) and (
                                                                   rt[i]['kind'] not in advanced_kind) and (
