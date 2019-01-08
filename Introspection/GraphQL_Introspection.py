@@ -10,6 +10,7 @@ import argparse
 import sys
 import time
 import os
+import json
 from urlparse import urlparse
 from datetime import date
 
@@ -144,28 +145,48 @@ def check_dir(file_path):
 
 def main():
     parser = argparse.ArgumentParser(prog="GraphQL_Introspection.py", description="GraphQL Introspection")
-    parser.add_argument("-t", required=True, dest="target",
+    parser.add_argument("-t", dest="target", default=None,
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
-    parser.add_argument("-k", dest="key", help="API Authentication Key")
+    parser.add_argument("-k", dest="key", help="API Authentication Key")    
     parser.add_argument("-c", dest="custom", action='store_true', default=False,
                         help="Add custom objects to the output (verbose)")
+    parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     args = parser.parse_args()
 
-    if args.target:
-        URL = urlparse(args.target).netloc
+    if args.target is None and args.schema_json_file is None:
+        print RED + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + WHITE
+        sys.exit(1)
+
+    if args.target is not None and args.schema_json_file is not None:
+        print RED + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + WHITE
+        sys.exit(1)        
+    
+    if args.target is not None or args.schema_json_file is not None :
+        if args.target is not None :
+            URL = urlparse(args.target).netloc
+        else:
+            URL = "localschema"
         timestamp = time.time()  # str(int(timestamp))
         today = str(date.today())
         # Create directory structure
         check_dir(URL + "/")
 
         with open(URL + "/doc-" + today + ".html", 'w') as output_file:
-            result = query(args.target, args.key)
+            if args.target is not None:
+                result = query(args.target, args.key)
+                # returns a dict
+                result = result.json()
+            else:
+                with open(args.schema_json_file,"r") as s:
+                    result_raw = s.read()
+                    result = json.loads(result_raw)
             # Printing schema file
             schema_file = open(URL + "/schema-" + today + ".txt", "w")
-            schema_file.write(result.text)  # return clean json
+            if args.target is not None:
+                schema_file.write(json.dumps(result))  # return clean json
+            else:
+                schema_file.write(result_raw)
             schema_file.close()
-            # returns a dict
-            result = result.json()
             # --------------------
             output_file.write("<html><head><title>GraphQL Schema</title>")
             output_file.write(stl)
