@@ -3,7 +3,7 @@
 # Title: GraphQL Introspection
 # Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries Mutations & Subscriptions
 # Author: Paolo Stagno (@Void_Sec)
-# Version: 1.5
+# Version: 1.6
 
 import requests
 import argparse
@@ -147,18 +147,20 @@ def main():
     parser = argparse.ArgumentParser(prog="GraphQL_Introspection.py", description="GraphQL Introspection")
     parser.add_argument("-t", dest="target", default=None,
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
+    parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     parser.add_argument("-k", dest="key", help="API Authentication Key")    
     parser.add_argument("-c", dest="custom", action='store_true', default=False,
                         help="Add custom objects to the output (verbose)")
-    parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     args = parser.parse_args()
 
     if args.target is None and args.schema_json_file is None:
         print RED + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + WHITE
+        parser.print_help()
         sys.exit(1)
 
     if args.target is not None and args.schema_json_file is not None:
         print RED + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + WHITE
+        parser.print_help()
         sys.exit(1)        
     
     if args.target is not None or args.schema_json_file is not None :
