@@ -4,6 +4,7 @@
 # Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries Mutations & Subscriptions
 # Author: Paolo Stagno (@Void_Sec)
 # Version: 1.6
+# Added proxies by @deurstijl
 
 import requests
 import argparse
@@ -13,6 +14,7 @@ import os
 import json
 from urlparse import urlparse
 from datetime import date
+
 
 RED = "\033[1;31;10m"
 GREEN = "\033[1;32;10m"
@@ -101,7 +103,7 @@ div.box {
 """
 
 
-def query(target, key):
+def query(target, key, proxyDict):
     # Introspection Query
     # -----------------------
     query = "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"
@@ -118,12 +120,12 @@ def query(target, key):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
         }
     try:
-        request = requests.post(target, json={"query": query}, headers=headers)
+        request = requests.post(target, json={"query": query}, headers=headers, proxies=proxyDict, verify=False)
         if request.status_code == 200:
             return request
         else:
             print "Trying the old introspection query"
-            request = requests.post(target, json={"query": old_query}, headers=headers)
+            request = requests.post(target, json={"query": old_query}, headers=headers, proxies=proxyDict, verify=False)
             if request.status_code == 200:
                 return request
             else:
@@ -151,6 +153,10 @@ def main():
     parser.add_argument("-k", dest="key", help="API Authentication Key")    
     parser.add_argument("-c", dest="custom", action='store_true', default=False,
                         help="Add custom objects to the output (verbose)")
+    parser.add_argument('-p', dest="proxy", default=None,
+                        help='IP of web proxy to go through (http://127.0.0.1:8080)')
+
+
     args = parser.parse_args()
 
     if args.target is None and args.schema_json_file is None:
@@ -161,8 +167,13 @@ def main():
     if args.target is not None and args.schema_json_file is not None:
         print RED + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + WHITE
         parser.print_help()
-        sys.exit(1)        
-    
+        sys.exit(1)       
+
+    if args.proxy is not None:
+    	proxyDict = { "http"  : args.proxy, "https" : args.proxy }
+    else:
+    	proxyDict = {}
+
     if args.target is not None or args.schema_json_file is not None :
         if args.target is not None :
             URL = urlparse(args.target).netloc
@@ -175,7 +186,7 @@ def main():
 
         with open(URL + "/doc-" + today + ".html", 'w') as output_file:
             if args.target is not None:
-                result = query(args.target, args.key)
+                result = query(args.target, args.key, proxyDict)
                 # returns a dict
                 result = result.json()
             else:
