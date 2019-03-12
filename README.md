@@ -30,7 +30,7 @@ optional arguments:
   
 $python GraphQL_Introspection.py -t http://192.168.1.82/examples/04-bank/graphql
 ```
-###Future Updates
+### Future Updates
 
 We are currenyly working on "porting" this script into a Burp Extension with a nice and clean GUI.
 Do not be afraid, it will also be possible to use it as a stand-alone script.
