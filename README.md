@@ -11,7 +11,11 @@ The script will also generate templates (with optional placeholders) for all the
 
 The resulting HTML page will contain details for all available Queries, Mutations and Subscriptions as shown here:
 
-![Preview](Introspection/GraphQL_Introspection_Output.png)
+![Preview](Misc/GraphQL_Introspection_Output.png)
+
+Templates:
+
+![Preview](Misc/Introspection_Templates.png)
 
 Usage:
 ```
