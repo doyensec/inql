@@ -666,7 +666,7 @@ def main():
             print WHITE + "[-] Writing Mutations Templates" + WHITE
             index = 0
             for mname in m_name:
-                file_write(URL, "mutation", today, timestamp, mname, "{\"mutation\":\"mutation{" + mname + "(", "w")
+                file_write(URL, "mutation", today, timestamp, mname, "{\"query\":\"mutation{" + mname + "(", "w")
                 for argsname in m_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
@@ -691,7 +691,7 @@ def main():
             print WHITE + "[-] Writing Subscriptions Templates" + WHITE
             index = 0
             for sname in s_name:
-                file_write(URL, "subscription", today, timestamp, sname, "{\"subscription\":\"subscription{{" + sname + "(", "w")
+                file_write(URL, "subscription", today, timestamp, sname, "{\"query\":\"subscription{{" + sname + "(", "w")
                 for argsname in s_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
