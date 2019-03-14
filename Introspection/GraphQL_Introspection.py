@@ -3,7 +3,7 @@
 """
 Title: GraphQL Introspection
 Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
-Version: 3.0
+Version: 3.1
 Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate Queries, Mutations & Subscriptions templates (with optional placeholders) for all the known types.
 """
@@ -181,7 +181,7 @@ def check_dir(file_path):
         os.makedirs(directory)
 
 
-def file_write(URL, file_path, today, file_name, content, mode):
+def file_write(URL, file_path, today, timestamp, file_name, content, mode):
     """
     This function is used in order to generate the Queries Mutations & Subscriptions templates.
     Path and file name will be generated as follow:
@@ -195,6 +195,9 @@ def file_write(URL, file_path, today, file_name, content, mode):
     :param today:
         date.today (2019-03-12)
 
+    :param timestamp:
+        timestamp
+
     :param file_name:
         query, mutation, subscription names
 
@@ -207,7 +210,7 @@ def file_write(URL, file_path, today, file_name, content, mode):
     :return:
         none
     """
-    write_file = open(URL + "/" + file_path + "/" + today + "/" + file_name + ".txt", mode)
+    write_file = open(URL + "/" + file_path + "/" + today + "/" + timestamp + "/" + file_name + ".txt", mode)
     write_file.write(content)
 
 
@@ -294,14 +297,14 @@ def main():
             print YELLOW + "Detect arguments is ENABLED, known types will be replaced with placeholder values" + WHITE
         if args.custom:
             print YELLOW + "Custom objects is ENABLED, output documentation will be very verbose" + WHITE
-        # Unused right now but can be useful to generate 'unique' file names for multiple documentation
+        # Used to generate 'unique' file names for multiple documentation
         timestamp = time.time()  # Can be printed with: str(int(timestamp))
         today = str(date.today())
         # Create directories structure
         # -----------------------
-        check_dir(URL + "/query/" + today + "/")
-        check_dir(URL + "/mutation/" + today + "/")
-        check_dir(URL + "/subscription/" + today + "/")
+        check_dir(URL + "/query/" + today + "/" + str(int(timestamp)) + "/")
+        check_dir(URL + "/mutation/" + today + "/" + str(int(timestamp)) + "/")
+        check_dir(URL + "/subscription/" + today + "/" + str(int(timestamp)) + "/")
         # -----------------------
         # Setup lists for templates generation
         # -----------------------
@@ -315,7 +318,7 @@ def main():
         # -----------------------
 
         # Generate the documentation for the target
-        with open(URL + "/doc-" + today + ".html", 'w') as output_file:
+        with open(URL + "/doc-" + today + "-" + str(int(timestamp)) + ".html", 'w') as output_file:
             if args.target is not None:
                 # Parse response from the GraphQL endpoint
                 result = query(args.target, args.key, proxyDict)
@@ -327,7 +330,7 @@ def main():
                     result_raw = s.read()
                     result = json.loads(result_raw)
             # Write schema file
-            schema_file = open(URL + "/schema-" + today + ".txt", "w")
+            schema_file = open(URL + "/schema-" + today + "-" + str(int(timestamp)) + ".txt", "w")
             if args.target is not None:
                 # returns a prettified json
                 schema_file.write(json.dumps(result))
@@ -638,24 +641,24 @@ def main():
             print WHITE + "[-] Writing Queries Templates" + WHITE
             index = 0
             for qname in q_name:
-                file_write(URL, "query", today, qname, "{\"query\":\"query{" + qname + "(", "w")
+                file_write(URL, "query", today, str(int(timestamp)), qname, "{\"query\":\"query{" + qname + "(", "w")
                 for argsname in q_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "query", today, qname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "query", today, str(int(timestamp)), qname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "query", today, qname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "query", today, str(int(timestamp)), qname, argsname + ":" + args_type.pop() + " ", "a")
                     else:
                         args_type.pop()
                 # Query name
-                file_write(URL, "query", today, qname, "){", "a")
+                file_write(URL, "query", today, str(int(timestamp)), qname, "){", "a")
                 # Query args
                 for argsname in q_args_name[index]:
-                    file_write(URL, "query", today, qname, argsname + " ", "a")
+                    file_write(URL, "query", today, str(int(timestamp)), qname, argsname + " ", "a")
                 # Close query
-                file_write(URL, "query", today, qname, "}}\"}", "a")
+                file_write(URL, "query", today, str(int(timestamp)), qname, "}}\"}", "a")
                 index += 1
             # --------------------
             # MUTATION
@@ -663,24 +666,24 @@ def main():
             print WHITE + "[-] Writing Mutations Templates" + WHITE
             index = 0
             for mname in m_name:
-                file_write(URL, "mutation", today, mname, "{\"mutation\":\"mutation{" + mname + "(", "w")
+                file_write(URL, "mutation", today, str(int(timestamp)), mname, "{\"mutation\":\"mutation{" + mname + "(", "w")
                 for argsname in m_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "mutation", today, mname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "mutation", today, str(int(timestamp)), mname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "mutation", today, mname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "mutation", today, str(int(timestamp)), mname, argsname + ":" + args_type.pop() + " ", "a")
                     else:
                         args_type.pop()
                 # Mutation name
-                file_write(URL, "mutation", today, mname, "){", "a")
+                file_write(URL, "mutation", today, str(int(timestamp)), mname, "){", "a")
                 # Mutation args
                 for argsname in m_args_name[index]:
-                    file_write(URL, "mutation", today, mname, argsname + " ", "a")
+                    file_write(URL, "mutation", today, str(int(timestamp)), mname, argsname + " ", "a")
                 # Close mutation
-                file_write(URL, "mutation", today, mname, "}}\"}", "a")
+                file_write(URL, "mutation", today, str(int(timestamp)), mname, "}}\"}", "a")
                 index += 1
             # --------------------
             # SUBSCRIPTION
@@ -688,24 +691,24 @@ def main():
             print WHITE + "[-] Writing Subscriptions Templates" + WHITE
             index = 0
             for sname in s_name:
-                file_write(URL, "subscription", today, sname, "{\"subscription\":\"subscription{{" + sname + "(", "w")
+                file_write(URL, "subscription", today, str(int(timestamp)), sname, "{\"subscription\":\"subscription{{" + sname + "(", "w")
                 for argsname in s_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "subscription", today, sname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "subscription", today, str(int(timestamp)), sname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "subscription", today, sname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "subscription", today, str(int(timestamp)), sname, argsname + ":" + args_type.pop() + " ", "a")
                     else:
                         args_type.pop()
                 # Subscription name
-                file_write(URL, "subscription", today, sname, "){", "a")
+                file_write(URL, "subscription", today, str(int(timestamp)), sname, "){", "a")
                 # Subscription args
                 for argsname in s_args_name[index]:
-                    file_write(URL, "subscription", today, sname, argsname + " ", "a")
+                    file_write(URL, "subscription", today, str(int(timestamp)), sname, argsname + " ", "a")
                 # Close subscription
-                file_write(URL, "subscription", today, sname, "}}\"}", "a")
+                file_write(URL, "subscription", today, str(int(timestamp)), sname, "}}\"}", "a")
                 index += 1
             # --------------------
             # THE END, they all lived happily ever after (hopefully)
