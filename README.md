@@ -19,18 +19,17 @@ Templates:
 
 Usage:
 ```
-GraphQL_Introspection.py [-h] [-t TARGET] [-f SCHEMA_JSON_FILE]
-                                [-k KEY] [-p PROXY] [-d] [-c]
+usage: GraphQL_Introspection.py [-h] [-t TARGET] [-f SCHEMA_JSON_FILE]
+                                [-k KEY] [-p PROXY] [-d]
 
-optional arguments:
+arguments:
   -h, --help           show this help message and exit
   -t TARGET            Remote GraphQL Endpoint (https://<Target_IP>/graphql)
   -f SCHEMA_JSON_FILE  Schema file in JSON format
   -k KEY               API Authentication Key
   -p PROXY             IP of web proxy to go through (http://127.0.0.1:8080)
   -d                   Replace known GraphQL arguments types with placeholder
-                       values (useful for Burp Suite repeater)
-  -c                   Add custom objects to the documentation output (verbose)
+                       values (useful for Burp Suite)
   
 $python GraphQL_Introspection.py -t http://192.168.1.82/examples/04-bank/graphql
 ```
