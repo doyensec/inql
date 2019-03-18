@@ -3,7 +3,7 @@
 """
 Title: GraphQL Introspection
 Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
-Version: 3.1
+Version: 4.0
 Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate Queries, Mutations & Subscriptions templates (with optional placeholders) for all the known types.
 """
@@ -260,8 +260,6 @@ def main():
                         help='IP of web proxy to go through (http://127.0.0.1:8080)')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")
-    parser.add_argument("-c", dest="custom", action='store_true', default=False,
-                        help="Add custom objects to the output (verbose)")
     args = parser.parse_args()
     # -----------------------
 
@@ -295,8 +293,6 @@ def main():
         detect = args.detect
         if detect:
             print YELLOW + "Detect arguments is ENABLED, known types will be replaced with placeholder values" + WHITE
-        if args.custom:
-            print YELLOW + "Custom objects is ENABLED, output documentation will be very verbose" + WHITE
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
@@ -311,12 +307,20 @@ def main():
         args_type = []
         q_name = []
         q_args_name = []
+        q_type = []
         m_name = []
         m_args_name = []
+        m_type = []
         s_name = []
         s_args_name = []
+        s_type = []
+        # holds custom objects
+        # [[obj name 1,field name 1,field name 2],[obj name 2,field name 1,field name 2, field name 3]]
+        fields_names = []
         # -----------------------
-
+        # Custom Objects are required for fields names in the documentation and templates generation
+        # old -c parameter, enabled by default
+        custom = True
         # Generate the documentation for the target
         with open(URL + "/doc-" + today + "-" + timestamp + ".html", 'w') as output_file:
             if args.target is not None:
@@ -352,27 +356,26 @@ def main():
                 "<li class='field'>Fields</li></ul></div>")
             # --------------------
             output_file.write("<p>Available Operations Types:</p>")
-            custom = args.custom
             try:
                 # Print available operation types, usually: Query, Mutations & Subscriptions
                 # This part also holds custom names (schema[Type]['name'] != 'RootQuery', 'RootMutation', 'Subscriptions')
                 # --------------------
                 if result['data']['__schema']['mutationType'] is not None:
-                    output_file.write("<ul><li class='mutation'>{0}</li>\n".format(
+                    output_file.write("<ul><li class='mutation'>{0}</li>".format(
                         result['data']['__schema']['mutationType']['name']))
                     Mutation = result['data']['__schema']['mutationType']['name']
                 else:
                     # Needed since not all GraphQL endpoints use/have all the three types (Query, Mutations & Subscriptions)
                     Mutation = None
                 if result['data']['__schema']['queryType'] is not None:
-                    output_file.write("<li class='query'>{0}</li>\n".format(
+                    output_file.write("<li class='query'>{0}</li>".format(
                         result['data']['__schema']['queryType']['name']))
                     Query = result['data']['__schema']['queryType']['name']
                 else:
                     Query = None
                 if result['data']['__schema']['subscriptionType'] is not None:
                     output_file.write(
-                        "<li class='subscription'>{0}</li></ul>\n".format(
+                        "<li class='subscription'>{0}</li></ul>".format(
                             result['data']['__schema']['subscriptionType']['name']))
                     Subscription = result['data']['__schema']['subscriptionType']['name']
                 else:
@@ -387,26 +390,30 @@ def main():
                 #       mutationType
                 #       queryType
                 #       subscriptionType
-                #       types
-                #              name (RootQuery, RootMutation, Subscriptions)
+                #       types (kind, name, description)
+                #              name (RootQuery, RootMutation, Subscriptions, [custom] OBJECT)
                 #              fields
-                #                     name (nome query)
+                #                     name (query names)
                 #                     args
-                #                            name (arg name)
+                #                            name (args names)
                 #                            type
-                #                                   name (type arg)
+                #                                   name (args types)
                 ##########################################################################################
                 # Start looping trough types
                 if result['data']['__schema']['types'] is not None:
                     rt = result['data']['__schema']['types']
+                    # holds the number of custom objects
+                    xxx = 0
                     for types in rt:
                         j = 0
                         # Data -> Schema -> Types (kind, name, description)
-                        # filtering out kind == SCALAR & name != primitive types
+                        # filtering out primitive types
                         # TODO: exclude interfaces & union types
                         primitives = ['Int', 'Float', 'String', 'Boolean', 'ID', '__TypeKind', '__Type', '__Schema',
                                       '__Field', '__InputValue', '__EnumValue', '__Directive', '__DirectiveLocation']
                         advanced_kind = ['INPUT_OBJECT']
+                        # This super if is BOOLEAN able to switch between ENABLED custom types parameter (-c)
+                        # It will selectively routine trough values needed to print
                         if ((custom is False and ((rt[i]['kind'] is not None and rt[i]['name'] is not None) and (
                                 rt[i]['name'] not in primitives) and (rt[i]['kind'] not in advanced_kind) and (
                                                           (rt[i]['kind'] == "OBJECT") and (
@@ -414,23 +421,26 @@ def main():
                                                           rt[i]['name'] == Subscription))))) or (
                                 custom is not False and ((rt[i]['kind'] is not None and rt[i]['name'] is not None) and (
                                 rt[i]['name'] not in primitives) and (rt[i]['kind'] not in advanced_kind)))):
-                            output_file.write("<li>{0}</li>\n".format(rt[i]['kind']))
+                            output_file.write("<li>{0}</li>".format(rt[i]['kind']))
                             # Print our types RootQuery, RootMutation, Subscriptions
                             # --------------------
                             if rt[i]['name'] == Mutation:
-                                output_file.write("<li class='mutation'>{0}</li>\n".format(rt[i]['name']))
+                                output_file.write("<li class='mutation'>{0}</li>".format(rt[i]['name']))
                             elif rt[i]['name'] == Query:
-                                output_file.write("<li class='query'>{0}</li>\n".format(rt[i]['name']))
+                                output_file.write("<li class='query'>{0}</li>".format(rt[i]['name']))
                             elif rt[i]['name'] == Subscription:
-                                output_file.write("<li class='subscription'>{0}</li>\n".format(rt[i]['name']))
-                            else:
-                                if rt[i]['description'] is not None:
-                                    output_file.write(
-                                        "<span class='description'>{0}</span>\n".format(rt[i]['description']))
-                                output_file.write("<span class='type'>{0}</span>\n".format(rt[i]['name']))
+                                output_file.write("<li class='subscription'>{0}</li>".format(rt[i]['name']))
+                            # Handles custom objects (FIELDS)
+                            elif rt[i]['kind'] == "OBJECT" and rt[i]['name'] is not None:
+                                output_file.write("<span class='type'>{0}</span><br>".format(rt[i]['name']))
+                                fields_names.append([rt[i]['name']])
+                                xxx += 1
+                            if rt[i]['description'] is not None:
+                                output_file.write(
+                                    "<span class='description'>{0}</span><br>".format(rt[i]['description']))
                             # --------------------
                         k = 0
-                        # Retrieving general docs (I honestly do not remember what kind of info are being extracted here, maybe custom types have them)
+                        # Retrieving general docs regarding primitives (filtered out from documentation, not needed)
                         # Data -> Schema -> Types -> enumValues (name, description, isDeprecated, deprecationReason)
                         # My super BOOLEAN IF, used to switch between ENABLED custom types parameter (-c)
                         if ((custom is False and (
@@ -444,24 +454,23 @@ def main():
                             for enumValues in rt[i]['enumValues']:
                                 # Name
                                 if rt[i]['enumValues'][k]['name'] is not None:
-                                    output_file.write("<span>{0}</span>\n".format(rt[i]['enumValues'][k]['name']))
+                                    output_file.write("<span>{0}</span><br>".format(rt[i]['enumValues'][k]['name']))
                                 # Description
                                 if rt[i]['enumValues'][k]['description'] is not None:
-                                    output_file.write("<span class='description'>{0}</span>\n".format(
+                                    output_file.write("<span class='description'>{0}</span><br>".format(
                                         rt[i]['enumValues'][k]['description']))
                                 # Is Deprecated?
                                 if rt[i]['enumValues'][k]['isDeprecated'] is not False and rt[i]['enumValues'][k][
                                     'isDeprecated'] is not None:
-                                    output_file.write("<span class='deprecated'>Is Deprecated</span>\n")
+                                    output_file.write("<span class='deprecated'>Is Deprecated</span><br>")
                                 # Deprecation Reason
                                 if rt[i]['enumValues'][k]['deprecationReason'] is not None:
-                                    output_file.write("<span>Reason: {0}</span>\n".format(
+                                    output_file.write("<span>Reason: {0}</span><br>".format(
                                         rt[i]['enumValues'][k]['deprecationReason']))
                                 k = k + 1
                         # Retrieving queries, mutations and subscriptions information
                         # Data -> Schema -> Types -> Fields (name, isDeprecated, deprecationReason, description)
-                        # This super if is BOOLEAN able to switch between ENABLED custom types parameter (-c)
-                        # It will selectively routine trough values needed to print
+                        # My super BOOLEAN IF, used to switch between ENABLED custom types parameter (-c)
                         if ((custom is False and ((
                                                           rt[i]['fields'] is not None) and (
                                                           rt[i]['name'] not in primitives) and (
@@ -473,69 +482,90 @@ def main():
                                                                  rt[i]['fields'] is not None) and (
                                                                  rt[i]['name'] not in primitives) and (
                                                                  rt[i]['kind'] not in advanced_kind)))):
-                            # Printing out queries, mutations and subscriptions names
+                            # Printing out queries, mutations, subscriptions and custom object names
                             # --------------------
+                            # number of fields per obj
                             for fields in result['data']['__schema']['types'][i]['fields']:
                                 if rt[i]['fields'][j]['name'] is not None:
                                     # Query
                                     if rt[i]['name'] == Query:
                                         output_file.write(
-                                            "<li class='query'>{0}</li>\n".format(rt[i]['fields'][j]['name']))
+                                            "<li class='query'>{0}</li>".format(rt[i]['fields'][j]['name']))
+                                        # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         q_name.append(rt[i]['fields'][j]['name'])
+                                        if rt[i]['fields'][j]['type']['name'] is not None:
+                                            q_type.append(rt[i]['fields'][j]['type']['name'])
+                                        else:
+                                            q_type.append(rt[i]['fields'][j]['type']['ofType']['name'])
                                     # Mutation
                                     elif rt[i]['name'] == Mutation:
                                         output_file.write(
-                                            "<li class='mutation'>{0}</li>\n".format(rt[i]['fields'][j]['name']))
+                                            "<li class='mutation'>{0}</li>".format(rt[i]['fields'][j]['name']))
+                                        # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         m_name.append(rt[i]['fields'][j]['name'])
+                                        if rt[i]['fields'][j]['type']['name'] is not None:
+                                            m_type.append(rt[i]['fields'][j]['type']['name'])
+                                        else:
+                                            m_type.append(rt[i]['fields'][j]['type']['ofType']['name'])
                                     # Subscription
                                     elif rt[i]['name'] == Subscription:
                                         output_file.write(
-                                            "<li class='subscription'>{0}</li>\n".format(rt[i]['fields'][j]['name']))
+                                            "<li class='subscription'>{0}</li>".format(rt[i]['fields'][j]['name']))
+                                        # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         s_name.append(rt[i]['fields'][j]['name'])
-                                    # Root objects or custom ones
+                                        if rt[i]['fields'][j]['type']['name'] is not None:
+                                            s_type.append(rt[i]['fields'][j]['type']['name'])
+                                        else:
+                                            s_type.append(rt[i]['fields'][j]['type']['ofType']['name'])
+                                    # It handle custom objects
                                     elif rt[i]['kind'] == "OBJECT":
                                         output_file.write(
-                                            "<li class='field'>{0}</li>\n".format(rt[i]['fields'][j]['name']))
-                                    else:
-                                        output_file.write("<li>{0}</li>\n".format(rt[i]['fields'][j]['name']))
+                                            "<span class='field'>{0}</span>&nbsp;&nbsp;".format(
+                                                rt[i]['fields'][j]['name']))
+                                        # here I  add the args name the field list
+                                        # xxx-1 since it will be incremented after the assign, otherwise list out of bound
+                                        fields_names[xxx - 1].append(rt[i]['fields'][j]['name'])
+                                    # Seems that i do not need the following two lines
+                                    # else:
+                                    #    output_file.write("<li>{0}</li>".format(rt[i]['fields'][j]['name']))
                                 # --------------------
                                 # Printing info regarding the queries, mutations and subscriptions above
                                 # --------------------
                                 # Deprecated
                                 if rt[i]['fields'][j]['isDeprecated'] is not False and rt[i]['fields'][j][
                                     'isDeprecated'] is not None:
-                                    output_file.write("<span class='deprecated'>Is Deprecated</span>\n")
+                                    output_file.write("<span class='deprecated'>Is Deprecated</span><br>")
                                 # Deprecated Reason
                                 if rt[i]['fields'][j]['deprecationReason'] is not None:
                                     output_file.write(
-                                        "<span>Reason: {0}</span>\n".format(rt[i]['fields'][j]['deprecationReason']))
+                                        "<span>Reason: {0}</span><br>".format(rt[i]['fields'][j]['deprecationReason']))
                                 # Description
                                 if rt[i]['fields'][j]['description'] is not None and rt[i]['fields'][j][
                                     'description'] != '':
                                     output_file.write(
-                                        "<span class='description'>{0}</span>\n".format(
+                                        "<span class='description'>{0}</span><br>".format(
                                             rt[i]['fields'][j]['description']))
-                                # Name
+                                # Name (fields type)
                                 if rt[i]['fields'][j]['type'] is not None:
                                     if rt[i]['fields'][j]['type']['name'] is not None:
-                                        output_file.write("<span class='type'>{0}</span>\n".format(
+                                        output_file.write("<span class='type'>{0}</span><br>".format(
                                             rt[i]['fields'][j]['type']['name']))
-                                # Type
+                                # oFType
                                 if rt[i]['fields'][j]['type']['ofType'] is not None and \
                                         rt[i]['fields'][j]['type']['ofType']['name'] is not None:
                                     # LIST
                                     if rt[i]['fields'][j]['type']['kind'] is not None and rt[i]['fields'][j]['type'][
                                         'kind'] == "LIST":
-                                        output_file.write("<span class='type'>[{0}]</span>\n".format(
+                                        output_file.write("<span class='type'>[{0}]</span><br>".format(
                                             rt[i]['fields'][j]['type']['ofType']['name']))
                                     # NOT NULL
                                     elif rt[i]['fields'][j]['type']['kind'] is not None and rt[i]['fields'][j]['type'][
                                         'kind'] == "NON_NULL":
-                                        output_file.write("<span class='type'>!{0}</span>\n".format(
+                                        output_file.write("<span class='type'>!{0}</span><br>".format(
                                             rt[i]['fields'][j]['type']['ofType']['name']))
                                     # CUSTOM TYPE
                                     else:
-                                        output_file.write("<span class='type'>{0}</span>\n".format(
+                                        output_file.write("<span class='type'>{0}</span><br>".format(
                                             rt[i]['fields'][j]['type']['ofType']['name']))
                                 # --------------------
                                 x = 0
@@ -553,7 +583,7 @@ def main():
                                         s_args_name[j].append("")
                                     args_type.append("")
                                 # --------------------
-                                # Again, super if BOOLEAN based for custom types parameters (-c)
+                                # My super BOOLEAN IF, used to switch between ENABLED custom types parameter (-c)
                                 if ((custom is False and ((rt[i]['fields'][j]['args'] is not None) and (
                                         rt[i]['name'] not in primitives) and (
                                                                   rt[i]['kind'] not in advanced_kind) and (
@@ -570,11 +600,11 @@ def main():
                                         # Default value if present
                                         if rt[i]['fields'][j]['args'][x]['defaultValue'] is not None:
                                             output_file.write(
-                                                "<span>{0}</span>\n".format(
+                                                "<span>{0}</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['defaultValue']))
                                         # ARGS name
                                         if rt[i]['fields'][j]['args'][x]['name'] is not None:
-                                            output_file.write("<span class='argument'>{0}</span>\n".format(
+                                            output_file.write("<span class='argument'>{0}</span>&nbsp;&nbsp;".format(
                                                 rt[i]['fields'][j]['args'][x]['name']))
                                             # Will append the ARG name to the correct list
                                             # based on if it is an argument from query, mutation or subscription
@@ -592,9 +622,9 @@ def main():
                                         # ARGS description
                                         if rt[i]['fields'][j]['args'][x]['description'] is not None and \
                                                 rt[i]['fields'][j]['args'][x]['description'] != '':
-                                            output_file.write("<span class='description'>{0}</span>\n".format(
+                                            output_file.write("<span class='description'>{0}</span><br>".format(
                                                 rt[i]['fields'][j]['args'][x]['description']))
-                                    # --------------------
+                                        # --------------------
                                         # Printing out ARGS types
                                         # Data -> Schema -> Types -> Fields -> Args -> Type (name, ofType, kind)
                                         # --------------------
@@ -603,30 +633,30 @@ def main():
                                                 rt[i]['kind'] not in advanced_kind):
                                             # LIST
                                             if rt[i]['fields'][j]['args'][x]['type']['kind'] == "LIST":
-                                                output_file.write("<span class='type'>[{0}]</span>\n".format(
+                                                output_file.write("<span class='type'>[{0}]</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 args_type.append(
                                                     "[" + rt[i]['fields'][j]['args'][x]['type']['ofType']['name'] + "]")
                                             # NOT NULL
                                             elif rt[i]['fields'][j]['args'][x]['type']['kind'] == "NON_NULL":
-                                                output_file.write("<span class='type'>!{0}</span>\n".format(
+                                                output_file.write("<span class='type'>!{0}</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 args_type.append(
                                                     "!" + rt[i]['fields'][j]['args'][x]['type']['ofType']['name'])
                                             # CUSTOM TYPE
                                             else:
                                                 if rt[i]['fields'][j]['args'][x]['type']['name'] is not None:
-                                                    output_file.write("<span class='type'>{0}</span>\n".format(
+                                                    output_file.write("<span class='type'>{0}</span><br>".format(
                                                         rt[i]['fields'][j]['args'][x]['type']['name']))
                                                     args_type.append(rt[i]['fields'][j]['args'][x]['type']['name'])
                                                 if rt[i]['fields'][j]['args'][x]['type']['ofType'] is not None:
-                                                    output_file.write("<span>{0}</span>\n".format(
+                                                    output_file.write("<span>{0}</span><br>".format(
                                                         rt[i]['fields'][j]['args'][x]['type']['ofType']))
                                         # --------------------
                                         x += 1
                                 j += 1
                         i += 1
-            # Used for None key exceptions: except KeyError:
+            # For None key exceptions use: except KeyError:
             except Exception:
                 raise
             # Close documentation
@@ -635,78 +665,107 @@ def main():
             # Writing templates
             # Reverse args list in order to use pop
             args_type.reverse()
+            # replacing None items to String for a clean exec
+            q_type = map(str, q_type)
+            m_type = map(str, m_type)
+            s_type = map(str, s_type)
             # --------------------
             # QUERY
             # --------------------
-            print WHITE + "[-] Writing Queries Templates" + WHITE
+            print GREEN + "Writing Queries Templates" + WHITE
             index = 0
             for qname in q_name:
+                print " |  " + str(qname)
                 file_write(URL, "query", today, timestamp, qname, "{\"query\":\"query{" + qname + "(", "w")
                 for argsname in q_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "query", today, timestamp, qname,
+                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + args_type.pop() + " ",
+                                       "a")
                     else:
                         args_type.pop()
                 # Query name
                 file_write(URL, "query", today, timestamp, qname, "){", "a")
-                # Query args
-                for argsname in q_args_name[index]:
-                    file_write(URL, "query", today, timestamp, qname, argsname + " ", "a")
+                # Query fields
+                f_index = 0
+                for fieldsnames in fields_names:
+                    if q_type[index] in fields_names[f_index][0]:
+                        for items in fields_names[f_index][1:]:
+                            file_write(URL, "query", today, timestamp, qname, items + " ", "a")
+                        break
+                    f_index += 1
                 # Close query
                 file_write(URL, "query", today, timestamp, qname, "}}\"}", "a")
                 index += 1
             # --------------------
             # MUTATION
             # --------------------
-            print WHITE + "[-] Writing Mutations Templates" + WHITE
+            print GREEN + "Writing Mutations Templates" + WHITE
             index = 0
             for mname in m_name:
+                print " |  " + str(mname)
                 file_write(URL, "mutation", today, timestamp, mname, "{\"query\":\"mutation{" + mname + "(", "w")
                 for argsname in m_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "mutation", today, timestamp, mname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "mutation", today, timestamp, mname,
+                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "mutation", today, timestamp, mname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "mutation", today, timestamp, mname, argsname + ":" + args_type.pop() + " ",
+                                       "a")
                     else:
                         args_type.pop()
                 # Mutation name
                 file_write(URL, "mutation", today, timestamp, mname, "){", "a")
-                # Mutation args
-                for argsname in m_args_name[index]:
-                    file_write(URL, "mutation", today, timestamp, mname, argsname + " ", "a")
+                # Mutation fields
+                f_index = 0
+                for fieldsnames in fields_names:
+                    if m_type[index] in fields_names[f_index][0]:
+                        for items in fields_names[f_index][1:]:
+                            file_write(URL, "mutation", today, timestamp, mname, items + " ", "a")
+                        break
+                    f_index += 1
                 # Close mutation
                 file_write(URL, "mutation", today, timestamp, mname, "}}\"}", "a")
                 index += 1
             # --------------------
             # SUBSCRIPTION
             # --------------------
-            print WHITE + "[-] Writing Subscriptions Templates" + WHITE
+            print GREEN + "Writing Subscriptions Templates" + WHITE
             index = 0
             for sname in s_name:
-                file_write(URL, "subscription", today, timestamp, sname, "{\"query\":\"subscription{{" + sname + "(", "w")
+                print " |  " + str(sname)
+                file_write(URL, "subscription", today, timestamp, sname, "{\"query\":\"subscription{" + sname + "(",
+                           "w")
                 for argsname in s_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
-                            file_write(URL, "subscription", today, timestamp, sname, argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                            file_write(URL, "subscription", today, timestamp, sname,
+                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "subscription", today, timestamp, sname, argsname + ":" + args_type.pop() + " ", "a")
+                            file_write(URL, "subscription", today, timestamp, sname,
+                                       argsname + ":" + args_type.pop() + " ", "a")
                     else:
                         args_type.pop()
                 # Subscription name
                 file_write(URL, "subscription", today, timestamp, sname, "){", "a")
-                # Subscription args
-                for argsname in s_args_name[index]:
-                    file_write(URL, "subscription", today, timestamp, sname, argsname + " ", "a")
+                # Subscription fields
+                f_index = 0
+                for fieldsnames in fields_names:
+                    if s_type[index] in fields_names[f_index][0]:
+                        for items in fields_names[f_index][1:]:
+                            file_write(URL, "subscription", today, timestamp, sname, items + " ", "a")
+                        break
+                    f_index += 1
                 # Close subscription
                 file_write(URL, "subscription", today, timestamp, sname, "}}\"}", "a")
                 index += 1
