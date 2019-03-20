@@ -4,7 +4,7 @@
 With the increasing popularity of [GraphQL](https://graphql.org/) technology, we will be using this repository to publish scripts and other resources that can facilitate security testing efforts.
 
 ## GraphQL Introspection
-*Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec)) 
+*Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com)) 
 
 A tool to query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate templates (with optional placeholders) for all the known types, usefull for Burp Suite repeater.
@@ -33,6 +33,11 @@ arguments:
   
 $python GraphQL_Introspection.py -t http://192.168.1.82/examples/04-bank/graphql
 ```
+
+Terminal Output:
+
+![Preview](Misc/Terminal_Output.png)
+
 ### Future Updates
 
 We are currenyly working on "porting" this script into a Burp Extension with a nice and clean GUI.

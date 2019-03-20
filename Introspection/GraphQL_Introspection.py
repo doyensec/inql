@@ -3,7 +3,7 @@
 """
 Title: GraphQL Introspection
 Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
-Version: 4.0
+Version: 4.1
 Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate Queries, Mutations & Subscriptions templates (with optional placeholders) for all the known types.
 """
@@ -220,14 +220,16 @@ def detect_type(types):
 
     :param types:
         Known types: String, Boolean, Float, Int, NOT_NULL
-        TODO: add the support for custom objects and lists
+        TODO: add the support for custom objects and lists (partially handled since v4.1)
 
     :return:
         Returns a placeholder accordingly to the provided type
     """
+    # strip the ! character (not null symbol) before returning the type
+    types = types.replace("!", "")
     # Switch between known args types
     if "String" in types:
-        # needed fro Burp Repeater string handling
+        # needed for Burp Repeater string handling
         types = '\\"' + types + '\\"'
         types = types.replace("String", "asd")
     elif "Boolean" in types:
@@ -236,8 +238,6 @@ def detect_type(types):
         types = types.replace("Float", "0.5")
     elif "Int" in types:
         types = types.replace("Int", "1")
-    # strip the ! character (not null symbol) before returning the type
-    types = types.replace("!", "")
     return types
 
 
@@ -304,15 +304,17 @@ def main():
         # -----------------------
         # Setup lists for templates generation
         # -----------------------
-        args_type = []
         q_name = []
         q_args_name = []
+        q_args_type = []
         q_type = []
         m_name = []
         m_args_name = []
+        m_args_type = []
         m_type = []
         s_name = []
         s_args_name = []
+        s_args_type = []
         s_type = []
         # holds custom objects
         # [[obj name 1,field name 1,field name 2],[obj name 2,field name 1,field name 2, field name 3]]
@@ -352,7 +354,7 @@ def main():
             output_file.write(
                 "<div class='box'><h4>Legend</h4><ul><li class='query'>Queries</li><li class='mutation'>Mutations</li><"
                 "li class='subscription'>Subscriptions</li><li class='argument'>Arguments</li>"
-                "<li class='type'>Types: String, Float, !not_null, [list]</li><li class='deprecated'>Deprecated</li>"
+                "<li class='type'>Types: String, Float, not_null!, [list]</li><li class='deprecated'>Deprecated</li>"
                 "<li class='field'>Fields</li></ul></div>")
             # --------------------
             output_file.write("<p>Available Operations Types:</p>")
@@ -493,6 +495,7 @@ def main():
                                             "<li class='query'>{0}</li>".format(rt[i]['fields'][j]['name']))
                                         # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         q_name.append(rt[i]['fields'][j]['name'])
+                                        q_args_name.append([])
                                         if rt[i]['fields'][j]['type']['name'] is not None:
                                             q_type.append(rt[i]['fields'][j]['type']['name'])
                                         else:
@@ -503,6 +506,7 @@ def main():
                                             "<li class='mutation'>{0}</li>".format(rt[i]['fields'][j]['name']))
                                         # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         m_name.append(rt[i]['fields'][j]['name'])
+                                        m_args_name.append([])
                                         if rt[i]['fields'][j]['type']['name'] is not None:
                                             m_type.append(rt[i]['fields'][j]['type']['name'])
                                         else:
@@ -513,6 +517,7 @@ def main():
                                             "<li class='subscription'>{0}</li>".format(rt[i]['fields'][j]['name']))
                                         # Get field name and its type, if none is an advanced element (es. list) and we get it from ofType
                                         s_name.append(rt[i]['fields'][j]['name'])
+                                        s_args_name.append([])
                                         if rt[i]['fields'][j]['type']['name'] is not None:
                                             s_type.append(rt[i]['fields'][j]['type']['name'])
                                         else:
@@ -571,18 +576,6 @@ def main():
                                 x = 0
                                 # Prepare a list of ARGS names for queries, mutations and subscriptions
                                 # --------------------
-                                if not rt[i]['fields'][j]['args']:
-                                    if rt[i]['name'] == Query:
-                                        q_args_name.append([])
-                                        q_args_name[j].append("")
-                                    elif rt[i]['name'] == Mutation:
-                                        m_args_name.append([])
-                                        m_args_name[j].append("")
-                                    elif rt[i]['name'] == Subscription:
-                                        s_args_name.append([])
-                                        s_args_name[j].append("")
-                                    args_type.append("")
-                                # --------------------
                                 # My super BOOLEAN IF, used to switch between ENABLED custom types parameter (-c)
                                 if ((custom is False and ((rt[i]['fields'][j]['args'] is not None) and (
                                         rt[i]['name'] not in primitives) and (
@@ -610,13 +603,10 @@ def main():
                                             # based on if it is an argument from query, mutation or subscription
                                             # --------------------
                                             if rt[i]['name'] == Query:
-                                                q_args_name.append([])
                                                 q_args_name[j].append(rt[i]['fields'][j]['args'][x]['name'])
                                             elif rt[i]['name'] == Mutation:
-                                                m_args_name.append([])
                                                 m_args_name[j].append(rt[i]['fields'][j]['args'][x]['name'])
                                             elif rt[i]['name'] == Subscription:
-                                                s_args_name.append([])
                                                 s_args_name[j].append(rt[i]['fields'][j]['args'][x]['name'])
                                             # --------------------
                                         # ARGS description
@@ -627,6 +617,35 @@ def main():
                                         # --------------------
                                         # Printing out ARGS types
                                         # Data -> Schema -> Types -> Fields -> Args -> Type (name, ofType, kind)
+                                        # TODO half a bug: there are custom objects that have multiple types as the following example
+                                        # in this case ![LIST], at the moment this specific case is handled casting the returning value of
+                                        # rt[i]['fields'][j]['args'][x]['type']['ofType']['name'] to STRING
+                                        # in order to prevent errors (None type concatenated to a string)
+                                        # we are missing the custom object but at least the script does not falls apart
+                                        """
+                                             "description":null,
+                                             "isDeprecated":false,
+                                             "args":[  ],
+                                             "deprecationReason":null,
+                                             "type":{  
+                                                "kind":"NON_NULL",
+                                                "name":null,
+                                                "ofType":{  
+                                                   "kind":"LIST",
+                                                   "name":null,
+                                                   "ofType":{  
+                                                      "kind":"NON_NULL",
+                                                      "name":null,
+                                                      "ofType":{  
+                                                         "kind":"SCALAR",
+                                                         "name":"String",
+                                                         "ofType":null
+                                                      }
+                                                   }
+                                                }
+                                             },
+                                             "name":"roles"
+                                        """
                                         # --------------------
                                         if rt[i]['fields'][j]['args'][x]['type'] is not None and (
                                                 rt[i]['name'] not in primitives) and (
@@ -635,23 +654,45 @@ def main():
                                             if rt[i]['fields'][j]['args'][x]['type']['kind'] == "LIST":
                                                 output_file.write("<span class='type'>[{0}]</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
-                                                args_type.append(
-                                                    "[" + rt[i]['fields'][j]['args'][x]['type']['ofType']['name'] + "]")
+                                                if rt[i]['name'] == Query:
+                                                    q_args_type.append(
+                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
+                                                            'name']) + "]")
+                                                elif rt[i]['name'] == Mutation:
+                                                    m_args_type.append(
+                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
+                                                            'name']) + "]")
+                                                elif rt[i]['name'] == Subscription:
+                                                    s_args_type.append(
+                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
+                                                            'name']) + "]")
                                             # NOT NULL
                                             elif rt[i]['fields'][j]['args'][x]['type']['kind'] == "NON_NULL":
-                                                output_file.write("<span class='type'>!{0}</span><br>".format(
+                                                output_file.write("<span class='type'>{0}!</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
-                                                args_type.append(
-                                                    "!" + rt[i]['fields'][j]['args'][x]['type']['ofType']['name'])
-                                            # CUSTOM TYPE
+                                                if rt[i]['name'] == Query:
+                                                    q_args_type.append(
+                                                        "!" + str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
+                                                elif rt[i]['name'] == Mutation:
+                                                    m_args_type.append(
+                                                        "!" + str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
+                                                elif rt[i]['name'] == Subscription:
+                                                    s_args_type.append(
+                                                        "!" + str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
+                                            # Holds simple types like float, string, int etc.
                                             else:
                                                 if rt[i]['fields'][j]['args'][x]['type']['name'] is not None:
                                                     output_file.write("<span class='type'>{0}</span><br>".format(
                                                         rt[i]['fields'][j]['args'][x]['type']['name']))
-                                                    args_type.append(rt[i]['fields'][j]['args'][x]['type']['name'])
-                                                if rt[i]['fields'][j]['args'][x]['type']['ofType'] is not None:
-                                                    output_file.write("<span>{0}</span><br>".format(
-                                                        rt[i]['fields'][j]['args'][x]['type']['ofType']))
+                                                    if rt[i]['name'] == Query:
+                                                        q_args_type.append(
+                                                            str(rt[i]['fields'][j]['args'][x]['type']['name']))
+                                                    elif rt[i]['name'] == Mutation:
+                                                        m_args_type.append(
+                                                            str(rt[i]['fields'][j]['args'][x]['type']['name']))
+                                                    elif rt[i]['name'] == Subscription:
+                                                        s_args_type.append(
+                                                            str(rt[i]['fields'][j]['args'][x]['type']['name']))
                                         # --------------------
                                         x += 1
                                 j += 1
@@ -664,8 +705,10 @@ def main():
             output_file.close()
             # Writing templates
             # Reverse args list in order to use pop
-            args_type.reverse()
-            # replacing None items to String for a clean exec
+            q_args_type.reverse()
+            m_args_type.reverse()
+            s_args_type.reverse()
+            # replacing None items to String for a smooth exec
             q_type = map(str, q_type)
             m_type = map(str, m_type)
             s_type = map(str, s_type)
@@ -683,12 +726,12 @@ def main():
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "query", today, timestamp, qname,
-                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                                       argsname + ":" + detect_type(q_args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + args_type.pop() + " ",
+                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + q_args_type.pop() + " ",
                                        "a")
                     else:
-                        args_type.pop()
+                        q_args_type.pop()
                 # Query name
                 file_write(URL, "query", today, timestamp, qname, "){", "a")
                 # Query fields
@@ -716,12 +759,13 @@ def main():
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "mutation", today, timestamp, mname,
-                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                                       argsname + ":" + detect_type(m_args_type.pop()) + " ", "a")
                         else:
-                            file_write(URL, "mutation", today, timestamp, mname, argsname + ":" + args_type.pop() + " ",
+                            file_write(URL, "mutation", today, timestamp, mname,
+                                       argsname + ":" + m_args_type.pop() + " ",
                                        "a")
                     else:
-                        args_type.pop()
+                        m_args_type.pop()
                 # Mutation name
                 file_write(URL, "mutation", today, timestamp, mname, "){", "a")
                 # Mutation fields
@@ -750,12 +794,12 @@ def main():
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "subscription", today, timestamp, sname,
-                                       argsname + ":" + detect_type(args_type.pop()) + " ", "a")
+                                       argsname + ":" + detect_type(s_args_type.pop()) + " ", "a")
                         else:
                             file_write(URL, "subscription", today, timestamp, sname,
-                                       argsname + ":" + args_type.pop() + " ", "a")
+                                       argsname + ":" + s_args_type.pop() + " ", "a")
                     else:
-                        args_type.pop()
+                        s_args_type.pop()
                 # Subscription name
                 file_write(URL, "subscription", today, timestamp, sname, "){", "a")
                 # Subscription fields
