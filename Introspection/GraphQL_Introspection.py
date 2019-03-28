@@ -18,6 +18,10 @@ import json
 from urlparse import urlparse
 from datetime import date
 
+# Hack-ish way to handle unicode
+reload(sys)
+sys.setdefaultencoding('UTF8')
+
 # colors for terminal messages
 RED = "\033[1;31;10m[!] "
 GREEN = "\033[1;32;10m[+] "
