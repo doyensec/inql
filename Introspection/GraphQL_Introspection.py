@@ -210,8 +210,10 @@ def file_write(URL, file_path, today, timestamp, file_name, content, mode):
     :return:
         none
     """
-    write_file = open(URL + "/" + file_path + "/" + today + "/" + timestamp + "/" + file_name + ".txt", mode)
+    sep = os.sep
+    write_file = open(URL + sep + file_path + sep + today + sep + timestamp + sep + file_name + ".txt", mode)
     write_file.write(content)
+    write_file.close()
 
 
 def detect_type(types):
@@ -296,11 +298,13 @@ def main():
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
+        # os.sep
+        sep = os.sep
         # Create directories structure
         # -----------------------
-        check_dir(URL + "/query/" + today + "/" + timestamp + "/")
-        check_dir(URL + "/mutation/" + today + "/" + timestamp + "/")
-        check_dir(URL + "/subscription/" + today + "/" + timestamp + "/")
+        check_dir(URL + sep + "query" + sep + today + sep + timestamp + sep)
+        check_dir(URL + sep + "mutation" + sep + today + sep + timestamp + sep)
+        check_dir(URL + sep + "subscription" + sep + today + sep + timestamp + sep)
         # -----------------------
         # Setup lists for templates generation
         # -----------------------
@@ -324,7 +328,7 @@ def main():
         # old -c parameter, enabled by default
         custom = True
         # Generate the documentation for the target
-        with open(URL + "/doc-" + today + "-" + timestamp + ".html", 'w') as output_file:
+        with open(URL + sep + "doc-" + today + "-" + timestamp + ".html", 'w') as output_file:
             if args.target is not None:
                 # Parse response from the GraphQL endpoint
                 result = query(args.target, args.key, proxyDict)
@@ -336,7 +340,7 @@ def main():
                     result_raw = s.read()
                     result = json.loads(result_raw)
             # Write schema file
-            schema_file = open(URL + "/schema-" + today + "-" + timestamp + ".txt", "w")
+            schema_file = open(URL + sep + "schema-" + today + "-" + timestamp + ".txt", "w")
             if args.target is not None:
                 # returns a prettified json
                 schema_file.write(json.dumps(result))
