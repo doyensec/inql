@@ -3,7 +3,7 @@
 """
 Title: GraphQL Introspection
 Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
-Version: 4.1
+Version: 4.2
 Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate Queries, Mutations & Subscriptions templates (with optional placeholders) for all the known types.
 """
@@ -18,7 +18,7 @@ import json
 from urlparse import urlparse
 from datetime import date
 
-# Hack-ish way to handle unicode
+# Hack-ish way to handle unicode (finger crossed)
 reload(sys)
 sys.setdefaultencoding('UTF8')
 
