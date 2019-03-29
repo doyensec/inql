@@ -1,5 +1,6 @@
 # GraphQL Scanner
 A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) technology security testing efforts.
+
 *Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com)) 
 
 ![GraphQL Official Logo](Misc/graphqllogo.png)
@@ -67,16 +68,16 @@ Usage:
 + Selecting any query/mutation/subscription will load its template in the main text area on the right
 
 Directory Structure will be the following:
-+ -url
-+ | query
-+	- timestamp 1
-+	-- query1.txt
-+	-- query2.txt
-+	- timestamp 2
-+	-- query1.txt
-+	-- query2.txt
-+ | mutation
-+ | subscription
++ url
++ - query
++	- - timestamp 1
++	- - - query1.txt
++	- - - query2.txt
++	- - timestamp 2
++	- - - query1.txt
++	- - - query2.txt
++ - mutation
++ - subscription
 
 ### Future Updates
 
