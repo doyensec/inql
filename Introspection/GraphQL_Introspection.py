@@ -112,7 +112,7 @@ div.box {
 """
 
 
-def query(target, key, proxyDict):
+def query(target, key, cookies, proxyDict):
     """
     Execute the introspection query against the GraphQL endpoint
 
@@ -137,16 +137,14 @@ def query(target, key, proxyDict):
     query = "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"
     old_query = "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description args{...InputValue}onOperation onFragment onField}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}"
     # -----------------------
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
+    }
+    # TODO add the option for custom headers and variables
     if key:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0",
-            "Authorization": key
-            # TODO add the option for custom headers and variables
-        }
-    else:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
-        }
+        headers["Authorization"] = key
+    if cookies:
+        headers["Cookie"] = cookies
     try:
         # Issue the Introspection request against the GraphQL endpoint
         request = requests.post(target, json={"query": query}, headers=headers, proxies=proxyDict, verify=False)
@@ -262,6 +260,7 @@ def main():
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     parser.add_argument("-k", dest="key", help="API Authentication Key")
+    parser.add_argument("-c", dest="cookies", help="Authentication/Authorization Cookies")
     parser.add_argument('-p', dest="proxy", default=None,
                         help='IP of web proxy to go through (http://127.0.0.1:8080)')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
@@ -335,7 +334,7 @@ def main():
         with open(URL + sep + "doc-" + today + "-" + timestamp + ".html", 'w') as output_file:
             if args.target is not None:
                 # Parse response from the GraphQL endpoint
-                result = query(args.target, args.key, proxyDict)
+                result = query(args.target, args.key, args.cookies, proxyDict)
                 # returns a dict
                 result = result.json()
             else:
