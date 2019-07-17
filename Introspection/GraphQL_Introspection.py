@@ -185,7 +185,7 @@ def check_dir(file_path):
 
 def file_write(URL, file_path, today, timestamp, file_name, content, mode):
     """
-    This function is used in order to generate the Queries Mutations & Subscriptions templates.
+    This function is used in order to generate the Queries, Mutations & Subscriptions templates.
     Path and file name will be generated as follow:
 
     :param URL:
@@ -628,7 +628,7 @@ def main():
                                         # in this case ![LIST], at the moment this specific case is handled casting the returning value of
                                         # rt[i]['fields'][j]['args'][x]['type']['ofType']['name'] to STRING
                                         # in order to prevent errors (None type concatenated to a string)
-                                        # we are missing the custom object but at least the script does not falls apart
+                                        # we are missing the custom object but at least the script does not fall apart
                                         """
                                              "description":null,
                                              "isDeprecated":false,
