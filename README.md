@@ -3,20 +3,20 @@ A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) 
 
 *Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com)) 
 
-![GraphQL Official Logo](Misc/graphqllogo.png)
+![GraphQL Official Logo](docs/graphqllogo.png)
 
 ### GraphQL Introspection (stand-alone script)
 
-Running `Introspection.py` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL endpoint in order to dump all the: Queries, Mutations, Subscriptions; retrieve their fields and arguments; retrieve objects and custom objects types in order to generate a clean documentation.
+Running `src/Introspection.py` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL endpoint in order to dump all the: Queries, Mutations, Subscriptions; retrieve their fields and arguments; retrieve objects and custom objects types in order to generate a clean documentation.
 The script will also generate templates (with optional placeholders values) for all the known types (usefull for Burp Suite repeater).
 
 The resulting HTML documentation page will contain details for all available Queries, Mutations and Subscriptions as shown here:
 
-![Preview](Misc/GraphQL_Introspection_Output.png)
+![Preview](docs/GraphQL_Introspection_Output.png)
 
 Templates Generation:
 
-![Preview](Misc/Introspection_Templates.png)
+![Preview](docs/Introspection_Templates.png)
 
 Usage:
 ```
@@ -37,11 +37,11 @@ $python Introspection.py -t http://192.168.1.82/examples/04-bank/graphql
 
 Terminal Output:
 
-![Preview](Misc/Terminal_Output.png)
+![Preview](docs/Terminal_Output.png)
 
 ### Burp Suite Extension
 
-It will retains (pretty much) the same capabilities of the `Introspection.py` tool; it will also implements the following checks:
+It will retains (pretty much) the same capabilities of the `src/Introspection.py` tool; it will also implements the following checks:
 + search for known GraphQL paths; it will grep and match knwown values to detect GraphQL Technology usage in the website
 + search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground and common consoles
 + add a GraphQL Tab for every request/response using GraphQL Technology
@@ -57,7 +57,7 @@ Import the Extension in Burp:
 
 Now you should be able to find a GraphQL Scanner Tab:
 
-![Preview](Misc/GraphQLScanner.png)
+![Preview](docs/GraphQLScanner.png)
 
 Usage:
 
