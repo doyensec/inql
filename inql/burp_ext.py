@@ -1,6 +1,8 @@
+#!/usr/bin/env jython
 """
 Title: GraphQL Scanner
-Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
+Author: Andrea Brancaleoni (@nJoyeneer)
+Original Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
 Version: 1.0
 Query a GraphQL endpoint with introspection in order to retrieve the documentation of all the Queries, Mutations & Subscriptions.
 The script will also generate Queries, Mutations & Subscriptions templates (with optional placeholders) for all the known types.
@@ -28,9 +30,9 @@ if platform.system() == "Java":
     import json
     import os
     # TODO: MUST merge this file to make it works as a standalone tool
-    import queryProcess
-    from Introspection import init
-    from FileTreeTest import FileTree
+    import query_process
+    from introspection import init
+    from filetree import FileTree
 
     SCANNER_VERSION = "1.0"
     DEBUG = False
@@ -432,7 +434,7 @@ if platform.system() == "Java":
             self.final_positions = []
             dataParameter = helpers.bytesToString(dataParameter)
             # Implement Query Process to get Insertion Points
-            request = queryProcess(dataParameter)
+            request = query_process(dataParameter) # TODO: isn't this thing completely bogus?
             request.findInsertionPoints()
             self.final_positions = request.findFinalPositions()
 

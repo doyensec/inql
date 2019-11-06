@@ -7,7 +7,7 @@ A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) 
 
 ### GraphQL Introspection (stand-alone script)
 
-Running `src/Introspection.py` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL endpoint in order to dump all the: Queries, Mutations, Subscriptions; retrieve their fields and arguments; retrieve objects and custom objects types in order to generate a clean documentation.
+Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL endpoint in order to dump all the: Queries, Mutations, Subscriptions; retrieve their fields and arguments; retrieve objects and custom objects types in order to generate a clean documentation.
 The script will also generate templates (with optional placeholders values) for all the known types (usefull for Burp Suite repeater).
 
 The resulting HTML documentation page will contain details for all available Queries, Mutations and Subscriptions as shown here:
@@ -20,7 +20,7 @@ Templates Generation:
 
 Usage:
 ```
-usage: Introspection.py [-h] [-t TARGET] [-f SCHEMA_JSON_FILE]
+usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE]
                                 [-k KEY] [-p PROXY] [-d]
 
 arguments:
@@ -32,7 +32,7 @@ arguments:
   -d                   Replace known GraphQL arguments types with placeholder
                        values (useful for Burp Suite)
   
-$python Introspection.py -t http://192.168.1.82/examples/04-bank/graphql
+$python inql -t http://192.168.1.82/examples/04-bank/graphql
 ```
 
 Terminal Output:
@@ -41,7 +41,7 @@ Terminal Output:
 
 ### Burp Suite Extension
 
-It will retains (pretty much) the same capabilities of the `src/Introspection.py` tool; it will also implements the following checks:
+It will retains (pretty much) the same capabilities of the `inql` tool; it will also implements the following checks:
 + search for known GraphQL paths; it will grep and match knwown values to detect GraphQL Technology usage in the website
 + search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground and common consoles
 + add a GraphQL Tab for every request/response using GraphQL Technology
