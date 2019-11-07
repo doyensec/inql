@@ -74,6 +74,7 @@ if platform.system() == "Java":
         def registerExtenderCallbacks(self, callbacks):
             self._callbacks = callbacks
             self._helpers = callbacks.getHelpers()
+            # TODO: use burp TMPDIR
             self.tmpdir = tempfile.mkdtemp()
             os.chdir(self.tmpdir)
             helpers = callbacks.getHelpers()
@@ -581,17 +582,17 @@ if platform.system() == "Java":
                     .addGap(12, 12, 12)
                     .addGroup(
                     layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(jScrollPane2)
+                        .addComponent(jScrollPane2, 0, Short.MAX_VALUE, Short.MAX_VALUE)
                         .addGroup(layout.createSequentialGroup()
                                   .addComponent(jLabel3, javax.swing.GroupLayout.DEFAULT_SIZE,
                                                 javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                   .addComponent(LoadPlaceholders))))
-                                        .addGroup(layout.createSequentialGroup()
+                                        .addGroup(layout.createSequentialGroup() # first bar the one on top
                                                   .addComponent(jLabel1)
                                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                                   .addComponent(url, javax.swing.GroupLayout.PREFERRED_SIZE, 421,
-                                                                javax.swing.GroupLayout.PREFERRED_SIZE)
+                                                                Short.MAX_VALUE)
                                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                                   .addComponent(LoadJSON)
                                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -608,17 +609,18 @@ if platform.system() == "Java":
                                                       javax.swing.GroupLayout.PREFERRED_SIZE)
                                         .addComponent(LoadJSON)
                                         .addComponent(Loadurl))
-                              .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED,
-                                               javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                              .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED,  # vertical spacing 
+                                               0, 24)
+                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE) # bar over the selection
                                         .addComponent(jLabel2)
                                         .addComponent(jLabel3)
                                         .addComponent(LoadPlaceholders))
                               .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, False)
+                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, True) # FileTree and Selected Template Content, TODO: use a JSplitPane here
                                         .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 403,
                                                       Short.MAX_VALUE)
-                                        .addComponent(jScrollPane3))
+                                        .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 403,
+                                                      Short.MAX_VALUE))
                               .addContainerGap())
             )
             # --------------------
