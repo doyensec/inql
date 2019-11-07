@@ -50,11 +50,46 @@ def wrap_open(method, exceptions = (OSError, IOError)):
 
 open = wrap_open(open)
 
+def wrap_exit(method, exceptions = (OSError, IOError)):
+    def fn(*args, **kwargs):
+        try:
+            print(reset)
+            return method(*args, **kwargs)
+        except exceptions:
+            sys.exit('Can\'t open \'{0}\'. Error #{1[0]}: {1[1]}'.format(args[0], sys.exc_info()[1].args))
+
+    return fn
+exit = wrap_exit(exit)
+
 # colors for terminal messages
-RED = "\033[1;31;10m[!] "
-GREEN = "\033[1;32;10m[+] "
-WHITE = "\033[1;37;10m"
-YELLOW = "\033[1;33;10m[!] "
+red = ""
+green = ""
+white = ""
+yellow = ""
+reset = ""
+
+def posix_colors():
+    global red, green, white, yellow, reset
+    red = "\033[1;31;10m[!] "
+    green = "\033[1;32;10m[+] "
+    white = "\033[1;37;10m"
+    yellow = "\033[1;33;10m[!] "
+    reset = "\033[0;0m"
+
+def supports_color():
+    """
+    Returns True if the running system's terminal supports color, and False
+    otherwise.
+    """
+    plat = sys.platform
+    supported_platform = plat != 'Pocket PC' and (plat != 'win32' or
+                                                  'ANSICON' in os.environ)
+    # isatty is not always implemented, #6223.
+    is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    return supported_platform and is_a_tty
+
+if supports_color():
+    posix_colors()
 
 # CSS style used for the documentation
 stl = """
@@ -187,10 +222,10 @@ def query(target, key, proxyDict):
         return contents
 
     except urllib2.HTTPError, e:
-        print RED + str(e) + WHITE
+        print red + str(e) + white
 
     except urllib2.URLError, e:
-        print RED + str(e) + WHITE
+        print red + str(e) + white
 
 
 def file_write(URL, file_path, today, timestamp, file_name, content, mode):
@@ -288,21 +323,21 @@ def main():
 def init(args, print_help=None):
     # At least one between -t or -f (target) parameters must be set
     if args.target is None and args.schema_json_file is None:
-        print RED + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + WHITE
+        print red + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + white
         if print_help:
             print_help()
             exit(1)
 
     # Only one of them -t OR -f :)
     if args.target is not None and args.schema_json_file is not None:
-        print RED + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + WHITE
+        print red + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + white
         if print_help:
             print_help()
             exit(1)
 
     # Takes care of any configured proxy (-p param)
     if args.proxy is not None:
-        print YELLOW + "Proxy ENABLED: " + args.proxy + WHITE
+        print yellow + "Proxy ENABLED: " + args.proxy + white
         proxyDict = {"http": args.proxy, "https": args.proxy}
     else:
         proxyDict = {}
@@ -313,11 +348,11 @@ def init(args, print_help=None):
             URL = urlparse(args.target).netloc
         else:
             # Acquire a local JSON file as a target
-            print YELLOW + "Parsing local schema file" + WHITE
+            print yellow + "Parsing local schema file" + white
             URL = "localschema"
         detect = args.detect
         if detect:
-            print YELLOW + "Detect arguments is ENABLED, known types will be replaced with placeholder values" + WHITE
+            print yellow + "Detect arguments is ENABLED, known types will be replaced with placeholder values" + white
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
@@ -738,7 +773,7 @@ def init(args, print_help=None):
             # --------------------
             # QUERY
             # --------------------
-            print GREEN + "Writing Queries Templates" + WHITE
+            print green + "Writing Queries Templates" + white
             index = 0
             for qname in q_name:
                 print " |  " + str(qname)
@@ -771,7 +806,7 @@ def init(args, print_help=None):
             # --------------------
             # MUTATION
             # --------------------
-            print GREEN + "Writing Mutations Templates" + WHITE
+            print green + "Writing Mutations Templates" + white
             index = 0
             for mname in m_name:
                 print " |  " + str(mname)
@@ -805,7 +840,7 @@ def init(args, print_help=None):
             # --------------------
             # SUBSCRIPTION
             # --------------------
-            print GREEN + "Writing Subscriptions Templates" + WHITE
+            print green + "Writing Subscriptions Templates" + white
             index = 0
             for sname in s_name:
                 print " |  " + str(sname)
@@ -838,11 +873,12 @@ def init(args, print_help=None):
                 index += 1
             # --------------------
             # THE END, they all lived happily ever after (hopefully)
-            print GREEN + "DONE" + WHITE
+            print green + "DONE" + white
     else:
         # Likely missing a required arguments
         print "Missing Arguments"
         if print_help:
+            print(white)
             print_help()
             exit(1)
 
@@ -852,4 +888,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         # Catch CTRL+C, it will abruptly kill the script
-        print RED + "Exiting..." + WHITE
+        print red + "Exiting..." + reset
