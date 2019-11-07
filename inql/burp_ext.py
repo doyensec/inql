@@ -25,10 +25,12 @@ if platform.system() == "Java":
     from java.io import PrintWriter
     # Burp Suite Import
     from burp import IBurpExtender, IMessageEditorTabFactory, IMessageEditorTab, IScannerInsertionPointProvider, \
-        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab
+        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener
     from array import array
     import json
     import os
+    import tempfile
+    import shutil
     # TODO: MUST merge this file to make it works as a standalone tool
     import query_process
     from introspection import init
@@ -67,15 +69,17 @@ if platform.system() == "Java":
             self.__dict__ = self
 
 
-    class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IMessageEditorTabFactory, IScannerCheck):
+    class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IMessageEditorTabFactory, IScannerCheck, IExtensionStateListener):
         # Main Class for Burp Extenders
         def registerExtenderCallbacks(self, callbacks):
             self._callbacks = callbacks
             self._helpers = callbacks.getHelpers()
+            self.tmpdir = tempfile.mkdtemp()
+            os.chdir(self.tmpdir)
             helpers = callbacks.getHelpers()
             callbacks.setExtensionName("GraphQL Scanner v." + SCANNER_VERSION)
             callbacks.issueAlert("GraphQL Scanner Started")
-            print "GraphQL Scanner Started!"
+            print("GraphQL Scanner Started! (tmpdir: %s )" % os.getcwd())
             stdout = PrintWriter(callbacks.getStdout(), True)
             stderr = PrintWriter(callbacks.getStderr(), True)
             # Registering GraphQL Tab
@@ -86,6 +90,13 @@ if platform.system() == "Java":
             callbacks.registerScannerCheck(self)
             # Register Suite Tab
             callbacks.addSuiteTab(GraphQLTab(callbacks, helpers))
+            # Register extension state listener
+            callbacks.registerExtensionStateListener(self)
+            return
+
+        def extensionUnloaded(self):
+            os.chdir('/')
+            shutil.rmtree(self.tmpdir, ignore_errors=False, onerror=None)
             return
 
         # helper method to search a response for occurrences of a literal match string

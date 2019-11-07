@@ -11,6 +11,45 @@ from datetime import date
 reload(sys)
 sys.setdefaultencoding('UTF8')
 
+
+# Wrap open to create directory before opening a file
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except:
+        if os.path.isdir(path):
+            pass
+        else:
+            raise
+
+
+def check_dir(file_path):
+    """
+    Get a path as input, it will creates all the necessary (missing) directories in order to follow the provided path
+
+    :param file_path:
+        ex. /tmp/random/pizza
+        it will create the directories random and pizza if not already present in the system
+
+    :return:
+        none
+    """
+    directory = os.path.dirname(file_path)
+    mkdir_p(directory)
+
+
+def wrap_open(method, exceptions = (OSError, IOError)):
+    def fn(*args, **kwargs):
+        try:
+            check_dir(args[0])
+            return method(*args, **kwargs)
+        except exceptions:
+            sys.exit('Can\'t open \'{0}\'. Error #{1[0]}: {1[1]}'.format(args[0], sys.exc_info()[1].args))
+
+    return fn
+
+open = wrap_open(open)
+
 # colors for terminal messages
 RED = "\033[1;31;10m[!] "
 GREEN = "\033[1;32;10m[+] "
@@ -154,22 +193,6 @@ def query(target, key, proxyDict):
         print RED + str(e) + WHITE
 
 
-def check_dir(file_path):
-    """
-    Get a path as input, it will creates all the necessary (missing) directories in order to follow the provided path
-
-    :param file_path:
-        ex. /tmp/random/pizza
-        it will create the directories random and pizza if not already present in the system
-
-    :return:
-        none
-    """
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-
 def file_write(URL, file_path, today, timestamp, file_name, content, mode):
     """
     This function is used in order to generate the Queries Mutations & Subscriptions templates.
@@ -199,8 +222,8 @@ def file_write(URL, file_path, today, timestamp, file_name, content, mode):
     :return:
         none
     """
-    sep = os.sep
-    write_file = open(URL + sep + file_path + sep + today + sep + timestamp + sep + file_name + ".txt", mode)
+
+    write_file = open(os.path.join(URL, file_path, today, timestamp, '%s.txt' % file_name), mode)
     write_file.write(content)
     write_file.close()
 
@@ -251,8 +274,13 @@ def main():
                         help='IP of web proxy to go through (http://127.0.0.1:8080)')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")
+    parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
+                        help="Output Directory")
     args = parser.parse_args()
     # -----------------------
+
+    mkdir_p(args.output_directory)
+    os.chdir(args.output_directory)
 
     return init(args, lambda: parser.print_help())
 
@@ -263,12 +291,14 @@ def init(args, print_help=None):
         print RED + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + WHITE
         if print_help:
             print_help()
+            exit(1)
 
     # Only one of them -t OR -f :)
     if args.target is not None and args.schema_json_file is not None:
         print RED + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + WHITE
         if print_help:
             print_help()
+            exit(1)
 
     # Takes care of any configured proxy (-p param)
     if args.proxy is not None:
@@ -291,13 +321,6 @@ def init(args, print_help=None):
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
-        # os.sep
-        sep = os.sep
-        # Create directories structure
-        # -----------------------
-        check_dir(URL + sep + "query" + sep + today + sep + timestamp + sep)
-        check_dir(URL + sep + "mutation" + sep + today + sep + timestamp + sep)
-        check_dir(URL + sep + "subscription" + sep + today + sep + timestamp + sep)
         # -----------------------
         # Setup lists for templates generation
         # -----------------------
@@ -321,7 +344,7 @@ def init(args, print_help=None):
         # old -c parameter, enabled by default
         custom = True
         # Generate the documentation for the target
-        with open(URL + sep + "doc-" + today + "-" + timestamp + ".html", 'w') as output_file:
+        with open(os.path.join(URL, "doc-%s-%s.html" % (today, timestamp)), 'w') as output_file:
             if args.target is not None:
                 # Parse response from the GraphQL endpoint
                 result = query(args.target, args.key, proxyDict)
@@ -333,10 +356,10 @@ def init(args, print_help=None):
                     result_raw = s.read()
                     result = json.loads(result_raw)
             # Write schema file
-            schema_file = open(URL + sep + "schema-" + today + "-" + timestamp + ".txt", "w")
+            schema_file = open(os.path.join(URL, "schema-%s-%s.txt" % (today, timestamp)), "w")
             if args.target is not None:
                 # returns a prettified json
-                schema_file.write(json.dumps(result))
+                schema_file.write(json.dumps(result, indent=4))
             else:
                 schema_file.write(result_raw)
             schema_file.close()
@@ -821,6 +844,7 @@ def init(args, print_help=None):
         print "Missing Arguments"
         if print_help:
             print_help()
+            exit(1)
 
 
 if __name__ == "__main__":

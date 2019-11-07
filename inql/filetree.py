@@ -1,3 +1,9 @@
+import platform
+
+if platform.system() != "Java":
+    print("Load this file inside Burp Suite/jython, if you need the stand-alone tool run: inql")
+    exit(-1)
+
 from java.awt import (BorderLayout, Color, Container, Dimension)
 
 from java.io import File
@@ -13,22 +19,14 @@ import os
 class FileTree:
 
     def listener(self, e):
-        try:
-            path = str(e.getPath().getParentPath().getLastPathComponent())
-        except AttributeError:
-            path = os.getcwd()
-        sep = str(os.sep)
-        target = str(e.getPath().getLastPathComponent())
-
         # load selected file into textarea
-        location = path + sep + target
         try:
-            f = open(location, "r")
+            f = open(os.path.join(*[str(p) for p in e.getPath().getPath()][1:]), "r")
             self.textarea.setText(f.read())
         except IOError:
             pass
 
-    def __init__(self, dir, textarea):
+    def __init__(self, dir, textarea=None):
         self.textarea = textarea
         dir = File(dir)
         self.dir = dir
@@ -37,6 +35,7 @@ class FileTree:
 
         # Make a tree list with all the nodes, and make it a JTree
         tree = JTree(self.addNodes(None, dir))
+        tree.setRootVisible(False)
         self.tree = tree
 
         # Add a listener
@@ -52,7 +51,9 @@ class FileTree:
 
     def addNodes(self, curTop, dir):
         curPath = dir.getPath()
-        curDir = DefaultMutableTreeNode(curPath)
+        if os.path.isdir(curPath):
+            nodePath = os.path.basename(curPath)
+        curDir = DefaultMutableTreeNode(nodePath)
         if curTop != None:  # should only be null at root
             curTop.add(curDir)
         ol = Vector()
@@ -67,7 +68,7 @@ class FileTree:
             if curPath == self.dir:
                 newPath = thisObject
             else:
-                newPath = curPath + File.separator + thisObject
+                newPath = os.path.join(curPath, thisObject)
             f = File(newPath)
             if f.isDirectory():
                 self.addNodes(curDir, f)
