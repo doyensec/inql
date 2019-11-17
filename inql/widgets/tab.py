@@ -5,6 +5,8 @@ if platform.system() == "Java":
     from java.awt import Component
     from java.awt import Color
     import java.awt
+    import java.awt.event
+    from java.awt.event import FocusListener
     from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel,
                              JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane,
                              SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree)
@@ -14,10 +16,36 @@ if platform.system() == "Java":
     from inql.introspection import init, mkdir_p
     from filetree import FileTree
 
+    DEFAULT_LOAD_URL = "http://example.com/graphql or /tmp/schema.json"
+
     class AttrDict(dict):
         def __init__(self, *args, **kwargs):
             super(AttrDict, self).__init__(*args, **kwargs)
             self.__dict__ = self
+
+    class HintTextField(FocusListener):
+        def __init__(self, hint):
+            self.this = JTextField(hint)
+            self.hint = hint
+            self.showingHint = True
+            self.this.addFocusListener(self)
+          
+        def focusGained(self, e):
+            if self.getText() == "":
+                self.this.setText("")
+                self.showingHint = False
+
+        def focusLost(self, e):
+            if self.getText() == "":
+                self.this.setText(self.hint)
+                self.showingHint = True
+
+        def getText(self):
+            if self.showingHint:
+                return ""
+            else:
+                return self.this.getText()
+    
 
 
     class GraphQLPanel:
@@ -31,7 +59,7 @@ if platform.system() == "Java":
 
         def initComponents(self):
             jLabel1 = javax.swing.JLabel()
-            url = javax.swing.JTextField()
+            url = HintTextField(DEFAULT_LOAD_URL).this
             self.url = url
             LoadJSON = javax.swing.JButton()
             self.LoadJSON = LoadJSON
@@ -51,7 +79,6 @@ if platform.system() == "Java":
             jLabel1.setLabelFor(url)
             jLabel1.setText("URL or File Location:")
 
-            url.setText("http://example.com/graphql or /tmp/schema.json")
             url.setName("url")
             url.setSelectionColor(java.awt.Color(255, 153, 51))
 
@@ -167,7 +194,7 @@ if platform.system() == "Java":
 
 
     def checktarget(target):
-        if target != "http://example.com/graphql or /tmp/schema.json" and target is not None and target != "":
+        if target != DEFAULT_LOAD_URL and target is not None and target != "":
             return True
 
         return False
