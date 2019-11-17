@@ -11,7 +11,7 @@ if platform.system() == "Java":
     import javax
     from java.lang import Short, Integer
     import os
-    from inql.introspection import init
+    from inql.introspection import init, mkdir_p
     from filetree import FileTree
 
     class AttrDict(dict):
@@ -36,8 +36,7 @@ if platform.system() == "Java":
             LoadJSON = javax.swing.JButton()
             self.LoadJSON = LoadJSON
             jScrollPane2 = javax.swing.JScrollPane()
-            TextArea = javax.swing.JEditorPane()
-            TextArea.setContentType("text/html")
+            TextArea = javax.swing.JTextArea()
             self.TextArea = TextArea
             jLabel2 = javax.swing.JLabel()
             jLabel3 = javax.swing.JLabel()
@@ -62,8 +61,10 @@ if platform.system() == "Java":
             LoadJSON.addActionListener(
                 lambda evt: LoadJSONActionPerformed(self, evt, url, LoadPlaceholders))
 
-            #TextArea.setColumns(20)
-            #TextArea.setRows(5)
+            TextArea.setColumns(20)
+            TextArea.setRows(5)
+            TextArea.setLineWrap(True)
+            TextArea.setWrapStyleWord(True)
             TextArea.setName("TextArea")
             TextArea.setSelectionColor(java.awt.Color(255, 153, 51))
             jScrollPane2.setViewportView(TextArea)
@@ -203,5 +204,5 @@ if __name__ == "__main__":
     frame.pack()
     frame.setVisible(True)
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
-    os.chdir('/')
-    shutil.rmtree(tmpdir, ignore_errors=False, onerror=None)
+    from threading import Event
+    Event().wait()
