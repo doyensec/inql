@@ -6,29 +6,43 @@ if platform.system() == "Java":
     from java.awt import Color
     import java.awt
     import java.awt.event
-    from java.awt.event import FocusListener
+    from java.awt.event import FocusListener, KeyAdapter, KeyEvent, WindowAdapter
     from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel,
                              JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane,
-                             SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree)
+                             SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree, JFileChooser)
+    import java.lang
+    from java.lang import System
+    import java.io
+    from java.io import File
+
     import javax
     from java.lang import Short, Integer
     import os
-    from inql.introspection import init, mkdir_p
+    from inql.introspection import init
     from filetree import FileTree
 
-    DEFAULT_LOAD_URL = "http://example.com/graphql or /tmp/schema.json"
+    DEFAULT_LOAD_URL = "URL or File Location (eg: http://example.com/graphql or /tmp/schema.json)"
 
     class AttrDict(dict):
         def __init__(self, *args, **kwargs):
             super(AttrDict, self).__init__(*args, **kwargs)
             self.__dict__ = self
 
-    class HintTextField(FocusListener):
-        def __init__(self, hint):
+    class HintTextField(FocusListener, KeyAdapter):
+        def __init__(self, hint='hint'):
             self.this = JTextField(hint)
             self.hint = hint
             self.showingHint = True
+            self.enter_listener = None
             self.this.addFocusListener(self)
+            self.this.addKeyListener(self)
+
+        def set_enter_evt_listener(self, enter_listener):
+            self.enter_listener = enter_listener
+
+        def keyPressed(self, e):
+            if self.enter_listener and e.getKeyCode() == KeyEvent.VK_ENTER:
+                self.enter_listener(e)
           
         def focusGained(self, e):
             if self.getText() == "":
@@ -48,7 +62,7 @@ if platform.system() == "Java":
     
 
 
-    class GraphQLPanel:
+    class GraphQLPanel(WindowAdapter):
         # XXX: inheriting from Java classes is very tricky. It is preferable to use
         #      the decorator pattern instead.
         def __init__(self, callbacks=None, helpers=None):
@@ -58,11 +72,11 @@ if platform.system() == "Java":
             self.initComponents()
 
         def initComponents(self):
-            jLabel1 = javax.swing.JLabel()
-            url = HintTextField(DEFAULT_LOAD_URL).this
+            omnibox = HintTextField(DEFAULT_LOAD_URL)
+            self.omnibox = omnibox
+            url = omnibox.this
+            omnibox.set_enter_evt_listener(lambda evt: self.LoadurlActionPerformed(evt, url, LoadPlaceholders))
             self.url = url
-            LoadJSON = javax.swing.JButton()
-            self.LoadJSON = LoadJSON
             jScrollPane2 = javax.swing.JScrollPane()
             TextArea = javax.swing.JTextArea()
             self.TextArea = TextArea
@@ -76,17 +90,8 @@ if platform.system() == "Java":
             self.FT = FileTree(os.getcwd(),TextArea)
             Tree = self.FT.this
 
-            jLabel1.setLabelFor(url)
-            jLabel1.setText("URL or File Location:")
-
             url.setName("url")
             url.setSelectionColor(java.awt.Color(255, 153, 51))
-
-            LoadJSON.setText("Load JSON")
-            LoadJSON.setToolTipText("Load a JSON schema from a local file")
-            LoadJSON.setName("LoadJSON")
-            LoadJSON.addActionListener(
-                lambda evt: LoadJSONActionPerformed(self, evt, url, LoadPlaceholders))
 
             TextArea.setColumns(20)
             TextArea.setRows(5)
@@ -94,6 +99,7 @@ if platform.system() == "Java":
             TextArea.setWrapStyleWord(True)
             TextArea.setName("TextArea")
             TextArea.setSelectionColor(java.awt.Color(255, 153, 51))
+            TextArea.requestFocus()
             jScrollPane2.setViewportView(TextArea)
 
             jLabel2.setText("Queries, mutations and subscriptions")
@@ -106,10 +112,10 @@ if platform.system() == "Java":
             LoadPlaceholders.setToolTipText("Load placeholders for the templates")
             LoadPlaceholders.setName("LoadPlaceholders")
 
-            Loadurl.setText("Load URL")
-            Loadurl.setToolTipText("Query a remote GraphQL backend (introspection)")
+            Loadurl.setText("Load")
+            Loadurl.setToolTipText("Query a GraphQL backend (introspection)")
             Loadurl.addActionListener(
-                lambda evt: LoadurlActionPerformed(self, evt, url, LoadPlaceholders))
+                lambda evt: self.LoadurlActionPerformed(evt, url, LoadPlaceholders))
 
             # Tree.setToolTipText("Select an item to load it's template")
             jScrollPane3.setViewportView(Tree)
@@ -140,12 +146,8 @@ if platform.system() == "Java":
                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                   .addComponent(LoadPlaceholders))))
                                         .addGroup(layout.createSequentialGroup() # first bar the one on top
-                                                  .addComponent(jLabel1)
-                                                  .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                                   .addComponent(url, javax.swing.GroupLayout.PREFERRED_SIZE, 421,
                                                                 Short.MAX_VALUE)
-                                                  .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                                  .addComponent(LoadJSON)
                                                   .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                                   .addComponent(Loadurl)))
                               .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
@@ -154,11 +156,9 @@ if platform.system() == "Java":
                     .addGroup(layout.createSequentialGroup()
                               .addContainerGap()
                               .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                        .addComponent(jLabel1)
                                         .addComponent(url, javax.swing.GroupLayout.PREFERRED_SIZE,
                                                       javax.swing.GroupLayout.DEFAULT_SIZE,
                                                       javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addComponent(LoadJSON)
                                         .addComponent(Loadurl))
                               .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED,  # vertical spacing 
                                                0, 24)
@@ -174,30 +174,30 @@ if platform.system() == "Java":
                                                       Short.MAX_VALUE))
                               .addContainerGap())
             )
-            # --------------------
 
+        def filepicker(self):
+            fileChooser = JFileChooser()
+            fileChooser.setCurrentDirectory(File(System.getProperty("user.home")))
+            result = fileChooser.showOpenDialog(self.this)
+            if result == JFileChooser.APPROVE_OPTION:
+                selectedFile = fileChooser.getSelectedFile()
+                self.omnibox.showingHint = False
+                self.url.setText(selectedFile.getAbsolutePath())
 
-    def LoadJSONActionPerformed(self, evt, url, LoadPlaceholders):
-        target = url.getText()
-        if checktarget(target):
-            print "Loading JSON schema from: " + target
-            run(self, target, LoadPlaceholders, "JSON")
-        pass
-
-
-    def LoadurlActionPerformed(self, evt, url, LoadPlaceholders):
-        target = url.getText()
-        if checktarget(target):
-            print "Quering GraphQL schema from: " + target
-            run(self, target, LoadPlaceholders, "URL")
-        pass
-
-
-    def checktarget(target):
-        if target != DEFAULT_LOAD_URL and target is not None and target != "":
-            return True
-
-        return False
+        def LoadurlActionPerformed(self, evt, url, LoadPlaceholders):
+            target = url.getText().strip()
+            if target == DEFAULT_LOAD_URL:
+                self.filepicker()
+                self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+            elif target.startswith('http://') or target.startswith('https://'):
+                print("Quering GraphQL schema from: %s" % target)
+                run(self, target, LoadPlaceholders, "URL")
+            elif not os.path.isfile(target):
+                self.filepicker()
+                self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+            else:
+                print("Loading JSON schema from: %s" % target)
+                run(self, target, LoadPlaceholders, "JSON")
 
 
     def run(self, target, LoadPlaceholders, flag):
