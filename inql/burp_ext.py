@@ -40,7 +40,7 @@ if platform.system() == "Java":
             self.tmpdir = tempfile.mkdtemp()
             os.chdir(self.tmpdir)
             helpers = callbacks.getHelpers()
-            callbacks.setExtensionName("GraphQL Scanner v.%s" % SCANNER_VERSION)
+            callbacks.setExtensionName("GraphQL Scanner %s" % SCANNER_VERSION)
             callbacks.issueAlert("GraphQL Scanner Started")
             print("GraphQL Scanner Started! (tmpdir: %s )" % os.getcwd())
             stdout = PrintWriter(callbacks.getStdout(), True)

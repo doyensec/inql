@@ -1,4 +1,4 @@
-SCANNER_VERSION = "1.0"
+SCANNER_VERSION = '%%VERSION%%'
 
 TECH_CHECKS = {
     '{"data":{"__schema":{',
