@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import re
 
 
@@ -11,7 +13,7 @@ class CalculatePositions:
         gql = self.message.find('variables')
         # print gql
         self.positions_variables = [(a.start(), a.end()) for a in list(re.finditer('variables":', self.message))]
-        print self.positions_variables
+        print(self.positions_variables)
 
     def findInsertionPoints(self):
         for item in self.positions_variables:
@@ -19,7 +21,7 @@ class CalculatePositions:
             start = item[1] + 1
             sub_string = self.message[start:length]
             size = sub_string.find('}')
-            print "Size is: %d" % size
+            print("Size is: %d" % size)
             end = start + size
             sub_string2 = self.message[start:end]
             self.insertionPoints.append((start, end))
@@ -45,7 +47,7 @@ class CalculatePositions:
                     # print sub_string3[ins[0]:ins[1]]
                     self.final_positions.append((point_start + ins[0], point_start + ins[1]))
 
-                print "==========Final positions for insertion==========="
+                print("==========Final positions for insertion===========")
                 # return self.final_positions to main
 
             return self.final_positions

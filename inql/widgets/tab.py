@@ -1,3 +1,4 @@
+from __future__ import print_function
 import platform
 
 if platform.system() == "Java":
@@ -249,7 +250,7 @@ if platform.system() == "Java":
         self.FT.refresh()
         return
 else:
-    print "Load this file inside jython, if you need the stand-alone tool run: Introspection.py"
+    print("Load this file inside jython, if you need the stand-alone tool run: Introspection.py")
 
 if __name__ == "__main__":
     import os, shutil, tempfile

@@ -324,13 +324,11 @@ if platform.system() == "Java":
                     isgql = True
 
             if len(message) > 2 and isgql:
-                # print "Starting GQL parsing and gql Indicator found: %s"%message[:17]
                 return True
             else:
 
                 var_pos = message.find(self._variable)
                 if len(message) > 2 and var_pos > 0:
-                    # print "GQL Indicator found: %s" % message[var_pos:var_pos+17]
                     return True
 
             return False
@@ -354,8 +352,7 @@ if platform.system() == "Java":
                         message.index('[') if '[' in message else len(message)
                     )
                 except ValueError:
-                    print "Sorry, this doesnt look like a Graph Query!"
-                    print ValueError
+                    print("Sorry, this doesnt look like a Graph Query!")
                     return
 
                 garbage = message[:limit]
@@ -365,7 +362,7 @@ if platform.system() == "Java":
                     gql_msg = garbage.strip() + '\n' + json.dumps(json.loads(clean), indent=4)
                     # gql_msg = re.sub(r'\\n', '\n', gql_msg)
                 except Exception:
-                    print("Problem parsing the setMessage")
+                    print("A problem occurred parsing the setMessage")
                     print(Exception)
                     gql_msg = garbage + clean
 
@@ -382,8 +379,7 @@ if platform.system() == "Java":
                     data = self._txtInput.getText()
 
                 except Exception:
-                    print "Problem Getting the Message After Modification"
-                    print Exception
+                    print("A problem occurred getting the message after modification")
 
                 # Update Request After Modification
                 r = self._helpers.analyzeRequest(self._currentMessage)

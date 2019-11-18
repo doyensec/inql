@@ -222,10 +222,10 @@ def query(target, key, proxyDict):
         return contents
 
     except urllib2.HTTPError, e:
-        print red + str(e) + white
+        print(red + str(e) + white)
 
     except urllib2.URLError, e:
-        print red + str(e) + white
+        print(red + str(e) + white)
 
 
 def file_write(URL, file_path, today, timestamp, file_name, content, mode):

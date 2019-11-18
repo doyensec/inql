@@ -47,7 +47,6 @@ if platform.system() == "Java":
                 new_body = body[:info.getBodyOffset()].tostring()
                 new_body += self.payload
                 repeater_body = StringUtil.toBytes(new_body)
-                print StringUtil.toBytes(self.payload)
                 self.callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(), info.getUrl().getProtocol() == 'https', repeater_body, 'GraphQL #%s' % self.index)
                 self.index += 1
 
