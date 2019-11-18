@@ -29,6 +29,8 @@ if platform.system() == "Java":
     from burp import IBurpExtender, IMessageEditorTabFactory, IMessageEditorTab, IScannerInsertionPointProvider, \
         IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener, IProxyListener
 
+    from utils import stringjoin
+
     class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IMessageEditorTabFactory, IScannerCheck, IExtensionStateListener):
         # Main Class for Burp Extenders
         def registerExtenderCallbacks(self, callbacks):
@@ -38,7 +40,7 @@ if platform.system() == "Java":
             self.tmpdir = tempfile.mkdtemp()
             os.chdir(self.tmpdir)
             helpers = callbacks.getHelpers()
-            callbacks.setExtensionName("GraphQL Scanner v." + SCANNER_VERSION)
+            callbacks.setExtensionName("GraphQL Scanner v.%s" % SCANNER_VERSION)
             callbacks.issueAlert("GraphQL Scanner Started")
             print("GraphQL Scanner Started! (tmpdir: %s )" % os.getcwd())
             stdout = PrintWriter(callbacks.getStdout(), True)
@@ -116,7 +118,7 @@ if platform.system() == "Java":
                         "Exposed GraphQL Development Console",
                         "GraphQL is a query language for APIs and a runtime for fulfilling queries with existing data.<br><br>"
                         "<b>GraphiQL/GraphQL Playground</b> are in-browser tools for writing, validating, and testing GraphQL queries.<br><br>"
-                        "The response contains the following string: <b>" + check + "</b>.",
+                        "The response contains the following string: <b>%s</b>." % check,
                         "Low", "Firm", "Not posing any imminent security risk.",
                         "<ul>"
                         "<li><a href='https://graphql.org/'>GraphQL</a></li>"
@@ -180,7 +182,7 @@ if platform.system() == "Java":
                             "Exposed GraphQL Development Console",
                             "GraphQL is a query language for APIs and a runtime for fulfilling queries with existing data.<br><br>"
                             "<b>GraphiQL/GraphQL Playground</b> are in-browser tools for writing, validating, and testing GraphQL queries.<br><br>"
-                            "The response contains the following string: <b>" + check + "</b>.",
+                            "The response contains the following string: <b>%s</b>." % check,
                             "Low", "Firm", "Not posing any imminent security risk.",
                             "<ul>"
                             "<li><a href='https://graphql.org/'>GraphQL</a></li>"
@@ -359,12 +361,11 @@ if platform.system() == "Java":
                 clean = message[limit:]
 
                 try:
-                    gql_msg = garbage.strip() + '\n' + json.dumps(json.loads(clean), indent=4)
-                    # gql_msg = re.sub(r'\\n', '\n', gql_msg)
+                    gql_msg = "\n".join(garbage.strip(), json.dumps(json.loads(clean), indent=4))
                 except Exception:
                     print("A problem occurred parsing the setMessage")
                     print(Exception)
-                    gql_msg = garbage + clean
+                    gql_msg = stringjoin(garbage, clean)
 
                 self._txtInput.setText(gql_msg)
                 self._txtInput.setEditable(self._editable)
@@ -422,7 +423,7 @@ if platform.system() == "Java":
             return self._baseValue
 
         def buildRequest(self, payload):
-            input(self._insertionPointPrefix + self._helpers.bytesToString(payload) + self._insertionPointSuffix)
+            input(stringjoin(self._insertionPointPrefix, self._helpers.bytesToString(payload), self._insertionPointSuffix))
             return self._helpers.updateParameter(self._baseRequest, self._helpers.buildParameter("data"), input,
                                                  IParameter.PARAM_BODY)
 

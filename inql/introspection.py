@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import urllib2, urllib
 import argparse
 import time
@@ -6,6 +8,7 @@ import json
 import sys
 from urlparse import urlparse
 from datetime import date
+from utils import stringjoin
 
 # Hack-ish way to handle unicode (finger crossed)
 reload(sys)
@@ -222,10 +225,10 @@ def query(target, key, proxyDict):
         return contents
 
     except urllib2.HTTPError, e:
-        print(red + str(e) + white)
+        print(stringjoin(red, str(e), white))
 
     except urllib2.URLError, e:
-        print(red + str(e) + white)
+        print(stringjoin(red, str(e), white))
 
 
 def file_write(URL, file_path, today, timestamp, file_name, content, mode):
@@ -279,7 +282,7 @@ def detect_type(types):
     # Switch between known args types
     if "String" in types:
         # needed for Burp Repeater string handling
-        types = '\\"' + types + '\\"'
+        types = stringjoin('\\"', types, '\\"')
         types = types.replace("String", "asd")
     elif "Boolean" in types:
         types = types.replace("Boolean", "TRUE")
@@ -323,21 +326,21 @@ def main():
 def init(args, print_help=None):
     # At least one between -t or -f (target) parameters must be set
     if args.target is None and args.schema_json_file is None:
-        print red + "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!" + white
+        print(stringjoin(red, "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!", white))
         if print_help:
             print_help()
             exit(1)
 
     # Only one of them -t OR -f :)
     if args.target is not None and args.schema_json_file is not None:
-        print red + "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!" + white
+        print(stringjoin(red, "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!", white))
         if print_help:
             print_help()
             exit(1)
 
     # Takes care of any configured proxy (-p param)
     if args.proxy is not None:
-        print yellow + "Proxy ENABLED: " + args.proxy + white
+        print(stringjoin(yellow, "Proxy ENABLED: ", args.proxy, white))
         proxyDict = {"http": args.proxy, "https": args.proxy}
     else:
         proxyDict = {}
@@ -348,11 +351,11 @@ def init(args, print_help=None):
             URL = urlparse(args.target).netloc
         else:
             # Acquire a local JSON file as a target
-            print yellow + "Parsing local schema file" + white
+            print(stringjoin(yellow, "Parsing local schema file", white))
             URL = "localschema"
         detect = args.detect
         if detect:
-            print yellow + "Detect arguments is ENABLED, known types will be replaced with placeholder values" + white
+            print(stringjoin(yellow, "Detect arguments is ENABLED, known types will be replaced with placeholder values", white))
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
@@ -711,31 +714,28 @@ def init(args, print_help=None):
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 if rt[i]['name'] == Query:
                                                     q_args_type.append(
-                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
-                                                                      'name']) + "]")
+                                                        "[%s]" % str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 elif rt[i]['name'] == Mutation:
                                                     m_args_type.append(
-                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
-                                                                      'name']) + "]")
+                                                        "[%s]" % str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 elif rt[i]['name'] == Subscription:
                                                     s_args_type.append(
-                                                        "[" + str(rt[i]['fields'][j]['args'][x]['type']['ofType'][
-                                                                      'name']) + "]")
+                                                        "[%s]" % str(rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                             # NOT NULL
                                             elif rt[i]['fields'][j]['args'][x]['type']['kind'] == "NON_NULL":
                                                 output_file.write("<span class='type'>{0}!</span><br>".format(
                                                     rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 if rt[i]['name'] == Query:
                                                     q_args_type.append(
-                                                        "!" + str(
+                                                        "!%s" % str(
                                                             rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 elif rt[i]['name'] == Mutation:
                                                     m_args_type.append(
-                                                        "!" + str(
+                                                        "!%s" % str(
                                                             rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                                 elif rt[i]['name'] == Subscription:
                                                     s_args_type.append(
-                                                        "!" + str(
+                                                        "!%s" % str(
                                                             rt[i]['fields'][j]['args'][x]['type']['ofType']['name']))
                                             # Holds simple types like float, string, int etc.
                                             else:
@@ -773,21 +773,20 @@ def init(args, print_help=None):
             # --------------------
             # QUERY
             # --------------------
-            print green + "Writing Queries Templates" + white
+            print(stringjoin(green, "Writing Queries Templates", white))
             index = 0
             for qname in q_name:
-                print " |  " + str(qname)
-                file_write(URL, "query", today, timestamp, qname, "{\"query\":\"query{" + qname + "(", "w")
+                print(" |  %s" % str(qname))
+                file_write(URL, "query", today, timestamp, qname, "{\"query\":\"query{%s(" % qname, "w")
                 for argsname in q_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "query", today, timestamp, qname,
-                                       argsname + ":" + detect_type(q_args_type.pop()) + " ", "a")
+                                       "%s:%s " % (argsname, detect_type(q_args_type.pop())), "a")
                         else:
-                            file_write(URL, "query", today, timestamp, qname, argsname + ":" + q_args_type.pop() + " ",
-                                       "a")
+                            file_write(URL, "query", today, timestamp, qname, "%s:%s " % (argsname, q_args_type.pop()), "a")
                     else:
                         q_args_type.pop()
                 # Query name
@@ -797,7 +796,7 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if q_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "query", today, timestamp, qname, items + " ", "a")
+                            file_write(URL, "query", today, timestamp, qname, "%s " % items, "a")
                         break
                     f_index += 1
                 # Close query
@@ -806,22 +805,21 @@ def init(args, print_help=None):
             # --------------------
             # MUTATION
             # --------------------
-            print green + "Writing Mutations Templates" + white
+            print(stringjoin(green, "Writing Mutations Templates", white))
             index = 0
             for mname in m_name:
-                print " |  " + str(mname)
-                file_write(URL, "mutation", today, timestamp, mname, "{\"query\":\"mutation{" + mname + "(", "w")
+                print(" |  %s" % str(mname))
+                file_write(URL, "mutation", today, timestamp, mname, "{\"query\":\"mutation{%s(" % mname, "w")
                 for argsname in m_args_name[index]:
                     # POP out of the list empty values
                     if argsname != "":
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "mutation", today, timestamp, mname,
-                                       argsname + ":" + detect_type(m_args_type.pop()) + " ", "a")
+                                       "%s:%s " % (argsname, detect_type(m_args_type.pop())), "a")
                         else:
                             file_write(URL, "mutation", today, timestamp, mname,
-                                       argsname + ":" + m_args_type.pop() + " ",
-                                       "a")
+                                       "%s:%s " % (argsname, m_args_type.pop()), "a")
                     else:
                         m_args_type.pop()
                 # Mutation name
@@ -831,7 +829,7 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if m_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "mutation", today, timestamp, mname, items + " ", "a")
+                            file_write(URL, "mutation", today, timestamp, mname, "%s " % items, "a")
                         break
                     f_index += 1
                 # Close mutation
@@ -840,11 +838,11 @@ def init(args, print_help=None):
             # --------------------
             # SUBSCRIPTION
             # --------------------
-            print green + "Writing Subscriptions Templates" + white
+            print(stringjoin(green, "Writing Subscriptions Templates", white))
             index = 0
             for sname in s_name:
-                print " |  " + str(sname)
-                file_write(URL, "subscription", today, timestamp, sname, "{\"query\":\"subscription{" + sname + "(",
+                print(" |  %s" % str(sname))
+                file_write(URL, "subscription", today, timestamp, sname, "{\"query\":\"subscription{%s(" % sname,
                            "w")
                 for argsname in s_args_name[index]:
                     # POP out of the list empty values
@@ -852,10 +850,10 @@ def init(args, print_help=None):
                         # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                         if detect:
                             file_write(URL, "subscription", today, timestamp, sname,
-                                       argsname + ":" + detect_type(s_args_type.pop()) + " ", "a")
+                                       "%s:%s " % (argsname, detect_type(s_args_type.pop())), "a")
                         else:
                             file_write(URL, "subscription", today, timestamp, sname,
-                                       argsname + ":" + s_args_type.pop() + " ", "a")
+                                       "%s:%s " % (argsname, s_args_type.pop()), "a")
                     else:
                         s_args_type.pop()
                 # Subscription name
@@ -865,7 +863,7 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if s_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "subscription", today, timestamp, sname, items + " ", "a")
+                            file_write(URL, "subscription", today, timestamp, sname, "%s " % items, "a")
                         break
                     f_index += 1
                 # Close subscription
@@ -873,10 +871,10 @@ def init(args, print_help=None):
                 index += 1
             # --------------------
             # THE END, they all lived happily ever after (hopefully)
-            print green + "DONE" + white
+            print(stringjoin(green, "DONE", white))
     else:
         # Likely missing a required arguments
-        print "Missing Arguments"
+        print("Missing Arguments")
         if print_help:
             print(white)
             print_help()
@@ -888,4 +886,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         # Catch CTRL+C, it will abruptly kill the script
-        print red + "Exiting..." + reset
+        print(stringjoin(red, "Exiting...", reset))

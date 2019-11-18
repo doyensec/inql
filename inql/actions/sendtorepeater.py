@@ -6,6 +6,7 @@ if platform.system() == "Java":
     from javax.swing import JMenuItem
     from inql.constants import *
     from org.python.core.util import StringUtil
+    from inql.utils import stringjoin
 
     class RepeaterSender(IProxyListener, ActionListener):
         def __init__(self, callbacks, helpers, text):
@@ -44,9 +45,8 @@ if platform.system() == "Java":
             if req:
                 info = req[0]
                 body = req[1]
-                new_body = body[:info.getBodyOffset()].tostring()
-                new_body += self.payload
-                repeater_body = StringUtil.toBytes(new_body)
+                headers = body[:info.getBodyOffset()].tostring()
+                repeater_body = StringUtil.toBytes(stringjoin(headers, self.payload))
                 self.callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(), info.getUrl().getProtocol() == 'https', repeater_body, 'GraphQL #%s' % self.index)
                 self.index += 1
 
