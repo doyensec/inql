@@ -6,9 +6,9 @@ if platform.system() == "Java":
     from java.awt import Color
     import java.awt
     import java.awt.event
-    from java.awt.event import FocusListener, KeyAdapter, KeyEvent, WindowAdapter
+    from java.awt.event import FocusListener, KeyAdapter, KeyEvent
     from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel,
-                             JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane,
+                             JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane, JPopupMenu,
                              SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree, JFileChooser)
     import java.lang
     from java.lang import System
@@ -19,9 +19,8 @@ if platform.system() == "Java":
     from java.lang import Short, Integer
     import os
     from inql.introspection import init
+    from inql.constants import *
     from filetree import FileTree
-
-    DEFAULT_LOAD_URL = "URL or File Location (eg: http://example.com/graphql or /tmp/schema.json)"
 
     class AttrDict(dict):
         def __init__(self, *args, **kwargs):
@@ -59,17 +58,36 @@ if platform.system() == "Java":
                 return ""
             else:
                 return self.this.getText()
-    
+
+    def inheritsPopupMenu(element):
+        element.setInheritsPopupMenu(True)
+        try:
+            for e in element.getComponents():
+                inheritsPopupMenu(e)
+        except:
+            pass
 
 
-    class GraphQLPanel(WindowAdapter):
+    class GraphQLPanel():
         # XXX: inheriting from Java classes is very tricky. It is preferable to use
         #      the decorator pattern instead.
-        def __init__(self, callbacks=None, helpers=None):
-            self.callbacks = callbacks
-            self.helpers = helpers
+        def __init__(self, actions=[]):
             self.this = JPanel()
+            self.actions = actions
             self.initComponents()
+
+        def treeListener(self, e):
+            # load selected file into textarea
+            try:
+                host = [str(p) for p in e.getPath().getPath()][1]
+                fname = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
+                f = open(fname, "r")
+                payload = f.read()
+                self.TextArea.setText(payload)
+                for action in self.actions:
+                    action.ctx(fname=fname, payload=payload, host=host)
+            except IOError:
+                pass
 
         def initComponents(self):
             omnibox = HintTextField(DEFAULT_LOAD_URL)
@@ -87,8 +105,10 @@ if platform.system() == "Java":
             Loadurl = javax.swing.JButton()
             self.Loadurl = Loadurl
             jScrollPane3 = javax.swing.JScrollPane()
-            self.FT = FileTree(os.getcwd(),TextArea)
+            self.FT = FileTree(os.getcwd())
+            self.FT.tree.addTreeSelectionListener(self.treeListener)
             Tree = self.FT.this
+
 
             url.setName("url")
             url.setSelectionColor(java.awt.Color(255, 153, 51))
@@ -175,6 +195,14 @@ if platform.system() == "Java":
                               .addContainerGap())
             )
 
+            self.popup = JPopupMenu()
+            self.this.setComponentPopupMenu(self.popup)
+            inheritsPopupMenu(self.this)
+
+            for action in self.actions:
+                self.popup.add(action.menuitem)
+
+
         def filepicker(self):
             fileChooser = JFileChooser()
             fileChooser.setCurrentDirectory(File(System.getProperty("user.home")))
@@ -224,12 +252,27 @@ else:
 if __name__ == "__main__":
     import os, shutil, tempfile
     tmpdir = tempfile.mkdtemp()
+    from java.awt.event import ActionListener
+    from javax.swing import JMenuItem
+
+    class TestAction(ActionListener):
+        def __init__(self, text):
+            self.requests = {}
+            self.menuitem = JMenuItem(text)
+            self.menuitem.addActionListener(self)
+            self.enabled = True
+            self.menuitem.setEnabled(self.enabled)
+
+        def actionPerformed(self, e):
+            self.enabled = not self.enabled
+            self.menuitem.setEnabled(self.enabled)
+
     os.chdir(tmpdir)
     frame = JFrame("Burp TAB Tester")
     frame.setForeground(Color.black)
     frame.setBackground(Color.lightGray)
     cp = frame.getContentPane()
-    cp.add(GraphQLPanel().this)
+    cp.add(GraphQLPanel(actions=[TestAction("test it")]).this)
     frame.pack()
     frame.setVisible(True)
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)

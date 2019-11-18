@@ -17,17 +17,7 @@ import os
 
 
 class FileTree:
-
-    def listener(self, e):
-        # load selected file into textarea
-        try:
-            f = open(os.path.join(*[str(p) for p in e.getPath().getPath()][1:]), "r")
-            self.textarea.setText(f.read())
-        except IOError:
-            pass
-
-    def __init__(self, dir, textarea=None):
-        self.textarea = textarea
+    def __init__(self, dir):
         dir = File(dir)
         self.dir = dir
         self.this = JPanel()
@@ -38,8 +28,6 @@ class FileTree:
         tree.setRootVisible(False)
         self.tree = tree
 
-        # Add a listener
-        tree.addTreeSelectionListener(self.listener)
 
         # Lastly, put the JTree into a JScrollPane.
         scrollpane = JScrollPane()

@@ -20,38 +20,14 @@ if platform.system() == "Java":
     # TODO: MUST merge this file to make it works as a standalone tool
     import query_process
     from widgets.tab import GraphQLPanel
+    from actions.sendtorepeater import RepeaterSender
 
     from java.io import PrintWriter
 
-    SCANNER_VERSION = "1.0"
-    DEBUG = False
-
-    tech_checks = {
-        '{"data":{"__schema":{',
-        "graphql-ws"
-    }
-
-    console_checks = {
-        "GraphiQL",
-        "GraphQL Playground",
-        "GraphQL Console",
-        "graphql-playground"
-    }
-
-    urls = {
-        "/graphql.php",
-        "/graphql",
-        "/graphiql",
-        "/graphql/console/",
-        "/swapi-graphql/",
-        "/gql",
-        "/graphql/subscriptions",
-        "/graphql/subscription"
-    }
-
+    from constants import *
 
     from burp import IBurpExtender, IMessageEditorTabFactory, IMessageEditorTab, IScannerInsertionPointProvider, \
-        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener
+        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener, IProxyListener
 
     class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IMessageEditorTabFactory, IScannerCheck, IExtensionStateListener):
         # Main Class for Burp Extenders
@@ -107,7 +83,7 @@ if platform.system() == "Java":
         # implement IScannerCheck
         def doPassiveScan(self, baseRequestResponse):
             issues = []
-            for check in tech_checks:
+            for check in TECH_CHECKS:
                 # look for matches of our passive check grep string
                 matches = self._get_matches(baseRequestResponse.getResponse(), bytearray(check))
                 if len(matches) != 0:
@@ -127,7 +103,7 @@ if platform.system() == "Java":
                         ""
                     )])
 
-            for check in console_checks:
+            for check in CONSOLE_CHECKS:
                 # look for matches of our passive check grep string
                 matches = self._get_matches(baseRequestResponse.getResponse(), bytearray(check))
                 if len(matches) != 0:
@@ -164,14 +140,14 @@ if platform.system() == "Java":
         # active scan
         def doActiveScan(self, baseRequestResponse, insertionPoint):
             issues = []
-            # will request the urls, passive scanner will do the grep and match
-            for url in urls:
+            # will request the URLS, passive scanner will do the grep and match
+            for url in URLS:
                 path = self._callbacks.getHelpers().analyzeRequest(baseRequestResponse).getUrl().getPath()
                 # this thing replace the path inside the old bytearray for the new request
                 newReq = self._callbacks.getHelpers().bytesToString(baseRequestResponse.getRequest()).replace(path, url,
                                                                                                               1)
                 result = self._callbacks.makeHttpRequest(baseRequestResponse.getHttpService(), newReq)
-                for check in tech_checks:
+                for check in TECH_CHECKS:
                     # look for matches of our passive check grep string
                     matches = self._get_matches(result.getResponse(), bytearray(check))
                     if len(matches) != 0:
@@ -191,7 +167,7 @@ if platform.system() == "Java":
                             ""
                         )])
 
-                for check in console_checks:
+                for check in CONSOLE_CHECKS:
                     # look for matches of our passive check grep string
                     matches = self._get_matches(result.getResponse(), bytearray(check))
                     if len(matches) != 0:
@@ -472,7 +448,8 @@ if platform.system() == "Java":
             return "GraphQL Scanner"
 
         def getUiComponent(self):
-            panel = GraphQLPanel(self.callbacks, self.helpers)
+            repeater_sender = RepeaterSender(self.callbacks, self.helpers, "Send to Repeater")
+            panel = GraphQLPanel(actions=[repeater_sender])
             self.callbacks.customizeUiComponent(panel.this)
             return panel.this
 
