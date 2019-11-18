@@ -18,6 +18,7 @@ if platform.system() == "Java":
     import javax
     from java.lang import Short, Integer
     import os
+    from inql.actions.executor import ExecutorAction
     from inql.introspection import init
     from inql.constants import *
     from filetree import FileTree
@@ -74,6 +75,8 @@ if platform.system() == "Java":
         def __init__(self, actions=[]):
             self.this = JPanel()
             self.actions = actions
+            self.actions.append(ExecutorAction("Load", self.LoadurlActionPerformed))
+            self.actions = reversed(self.actions)
             self.initComponents()
 
         def treeListener(self, e):
@@ -93,7 +96,7 @@ if platform.system() == "Java":
             omnibox = HintTextField(DEFAULT_LOAD_URL)
             self.omnibox = omnibox
             url = omnibox.this
-            omnibox.set_enter_evt_listener(lambda evt: self.LoadurlActionPerformed(evt, url, LoadPlaceholders))
+            omnibox.set_enter_evt_listener(self.LoadurlActionPerformed)
             self.url = url
             jScrollPane2 = javax.swing.JScrollPane()
             TextArea = javax.swing.JTextArea()
@@ -134,8 +137,7 @@ if platform.system() == "Java":
 
             Loadurl.setText("Load")
             Loadurl.setToolTipText("Query a GraphQL backend (introspection)")
-            Loadurl.addActionListener(
-                lambda evt: self.LoadurlActionPerformed(evt, url, LoadPlaceholders))
+            Loadurl.addActionListener(self.LoadurlActionPerformed)
 
             # Tree.setToolTipText("Select an item to load it's template")
             jScrollPane3.setViewportView(Tree)
@@ -214,20 +216,20 @@ if platform.system() == "Java":
                 self.url.setText(selectedFile.getAbsolutePath())
             return isApproveOption
 
-        def LoadurlActionPerformed(self, evt, url, LoadPlaceholders):
-            target = url.getText().strip()
+        def LoadurlActionPerformed(self, evt):
+            target = self.url.getText().strip()
             if target == DEFAULT_LOAD_URL:
                 if self.filepicker():
-                    self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+                    self.LoadurlActionPerformed(evt)
             elif target.startswith('http://') or target.startswith('https://'):
                 print("Quering GraphQL schema from: %s" % target)
-                run(self, target, LoadPlaceholders, "URL")
+                run(self, target, self.LoadPlaceholders, "URL")
             elif not os.path.isfile(target):
                 if self.filepicker():
-                    self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+                    self.LoadurlActionPerformed(evt)
             else:
                 print("Loading JSON schema from: %s" % target)
-                run(self, target, LoadPlaceholders, "JSON")
+                run(self, target, self.LoadPlaceholders, "JSON")
 
 
     def run(self, target, LoadPlaceholders, flag):
