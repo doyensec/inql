@@ -179,22 +179,24 @@ if platform.system() == "Java":
             fileChooser = JFileChooser()
             fileChooser.setCurrentDirectory(File(System.getProperty("user.home")))
             result = fileChooser.showOpenDialog(self.this)
-            if result == JFileChooser.APPROVE_OPTION:
+            isApproveOption = result == JFileChooser.APPROVE_OPTION
+            if isApproveOption:
                 selectedFile = fileChooser.getSelectedFile()
                 self.omnibox.showingHint = False
                 self.url.setText(selectedFile.getAbsolutePath())
+            return isApproveOption
 
         def LoadurlActionPerformed(self, evt, url, LoadPlaceholders):
             target = url.getText().strip()
             if target == DEFAULT_LOAD_URL:
-                self.filepicker()
-                self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+                if self.filepicker():
+                    self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
             elif target.startswith('http://') or target.startswith('https://'):
                 print("Quering GraphQL schema from: %s" % target)
                 run(self, target, LoadPlaceholders, "URL")
             elif not os.path.isfile(target):
-                self.filepicker()
-                self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
+                if self.filepicker():
+                    self.LoadurlActionPerformed(evt, url, LoadPlaceholders)
             else:
                 print("Loading JSON schema from: %s" % target)
                 run(self, target, LoadPlaceholders, "JSON")
