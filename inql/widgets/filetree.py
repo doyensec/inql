@@ -4,12 +4,12 @@ if platform.system() != "Java":
     print("Load this file inside Burp Suite/jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
-from java.awt import (BorderLayout, Color, Container, Dimension)
+from java.awt import (BorderLayout, Color, Container, Dimension, Component)
 
 from java.io import File
 from java.util import Vector
 
-from javax.swing import (BoxLayout, JFrame, JPanel, JScrollPane, JTree)
+from javax.swing import (BoxLayout, JFrame, JPanel, JScrollPane, JTree, JLabel)
 from javax.swing.event import TreeSelectionEvent
 from javax.swing.event import TreeSelectionListener
 from javax.swing.tree import (DefaultMutableTreeNode, DefaultTreeModel)
@@ -17,17 +17,21 @@ import os
 
 
 class FileTree:
-    def __init__(self, dir):
+    def __init__(self, dir=None, label=None):
+        if not dir: dir = os.getcwd()
+        if not label: label = "FileTree"
         dir = File(dir)
         self.dir = dir
         self.this = JPanel()
         self.this.setLayout(BorderLayout())
 
+        # Add a label
+        self.this.add(BorderLayout.PAGE_START, JLabel(label))
+
         # Make a tree list with all the nodes, and make it a JTree
         tree = JTree(self.addNodes(None, dir))
         tree.setRootVisible(False)
         self.tree = tree
-
 
         # Lastly, put the JTree into a JScrollPane.
         scrollpane = JScrollPane()
@@ -76,7 +80,7 @@ if __name__ == "__main__":
     frame.setForeground(Color.black)
     frame.setBackground(Color.lightGray)
     cp = frame.getContentPane()
-    cp.add(FileTree(os.getcwd()).this)
+    cp.add(FileTree().this)
     frame.pack()
     frame.setVisible(True)
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)

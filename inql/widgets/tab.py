@@ -4,11 +4,11 @@ import platform
 if platform.system() == "Java":
     # JAVA GUI Import
     from java.awt import Component
-    from java.awt import Color
+    from java.awt import Color, BorderLayout
     import java.awt
     import java.awt.event
     from java.awt.event import FocusListener, KeyAdapter, KeyEvent
-    from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel,
+    from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel, JSplitPane,
                              JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane, JPopupMenu,
                              SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree, JFileChooser)
     import java.lang
@@ -20,8 +20,11 @@ if platform.system() == "Java":
     from java.lang import Short, Integer
     import os
     from inql.actions.executor import ExecutorAction
+    from inql.actions.flag import FlagAction
     from inql.introspection import init
     from inql.constants import *
+    from inql.widgets.omnibar import Omnibar
+    from inql.widgets.fileview import FileView
     from filetree import FileTree
 
     class AttrDict(dict):
@@ -29,37 +32,6 @@ if platform.system() == "Java":
             super(AttrDict, self).__init__(*args, **kwargs)
             self.__dict__ = self
 
-    class HintTextField(FocusListener, KeyAdapter):
-        def __init__(self, hint='hint'):
-            self.this = JTextField(hint)
-            self.hint = hint
-            self.showingHint = True
-            self.enter_listener = None
-            self.this.addFocusListener(self)
-            self.this.addKeyListener(self)
-
-        def set_enter_evt_listener(self, enter_listener):
-            self.enter_listener = enter_listener
-
-        def keyPressed(self, e):
-            if self.enter_listener and e.getKeyCode() == KeyEvent.VK_ENTER:
-                self.enter_listener(e)
-          
-        def focusGained(self, e):
-            if self.getText() == "":
-                self.this.setText("")
-                self.showingHint = False
-
-        def focusLost(self, e):
-            if self.getText() == "":
-                self.this.setText(self.hint)
-                self.showingHint = True
-
-        def getText(self):
-            if self.showingHint:
-                return ""
-            else:
-                return self.this.getText()
 
     def inheritsPopupMenu(element):
         element.setInheritsPopupMenu(True)
@@ -71,132 +43,28 @@ if platform.system() == "Java":
 
 
     class GraphQLPanel():
-        # XXX: inheriting from Java classes is very tricky. It is preferable to use
-        #      the decorator pattern instead.
         def __init__(self, actions=[]):
-            self.this = JPanel()
             self.actions = actions
-            self.actions.append(ExecutorAction("Load", self.LoadurlActionPerformed))
+            self.action_loadplaceholder = FlagAction(
+                text_true="Disable Load placeholders for the templates",
+                text_false="Enable Load placeholders for the templates")
+            self.actions.append(self.action_loadplaceholder)
+            self.actions.append(ExecutorAction("Load", self.loadurl))
             self.actions = reversed(self.actions)
-            self.initComponents()
 
-        def treeListener(self, e):
-            # load selected file into textarea
-            try:
-                host = [str(p) for p in e.getPath().getPath()][1]
-                fname = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
-                f = open(fname, "r")
-                payload = f.read()
-                self.TextArea.setText(payload)
-                for action in self.actions:
-                    action.ctx(fname=fname, payload=payload, host=host)
-            except IOError:
-                pass
-
-        def initComponents(self):
-            omnibox = HintTextField(DEFAULT_LOAD_URL)
-            self.omnibox = omnibox
-            url = omnibox.this
-            omnibox.set_enter_evt_listener(self.LoadurlActionPerformed)
-            self.url = url
-            jScrollPane2 = javax.swing.JScrollPane()
-            TextArea = javax.swing.JTextArea()
-            self.TextArea = TextArea
-            jLabel2 = javax.swing.JLabel()
-            jLabel3 = javax.swing.JLabel()
-            LoadPlaceholders = javax.swing.JCheckBox()
-            self.LoadPlaceholders = LoadPlaceholders
-            Loadurl = javax.swing.JButton()
-            self.Loadurl = Loadurl
-            jScrollPane3 = javax.swing.JScrollPane()
-            self.FT = FileTree(os.getcwd())
-            self.FT.tree.addTreeSelectionListener(self.treeListener)
-            Tree = self.FT.this
-
-
-            url.setName("url")
-            url.setSelectionColor(java.awt.Color(255, 153, 51))
-
-            TextArea.setColumns(20)
-            TextArea.setRows(5)
-            TextArea.setLineWrap(True)
-            TextArea.setWrapStyleWord(True)
-            TextArea.setName("TextArea")
-            TextArea.setSelectionColor(java.awt.Color(255, 153, 51))
-            TextArea.requestFocus()
-            jScrollPane2.setViewportView(TextArea)
-
-            jLabel2.setText("Queries, mutations and subscriptions")
-
-            jLabel3.setLabelFor(TextArea)
-            jLabel3.setText("Selected template:")
-
-            LoadPlaceholders.setSelected(True)
-            LoadPlaceholders.setText("Load template placeholders")
-            LoadPlaceholders.setToolTipText("Load placeholders for the templates")
-            LoadPlaceholders.setName("LoadPlaceholders")
-
-            Loadurl.setText("Load")
-            Loadurl.setToolTipText("Query a GraphQL backend (introspection)")
-            Loadurl.addActionListener(self.LoadurlActionPerformed)
-
-            # Tree.setToolTipText("Select an item to load it's template")
-            jScrollPane3.setViewportView(Tree)
-            # JAVA GUI LAYOUT
-            # --------------------
-            layout = javax.swing.GroupLayout(self.this)
-            self.this.setLayout(layout)
-            layout.setHorizontalGroup(
-                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                              .addContainerGap()
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                        .addGroup(layout.createSequentialGroup()
-                    .addGroup(
-                    layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(jLabel2)
-                        .addGroup(layout.createSequentialGroup()
-                                  .addGap(6, 6, 6)
-                                  .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 231,
-                                                javax.swing.GroupLayout.PREFERRED_SIZE)))
-                    .addGap(12, 12, 12)
-                    .addGroup(
-                    layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(jScrollPane2, 0, Short.MAX_VALUE, Short.MAX_VALUE)
-                        .addGroup(layout.createSequentialGroup()
-                                  .addComponent(jLabel3, javax.swing.GroupLayout.DEFAULT_SIZE,
-                                                javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                  .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                  .addComponent(LoadPlaceholders))))
-                                        .addGroup(layout.createSequentialGroup() # first bar the one on top
-                                                  .addComponent(url, javax.swing.GroupLayout.PREFERRED_SIZE, 421,
-                                                                Short.MAX_VALUE)
-                                                  .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                                  .addComponent(Loadurl)))
-                              .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
-            layout.setVerticalGroup(
-                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                              .addContainerGap()
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                        .addComponent(url, javax.swing.GroupLayout.PREFERRED_SIZE,
-                                                      javax.swing.GroupLayout.DEFAULT_SIZE,
-                                                      javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addComponent(Loadurl))
-                              .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED,  # vertical spacing 
-                                               0, 24)
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE) # bar over the selection
-                                        .addComponent(jLabel2)
-                                        .addComponent(jLabel3)
-                                        .addComponent(LoadPlaceholders))
-                              .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                              .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, True) # FileTree and Selected Template Content, TODO: use a JSplitPane here
-                                        .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 403,
-                                                      Short.MAX_VALUE)
-                                        .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 403,
-                                                      Short.MAX_VALUE))
-                              .addContainerGap())
-            )
+            self.this = JPanel()
+            self.this.setLayout(BorderLayout())            
+            self.omnibar = Omnibar(
+                hint=DEFAULT_LOAD_URL,
+                label="Load",
+                action=self.loadurl)
+            self.this.add(BorderLayout.PAGE_START, self.omnibar.this)
+            self.fileview = FileView(
+                dir=os.getcwd(),
+                filetree_label="Queries, Mutations and Subscriptions",
+                payloadview_label="Query Template")
+            self.this.add(BorderLayout.CENTER, self.fileview.this)
+            self.fileview.filetree.tree.addTreeSelectionListener(self.treeListener)
 
             self.popup = JPopupMenu()
             self.this.setComponentPopupMenu(self.popup)
@@ -205,6 +73,17 @@ if platform.system() == "Java":
             for action in self.actions:
                 self.popup.add(action.menuitem)
 
+        def treeListener(self, e):
+            # load selected file into textarea
+            try:
+                host = [str(p) for p in e.getPath().getPath()][1]
+                fname = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
+                f = open(fname, "r")
+                payload = f.read()
+                for action in self.actions:
+                    action.ctx(fname=fname, payload=payload, host=host)
+            except IOError:
+                pass
 
         def filepicker(self):
             fileChooser = JFileChooser()
@@ -217,37 +96,37 @@ if platform.system() == "Java":
                 self.url.setText(selectedFile.getAbsolutePath())
             return isApproveOption
 
-        def LoadurlActionPerformed(self, evt):
-            target = self.url.getText().strip()
+        def loadurl(self, evt):
+            target = self.omnibar.getText().strip()
             if target == DEFAULT_LOAD_URL:
                 if self.filepicker():
-                    self.LoadurlActionPerformed(evt)
+                    self.loadurl(evt)
             elif target.startswith('http://') or target.startswith('https://'):
                 print("Quering GraphQL schema from: %s" % target)
-                run(self, target, self.LoadPlaceholders, "URL")
+                run(self, target, self.action_loadplaceholder.enabled, "URL")
             elif not os.path.isfile(target):
                 if self.filepicker():
-                    self.LoadurlActionPerformed(evt)
+                    self.loadurl(evt)
             else:
                 print("Loading JSON schema from: %s" % target)
-                run(self, target, self.LoadPlaceholders, "JSON")
+                run(self, target, self.action_loadplaceholder.enabled, "JSON")
 
 
-    def run(self, target, LoadPlaceholders, flag):
+    def run(self, target, load_placeholer, flag):
         if flag == "JSON":
-            if LoadPlaceholders.isSelected():
+            if load_placeholer:
                 args = {"schema_json_file": target, "detect": True, "key": None, "proxy": None, "target": None}
             else:
                 args = {"schema_json_file": target, "detect": "", "key": None, "proxy": None, "target": None}
         else:
-            if LoadPlaceholders.isSelected():
+            if load_placeholer:
                 args = {"target": target, "detect": True, "key": None, "proxy": None, "schema_json_file": None}
             else:
                 args = {"target": target, "detect": "", "key": None, "proxy": None, "schema_json_file": None}
 
         # call init method from Introspection tool
         init(AttrDict(args))
-        self.FT.refresh()
+        self.fileview.filetree.refresh()
         return
 else:
     print("Load this file inside jython, if you need the stand-alone tool run: Introspection.py")
