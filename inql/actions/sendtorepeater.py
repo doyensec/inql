@@ -55,6 +55,10 @@ if platform.system() == "Java":
             self.payload = payload
             self.fname = fname
 
+            if not self.fname.endswith('.query'):
+                self.menuitem.setEnabled(False)
+                return
+
             try:
                 self.requests[host]
                 self.menuitem.setEnabled(True)

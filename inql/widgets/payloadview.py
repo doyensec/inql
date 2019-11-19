@@ -24,6 +24,7 @@ class PayloadView:
         self.textarea.setRows(5)
         self.textarea.setLineWrap(True)
         self.textarea.setWrapStyleWord(True)
+        self.textarea.setEditable(False)
         self.textarea.setName("TextArea")
         self.textarea.setSelectionColor(Color(255, 153, 51))
         self.textarea.requestFocus()

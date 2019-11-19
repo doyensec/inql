@@ -5,6 +5,7 @@ if platform.system() != "Java":
     exit(-1)
 
 import os
+import json
 from javax.swing import JSplitPane, JFrame
 from java.awt import BorderLayout, Color
 
@@ -19,18 +20,30 @@ class FileView:
         self.this = JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                            self.filetree.this, self.payloadview.this)
         self.this.setOneTouchExpandable(True)
-        self.this.setDividerLocation(300)
         self.filetree.tree.addTreeSelectionListener(self.treeListener)
         self.this.getRightComponent().setVisible(False)
 
     def treeListener(self, e):
         try:
-            with open(os.path.join(*[str(p) for p in e.getPath().getPath()][1:]), 'r') as f:
-                self.payloadview.refresh(f.read())
+            fpath = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
+
+            if fpath.endswith('.html'):
+                self.this.getRightComponent().setVisible(False)
+                return
+
+            with open(fpath, 'r') as f:
+                payload = f.read()
+                if fpath.endswith('.query'):
+                    j = json.loads(payload)
+                    payload = j['query']
+                self.payloadview.refresh(payload)
                 self.this.getRightComponent().setVisible(True)
                 self.this.setDividerLocation(0.25)
         except IOError:
             pass
+
+    def addTreeListener(self, action):
+        self.filetree.tree.addTreeSelectionListener(action)
 
 
 if __name__ == "__main__":

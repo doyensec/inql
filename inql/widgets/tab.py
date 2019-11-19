@@ -21,6 +21,7 @@ if platform.system() == "Java":
     import os
     from inql.actions.executor import ExecutorAction
     from inql.actions.flag import FlagAction
+    from inql.actions.browser import BrowserAction
     from inql.introspection import init
     from inql.constants import *
     from inql.widgets.omnibar import Omnibar
@@ -46,11 +47,12 @@ if platform.system() == "Java":
         def __init__(self, actions=[]):
             self.actions = actions
             self.action_loadplaceholder = FlagAction(
-                text_true="Disable Load placeholders for the templates",
-                text_false="Enable Load placeholders for the templates")
+                text_true="Disable Load placeholders",
+                text_false="Enable Load placeholders")
             self.actions.append(self.action_loadplaceholder)
+            self.actions.append(BrowserAction())
             self.actions.append(ExecutorAction("Load", self.loadurl))
-            self.actions = reversed(self.actions)
+            self.actions = [a for a in reversed(self.actions)]
 
             self.this = JPanel()
             self.this.setLayout(BorderLayout())            
@@ -64,7 +66,7 @@ if platform.system() == "Java":
                 filetree_label="Queries, Mutations and Subscriptions",
                 payloadview_label="Query Template")
             self.this.add(BorderLayout.CENTER, self.fileview.this)
-            self.fileview.filetree.tree.addTreeSelectionListener(self.treeListener)
+            self.fileview.addTreeListener(self.treeListener)
 
             self.popup = JPopupMenu()
             self.this.setComponentPopupMenu(self.popup)
@@ -81,7 +83,7 @@ if platform.system() == "Java":
                 f = open(fname, "r")
                 payload = f.read()
                 for action in self.actions:
-                    action.ctx(fname=fname, payload=payload, host=host)
+                    action.ctx(host=host, payload=payload, fname=fname)
             except IOError:
                 pass
 
@@ -148,6 +150,9 @@ if __name__ == "__main__":
         def actionPerformed(self, e):
             self.enabled = not self.enabled
             self.menuitem.setEnabled(self.enabled)
+
+        def ctx(self, host=None, payload=None, fname=None):
+            pass
 
     os.chdir(tmpdir)
     frame = JFrame("Burp TAB Tester")

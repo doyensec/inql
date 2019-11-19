@@ -261,7 +261,7 @@ def file_write(URL, file_path, today, timestamp, file_name, content, mode):
         none
     """
 
-    write_file = open(os.path.join(URL, file_path, today, timestamp, '%s.txt' % file_name), mode)
+    write_file = open(os.path.join(URL, file_path, today, timestamp, '%s.query' % file_name), mode)
     write_file.write(content)
     write_file.close()
 
@@ -394,7 +394,7 @@ def init(args, print_help=None):
                     result_raw = s.read()
                     result = json.loads(result_raw)
             # Write schema file
-            schema_file = open(os.path.join(URL, "schema-%s-%s.txt" % (today, timestamp)), "w")
+            schema_file = open(os.path.join(URL, "schema-%s-%s.json" % (today, timestamp)), "w")
             if args.target is not None:
                 # returns a prettified json
                 schema_file.write(json.dumps(result, indent=4))

@@ -70,8 +70,8 @@ class FileTree:
         # Pass two: for files.
         for i in xrange(0, files.size()):
             f = files.elementAt(i)
-            if f.split('.')[-1] != 'html':
-                curDir.add(DefaultMutableTreeNode(files.elementAt(i)))
+            #if f.split('.')[-1] != 'html':
+            curDir.add(DefaultMutableTreeNode(files.elementAt(i)))
         return curDir
 
 
