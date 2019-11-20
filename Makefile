@@ -14,3 +14,5 @@ ext/inql_burp.py: requirements ext version
 
 clean:
 	rm -rf ext
+
+.PHONY: clean version
