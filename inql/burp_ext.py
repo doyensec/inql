@@ -17,6 +17,7 @@ if platform.system() == "Java":
     import json
     import tempfile
     import shutil
+    import os
     # TODO: MUST merge this file to make it works as a standalone tool
     import query_process
     from widgets.tab import GraphQLPanel
