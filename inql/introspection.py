@@ -777,20 +777,23 @@ def init(args, print_help=None):
             index = 0
             for qname in q_name:
                 print(" |  %s" % str(qname))
-                file_write(URL, "query", today, timestamp, qname, "{\"query\":\"query{%s(" % qname, "w")
-                for argsname in q_args_name[index]:
-                    # POP out of the list empty values
-                    if argsname != "":
-                        # if detect type (-d param) is enabled, retrieve placeholders according to arg type
-                        if detect:
-                            file_write(URL, "query", today, timestamp, qname,
-                                       "%s:%s " % (argsname, detect_type(q_args_type.pop())), "a")
+                file_write(URL, "query", today, timestamp, qname, "{\"query\":\"query %s {%s" % (qname, qname), "w")
+                if len(q_args_name[index]) != 0:
+                    file_write(URL, "query", today, timestamp, qname, "(", "a")
+                    for argsname in q_args_name[index]:
+                        # POP out of the list empty values
+                        if argsname != "":
+                            # if detect type (-d param) is enabled, retrieve placeholders according to arg type
+                            if detect:
+                                file_write(URL, "query", today, timestamp, qname,
+                                           "%s:%s " % (argsname, detect_type(q_args_type.pop())), "a")
+                            else:
+                                file_write(URL, "query", today, timestamp, qname, "%s:%s " % (argsname, q_args_type.pop()), "a")
                         else:
-                            file_write(URL, "query", today, timestamp, qname, "%s:%s " % (argsname, q_args_type.pop()), "a")
-                    else:
-                        q_args_type.pop()
-                # Query name
-                file_write(URL, "query", today, timestamp, qname, "){", "a")
+                            q_args_type.pop()
+                    # Query name
+                    file_write(URL, "query", today, timestamp, qname, ")", "a")
+                file_write(URL, "query", today, timestamp, qname, "{", "a")
                 # Query fields
                 f_index = 0
                 for fieldsnames in fields_names:
