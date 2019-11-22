@@ -18,6 +18,11 @@ import os
 
 class FileTree:
     def __init__(self, dir=None, label=None):
+        try:
+            FileTree.selves.append(self)
+        except AttributeError:
+            FileTree.selves = []
+            FileTree.selves.append(self)
         if not dir: dir = os.getcwd()
         if not label: label = "FileTree"
         dir = File(dir)
@@ -38,8 +43,10 @@ class FileTree:
         scrollpane.getViewport().add(tree)
         self.this.add(BorderLayout.CENTER, scrollpane)
 
-    def refresh(self):
-        self.tree.setModel(DefaultTreeModel(self.addNodes(None, self.dir)))
+    @staticmethod
+    def refresh():
+        for self in FileTree.selves:
+            self.tree.setModel(DefaultTreeModel(self.addNodes(None, self.dir)))
 
     def addNodes(self, curTop, dir):
         curPath = dir.getPath()
