@@ -128,7 +128,7 @@ if platform.system() == "Java":
 
         # call init method from Introspection tool
         init(AttrDict(args))
-        FileTree.refresh()
+        self.fileview.filetree.refresh()
         return
 else:
     print("Load this file inside jython, if you need the stand-alone tool run: Introspection.py")
