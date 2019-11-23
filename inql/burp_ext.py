@@ -1,6 +1,6 @@
 #!/usr/bin/env jython
 """
-Title: GraphQL Scanner
+Title: InQL Scanner
 Author: Andrea Brancaleoni (@nJoyeneer)
 Original Author: Paolo Stagno (@Void_Sec) - https://voidsec.com
 Version: 1.0
@@ -42,9 +42,9 @@ if platform.system() == "Java":
             self.tmpdir = tempfile.mkdtemp()
             os.chdir(self.tmpdir)
             helpers = callbacks.getHelpers()
-            callbacks.setExtensionName("GraphQL Scanner %s" % SCANNER_VERSION)
-            callbacks.issueAlert("GraphQL Scanner Started")
-            print("GraphQL Scanner Started! (tmpdir: %s )" % os.getcwd())
+            callbacks.setExtensionName("InQL Scanner %s" % SCANNER_VERSION)
+            callbacks.issueAlert("InQL Scanner Started")
+            print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
             stdout = PrintWriter(callbacks.getStdout(), True)
             stderr = PrintWriter(callbacks.getStderr(), True)
             # Registering GraphQL Tab
@@ -311,7 +311,7 @@ if platform.system() == "Java":
 
         # Define Message Editor Properties for GQL Editor
         def getTabCaption(self):
-            return "GraphQL"
+            return "InQL"
 
         def getUiComponent(self):
             return self._txtInput.getComponent()
@@ -446,7 +446,7 @@ if platform.system() == "Java":
             self.helpers = helpers
 
         def getTabCaption(self):
-            return "GraphQL Scanner"
+            return "InQL Scanner"
 
         def getUiComponent(self):
             repeater_sender = RepeaterSender(self.callbacks, self.helpers, "Send to Repeater")
