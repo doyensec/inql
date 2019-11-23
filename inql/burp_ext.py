@@ -33,6 +33,7 @@ if platform.system() == "Java":
     from utils import stringjoin
 
     class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IMessageEditorTabFactory, IScannerCheck, IExtensionStateListener):
+
         # Main Class for Burp Extenders
         def registerExtenderCallbacks(self, callbacks):
             self._callbacks = callbacks
@@ -53,7 +54,8 @@ if platform.system() == "Java":
             # Register ourselves as a custom scanner check
             callbacks.registerScannerCheck(self)
             # Register Suite Tab
-            callbacks.addSuiteTab(GraphQLTab(callbacks, helpers))
+            self.tab = GraphQLTab(callbacks, helpers)
+            callbacks.addSuiteTab(self.tab)
             # Register extension state listener
             callbacks.registerExtensionStateListener(self)
             return
@@ -61,6 +63,7 @@ if platform.system() == "Java":
         def extensionUnloaded(self):
             os.chdir('/')
             shutil.rmtree(self.tmpdir, ignore_errors=False, onerror=None)
+            self.tab.save()
             return
 
         # helper method to search a response for occurrences of a literal match string
@@ -447,7 +450,19 @@ if platform.system() == "Java":
 
         def getUiComponent(self):
             repeater_sender = RepeaterSender(self.callbacks, self.helpers, "Send to Repeater")
-            panel = GraphQLPanel(actions=[repeater_sender])
-            self.callbacks.customizeUiComponent(panel.this)
-            return panel.this
+            try:
+                restore = self.callbacks.loadExtensionSetting(GraphQLPanel.__name__)
+            except Exception as ex:
+                print("Cannot restore state! %s" % ex)
+                restore = None
+            self.panel = GraphQLPanel(
+                actions=[repeater_sender],
+                restore=restore)
+            self.callbacks.customizeUiComponent(self.panel.this)
+            return self.panel.this
 
+        def save(self):
+            try:
+                self.callbacks.saveExtensionSetting(self.panel.__class__.__name__, self.panel.state())
+            except:
+                print("Cannot save state!")

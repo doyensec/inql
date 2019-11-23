@@ -9,6 +9,7 @@ if platform.system() == "Java":
     from java.io import File
 
     import os
+    import json
     from inql.actions.executor import ExecutorAction
     from inql.actions.flag import FlagAction
     from inql.actions.browser import BrowserAction
@@ -33,7 +34,7 @@ if platform.system() == "Java":
 
 
     class GraphQLPanel():
-        def __init__(self, actions=[], restore=""):
+        def __init__(self, actions=[], restore=None):
             self.actions = actions
             self.action_loadplaceholder = FlagAction(
                 text_true="Disable Load placeholders",
@@ -63,6 +64,14 @@ if platform.system() == "Java":
 
             for action in self.actions:
                 self.popup.add(action.menuitem)
+
+            self._state = []
+            if restore:
+                for target, load_placeholer, flag in json.loads(restore):
+                    run(self, target, load_placeholer, flag)
+
+        def state(self):
+            return json.dumps(self._state)
 
         def treeListener(self, e):
             # load selected file into textarea
@@ -104,6 +113,7 @@ if platform.system() == "Java":
 
 
     def run(self, target, load_placeholer, flag):
+        self._state.append((target, load_placeholer, flag))
         if flag == "JSON":
             if load_placeholer:
                 args = {"schema_json_file": target, "detect": True, "key": None, "proxy": None, "target": None}
