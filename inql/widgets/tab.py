@@ -3,21 +3,11 @@ import platform
 
 if platform.system() == "Java":
     # JAVA GUI Import
-    from java.awt import Component
     from java.awt import Color, BorderLayout
-    import java.awt
-    import java.awt.event
-    from java.awt.event import FocusListener, KeyAdapter, KeyEvent
-    from javax.swing import (BoxLayout, ImageIcon, JButton, JFrame, JPanel, JSplitPane,
-                             JPasswordField, JLabel, JEditorPane, JTextField, JScrollPane, JPopupMenu,
-                             SwingConstants, WindowConstants, GroupLayout, JCheckBox, JTree, JFileChooser)
-    import java.lang
+    from javax.swing import (JFrame, JPanel, JPopupMenu, JFileChooser)
     from java.lang import System
-    import java.io
     from java.io import File
 
-    import javax
-    from java.lang import Short, Integer
     import os
     from inql.actions.executor import ExecutorAction
     from inql.actions.flag import FlagAction
@@ -26,7 +16,6 @@ if platform.system() == "Java":
     from inql.constants import *
     from inql.widgets.omnibar import Omnibar
     from inql.widgets.fileview import FileView
-    from filetree import FileTree
 
     class AttrDict(dict):
         def __init__(self, *args, **kwargs):
@@ -44,7 +33,7 @@ if platform.system() == "Java":
 
 
     class GraphQLPanel():
-        def __init__(self, actions=[]):
+        def __init__(self, actions=[], restore=""):
             self.actions = actions
             self.action_loadplaceholder = FlagAction(
                 text_true="Disable Load placeholders",
@@ -134,7 +123,7 @@ else:
     print("Load this file inside jython, if you need the stand-alone tool run: Introspection.py")
 
 if __name__ == "__main__":
-    import os, shutil, tempfile
+    import os, tempfile
     tmpdir = tempfile.mkdtemp()
     from java.awt.event import ActionListener
     from javax.swing import JMenuItem

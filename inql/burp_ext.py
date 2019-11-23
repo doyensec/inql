@@ -28,7 +28,7 @@ if platform.system() == "Java":
     from constants import *
 
     from burp import IBurpExtender, IMessageEditorTabFactory, IMessageEditorTab, IScannerInsertionPointProvider, \
-        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener, IProxyListener
+        IScannerInsertionPoint, IParameter, IScannerCheck, IScanIssue, ITab, IExtensionStateListener
 
     from utils import stringjoin
 
