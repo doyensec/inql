@@ -1,26 +1,32 @@
 import platform
 
 if platform.system() == "Java":
-    from burp import IProxyListener
+    from burp import IProxyListener, IContextMenuFactory
     from java.awt.event import ActionListener
     from javax.swing import JMenuItem
     from inql.constants import *
     from org.python.core.util import StringUtil
     from inql.utils import stringjoin
 
-    class RepeaterSender(IProxyListener, ActionListener):
+    class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
         def __init__(self, callbacks, helpers, text):
             self.requests = {}
             self.helpers = helpers
             self.callbacks = callbacks
             self.menuitem = JMenuItem(text)
+            self.burp_menuitem = JMenuItem("inql: %s" % text)
             self.callbacks.registerProxyListener(self)
             self.menuitem.addActionListener(self)
             self.menuitem.setEnabled(False)
+            self.burp_menuitem.addActionListener(self)
+            self.burp_menuitem.setEnabled(False)
             self.index = 0
             self.host = None
             self.payload = None
             self.fname = None
+            for r in self.callbacks.getProxyHistory():
+                self.processRequest(self.helpers.analyzeRequest(r), r.getRequest())
+            self.callbacks.registerContextMenuFactory(self)
 
         def processProxyMessage(self, messageIsRequest, message):
             if messageIsRequest:
@@ -57,10 +63,32 @@ if platform.system() == "Java":
 
             if not self.fname.endswith('.query'):
                 self.menuitem.setEnabled(False)
+                self.burp_menuitem.setEnabled(False)
                 return
 
             try:
                 self.requests[host]
                 self.menuitem.setEnabled(True)
+                self.burp_menuitem.setEnabled(True)
             except KeyError:
                 self.menuitem.setEnabled(False)
+                self.burp_menuitem.setEnabled(False)
+
+        def createMenuItems(self, invocation):
+            try:
+                r = invocation.getSelectedMessages()[0]
+                info = self.helpers.analyzeRequest(r)
+                url = str(info.getUrl())
+                if not any([x in url for x in URLS]):
+                    return None
+                body = r.getRequest()[info.getBodyOffset():].tostring()
+                for h in info.getHeaders():
+                    if h.lower().startswith("host:"):
+                        domain = h[5:].strip()
+
+                self.ctx(fname='dummy.query', host=domain, payload=body)
+                mymenu = []
+                mymenu.append(self.burp_menuitem)
+            except Exception as ex:
+                return None
+            return mymenu
