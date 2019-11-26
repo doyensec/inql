@@ -7,12 +7,11 @@ if platform.system() != "Java":
 from java.awt import (BorderLayout, Color, Container, Dimension, Component)
 
 from java.io import File
-from java.util import Vector
+from java.util import Vector, Collections
 
 from javax.swing import (BoxLayout, JFrame, JPanel, JScrollPane, JTree, JLabel)
-from javax.swing.event import TreeSelectionEvent
-from javax.swing.event import TreeSelectionListener
 from javax.swing.tree import (DefaultMutableTreeNode, DefaultTreeModel)
+
 import os
 
 
@@ -68,6 +67,7 @@ class FileTree:
                 files.addElement(thisObject)
 
         # Pass two: for files.
+        Collections.sort(files)
         for i in xrange(0, files.size()):
             f = files.elementAt(i)
             #if f.split('.')[-1] != 'html':
