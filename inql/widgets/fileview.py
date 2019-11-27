@@ -45,6 +45,9 @@ class FileView:
     def addTreeListener(self, action):
         self.filetree.tree.addTreeSelectionListener(action)
 
+    def addPayloadListener(self, action):
+        self.payloadview.addListener(action)
+
 
 if __name__ == "__main__":
     frame = JFrame("FileView")

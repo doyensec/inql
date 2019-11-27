@@ -57,6 +57,7 @@ if platform.system() == "Java":
                 payloadview_label="Query Template")
             self.this.add(BorderLayout.CENTER, self.fileview.this)
             self.fileview.addTreeListener(self.treeListener)
+            self.fileview.addPayloadListener(self.payloadListener)
 
             self.popup = JPopupMenu()
             self.this.setComponentPopupMenu(self.popup)
@@ -74,15 +75,27 @@ if platform.system() == "Java":
             return json.dumps(self._state)
 
         def treeListener(self, e):
-            # load selected file into textarea
             try:
                 host = [str(p) for p in e.getPath().getPath()][1]
+                self._host = host
                 fname = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
+                self._fname = fname
                 f = open(fname, "r")
                 payload = f.read()
                 for action in self.actions:
                     action.ctx(host=host, payload=payload, fname=fname)
             except IOError:
+                pass
+
+        def payloadListener(self, e):
+            try:
+                doc = e.getDocument()
+                payload = {
+                    "query": doc.getText(0, doc.getLength())
+                }
+                for action in self.actions:
+                    action.ctx(host=self._host, payload=json.dumps(payload), fname=self._fname)
+            except Exception:
                 pass
 
         def filepicker(self):
