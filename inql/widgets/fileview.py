@@ -33,9 +33,11 @@ class FileView:
 
             with open(fpath, 'r') as f:
                 payload = f.read()
+                self.payloadview.setEditable(False)
                 if fpath.endswith('.query'):
                     j = json.loads(payload)
                     payload = j['query']
+                    self.payloadview.setEditable(True)
                 self.payloadview.refresh(payload)
                 self.this.getRightComponent().setVisible(True)
                 self.this.setDividerLocation(0.25)

@@ -52,6 +52,9 @@ class PayloadView:
 
         self.refresh(payload)
 
+    def setEditable(self, editable):
+        self.textarea.setEditable(editable)
+
     def refresh(self, payload):
         if payload:
             self.textarea.setText(payload)
