@@ -435,7 +435,7 @@ if platform.system() == "Java":
             return None
 
         def getInsertionPointType(self):
-            return INS_EXTENSION_PROVIDED
+            return IScannerInsertionPoint.INS_EXTENSION_PROVIDED
 
 
     # JAVA GUI

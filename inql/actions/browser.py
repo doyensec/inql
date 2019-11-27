@@ -4,6 +4,7 @@ if platform.system() == "Java":
     from java.awt.event import ActionListener
     from java.awt import Desktop
     from javax.swing import JMenuItem
+    from java.net import URI
     import subprocess
     import os
 
