@@ -799,11 +799,11 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if q_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "query", today, timestamp, qname, "%s " % items, "a")
+                            file_write(URL, "query", today, timestamp, qname, "\\n\\t%s " % items, "a")
                         break
                     f_index += 1
                 # Close query
-                file_write(URL, "query", today, timestamp, qname, "}}\"}", "a")
+                file_write(URL, "query", today, timestamp, qname, "\\n}}\"}", "a")
                 index += 1
             # --------------------
             # MUTATION
@@ -832,11 +832,11 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if m_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "mutation", today, timestamp, mname, "%s " % items, "a")
+                            file_write(URL, "mutation", today, timestamp, mname, "\\n\\t%s " % items, "a")
                         break
                     f_index += 1
                 # Close mutation
-                file_write(URL, "mutation", today, timestamp, mname, "}}\"}", "a")
+                file_write(URL, "mutation", today, timestamp, mname, "\\n}}\"}", "a")
                 index += 1
             # --------------------
             # SUBSCRIPTION
@@ -866,11 +866,11 @@ def init(args, print_help=None):
                 for fieldsnames in fields_names:
                     if s_type[index] in fields_names[f_index][0]:
                         for items in fields_names[f_index][1:]:
-                            file_write(URL, "subscription", today, timestamp, sname, "%s " % items, "a")
+                            file_write(URL, "subscription", today, timestamp, sname, "\\n\\t%s " % items, "a")
                         break
                     f_index += 1
                 # Close subscription
-                file_write(URL, "subscription", today, timestamp, sname, "}}\"}", "a")
+                file_write(URL, "subscription", today, timestamp, sname, "\\n}}\"}", "a")
                 index += 1
             # --------------------
             # THE END, they all lived happily ever after (hopefully)

@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
         def ctx(self, host=None, payload=None, fname=None):
             pass
-
+    print("Changing dir to %s" % tmpdir)
     os.chdir(tmpdir)
     frame = JFrame("Burp TAB Tester")
     frame.setForeground(Color.black)
