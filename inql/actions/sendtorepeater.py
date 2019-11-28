@@ -34,7 +34,7 @@ if platform.system() == "Java":
 
         def processRequest(self, reqinfo, reqbody):
             url = str(reqinfo.getUrl())
-            if any([x in url for x in URLS]):
+            if any([url.endswith(x) for x in URLS]):
                 for h in reqinfo.getHeaders():
                     if h.lower().startswith("host:"):
                         domain = h[5:].strip()
@@ -43,7 +43,7 @@ if platform.system() == "Java":
                 try:
                     self.requests[domain]
                 except KeyError:
-                    self.requests[domain] = {}
+                    self.requests[domain] = {'POST': None, 'PUT': None, 'GET': None}
                 self.requests[domain][method] = (reqinfo, reqbody)
 
         def actionPerformed(self, e):
