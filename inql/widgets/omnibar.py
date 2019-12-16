@@ -46,6 +46,10 @@ class HintTextField(FocusListener, KeyAdapter):
         else:
             return self.this.getText()
 
+    def reset(self):
+        self.this.setText(self.hint)
+        self.showingHint = True
+
 class Omnibar:
     def __init__(self, hint=None, label=None, action=None):
         if not hint: hint = 'Omnibar hint'
@@ -65,6 +69,9 @@ class Omnibar:
 
     def getText(self):
         return self.text.getText()
+
+    def reset(self):
+        self.text.reset()
 
 if __name__ == "__main__":
     frame = JFrame("Omnibar")

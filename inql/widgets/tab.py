@@ -127,6 +127,7 @@ if platform.system() == "Java":
 
     def run(self, target, load_placeholer, flag):
         self._state.append((target, load_placeholer, flag))
+        self.omnibar.reset()
         if flag == "JSON":
             if load_placeholer:
                 args = {"schema_json_file": target, "detect": True, "key": None, "proxy": None, "target": None}
