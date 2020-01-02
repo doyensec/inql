@@ -4,8 +4,6 @@ if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
-import re
-
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 from org.python.core.util import StringUtil
@@ -13,29 +11,7 @@ from org.python.core.util import StringUtil
 from burp import IProxyListener, IContextMenuFactory
 
 from inql.constants import *
-from inql.utils import string_join
-
-def _override_headers(http_header, overrideheaders):
-    """
-    Overrides headers with the defined overrides.
-
-    :param http_header: an HTTP header content
-    :param overrideheaders: an overrideheaders object.
-    :return: a new overridden headers string
-    """
-    ree = [(
-        re.compile("^%s\s:\s*[^\n]+$" % re.escape(header)),
-        re.compile("%s: %s" % (re.escape(header), re.escape(val))))
-        for (header, val) in overrideheaders]
-    h = http_header
-    for find, replace in ree:
-        hn = re.sub(find, replace, h)
-        if hn == h:
-            h = "%s\n%s\n" % (hn, str(replace))
-        else:
-            h = hn
-
-    return h
+from inql.utils import string_join, override_headers
 
 
 class RepeaterSenderAction(IProxyListener, ActionListener, IContextMenuFactory):
@@ -108,10 +84,10 @@ class RepeaterSenderAction(IProxyListener, ActionListener, IContextMenuFactory):
             try:
                 self._overrideheaders[self._host]
             except KeyError:
-                self._overrideheaders[self._host] = {}
+                self._overrideheaders[self._host] = []
 
             repeater_body = StringUtil.toBytes(string_join(
-                _override_headers(headers, self._overrideheaders[self._host]),
+                override_headers(headers, self._overrideheaders[self._host]),
                 self._payload))
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),

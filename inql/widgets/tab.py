@@ -1,6 +1,7 @@
 from __future__ import print_function
 import platform
 
+
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
@@ -13,6 +14,8 @@ from java.io import File
 
 import os
 import json
+import string
+
 from inql.actions.executor import ExecutorAction
 from inql.actions.flag import FlagAction
 from inql.actions.browser import BrowserAction
@@ -20,6 +23,7 @@ from inql.introspection import init
 from inql.constants import *
 from inql.widgets.omnibar import Omnibar
 from inql.widgets.fileview import FileView
+from inql.widgets.propertyeditor import PropertyEditor
 from inql.utils import inherits_popup_menu, AttrDict
 
 
@@ -31,25 +35,22 @@ class GraphQLPanel():
     """
     def __init__(self, actions=[], restore=None):
         self._actions = actions
-        self.action_loadplaceholder = FlagAction(
-            text_true="Disable Load placeholders",
-            text_false="Enable Load placeholders")
-        self._actions.append(self.action_loadplaceholder)
-        self.action_generate_html = FlagAction(
-            text_true="Disable HTML DOC Generation",
-            text_false="Enable HTML DOC Generation",
-            enabled=False)
-        self._actions.append(self.action_generate_html)
-        self.action_generate_schema = FlagAction(
-            text_true="Disable Schema DOC Generation",
-            text_false="Enable Schema DOC Generation",
-            enabled=False)
-        self._actions.append(self.action_generate_schema)
-        self.action_generate_queries = FlagAction(
-            text_true="Disable STUB Queries Generation",
-            text_false="Enable STUB Queries Generation")
-        self._actions.append(self.action_generate_queries)
+        self._load_headers = []
+        self._run_config = [
+            ['Proxy', None],
+            ['Authorization Key', None],
+            ['Load Placeholders', True],
+            ['Generate HTML DOC', False],
+            ['Generate Schema DOC', False],
+            ['Generate Stub Queries', True]
+        ]
+        self._default_config = {}
+        for k, v in self._run_config:
+            self._default_config[k] = v
+        print(self._default_config)
+        self._old_config_hash = None
         self._actions.append(BrowserAction())
+        self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
         self._actions.append(ExecutorAction("Load", self._loadurl))
         self._actions = [a for a in reversed(self._actions)]
 
@@ -77,8 +78,41 @@ class GraphQLPanel():
 
         self._state = []
         if restore:
-            for target, load_placeholer, generate_html, generate_schema, generate_queries, flag in json.loads(restore):
-                run(self, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
+            for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in json.loads(restore):
+                self._run(key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
+
+    def _setup_headers(self):
+        PropertyEditor.get_instance(
+            text='Load Headers',
+            columns=['Header', 'Value'],
+            data=self._load_headers,
+            empty=["X-New-Header", "X-New-Header-Value"])
+
+    def _setup(self):
+        PropertyEditor.get_instance(
+            text="Configure InQL",
+            columns=['Property', 'Value'],
+            data=self._run_config,
+            actions=[
+                ExecutorAction("Setup Load Headers",
+                               lambda _: self._setup_headers())
+            ]
+        )
+
+    def _cfg(self, key):
+        new_hash = hash(string.join([str(i) for _, i in self._run_config]))
+        if self._old_config_hash != new_hash:
+            self._config = {}
+            for k, v in self._run_config:
+                self._config[k] = v
+            self._old_config_hash = new_hash
+        try:
+            return self._config[key]
+        except KeyError:
+            try:
+                return self._default_config[key]
+            except KeyError:
+                return None
 
     def state(self):
         """
@@ -151,27 +185,40 @@ class GraphQLPanel():
         if target == DEFAULT_LOAD_URL:
             if self._filepicker():
                 self._loadurl(evt)
+        elif target == 'about:config':
+            self._setup()
+            self._omnibar.reset()
+        elif target == 'about:headers':
+            self._setup_headers()
+            self._omnibar.reset()
         elif target.startswith('http://') or target.startswith('https://'):
             print("Quering GraphQL schema from: %s" % target)
-            self._run(target, self.action_loadplaceholder.enabled(),
-                      self.action_generate_html.enabled(),
-                      self.action_generate_schema.enabled(),
-                      self.action_generate_queries.enabled(),
-                "URL")
+            self._run(target,
+                      self._cfg('Authorization Key'),
+                      self._cfg('Proxy'),
+                      self._load_headers,
+                      self._cfg('Load Placeholders'),
+                      self._cfg('Generate HTML DOC'),
+                      self._cfg('Generate Schema DOC'),
+                      self._cfg('Generate Stub Queries'),
+                      "URL")
         elif not os.path.isfile(target):
             if self._filepicker():
                 self._loadurl(evt)
         else:
             print("Loading JSON schema from: %s" % target)
             self._run(target,
-                      self.action_loadplaceholder.enabled(),
-                      self.action_generate_html.enabled(),
-                      self.action_generate_schema.enabled(),
-                      self.action_generate_queries.enabled(),
-                "JSON")
+                      self._cfg('Authorization Key'),
+                      self._cfg('Proxy'),
+                      self._load_headers,
+                      self._cfg('Load Placeholders'),
+                      self._cfg('Generate HTML DOC'),
+                      self._cfg('Generate Schema DOC'),
+                      self._cfg('Generate Stub Queries'),
+                      "JSON")
 
 
-    def _run(self, target, load_placeholer, generate_html, generate_schema, generate_queries, flag):
+    def _run(self, target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, flag):
         """
         Run the actual analysis, this method is a wrapper for the non-UI version of the tool and basically calls the
         main/init method by itself.
@@ -184,21 +231,19 @@ class GraphQLPanel():
         :param flag: "JSON" file or normal target otherwise
         :return: None
         """
-        self._state.append((target, load_placeholer, generate_html, generate_schema, generate_queries, flag))
-        self.omnibar.reset()
-        args = {"key": None, "proxy": None, "target": None, 'headers': [],
-                "generate_html": generate_html, "generage_schema": generate_schema,
-                "generate_queries": generate_queries, "detect": load_placeholer}
-        if flag == "JSON":
-            args["schema_json_file"] = target
-        else:
-            args["target"] = target
-
-        args["detect"] = load_placeholer
+        self._state.append((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
+        print((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
+        self._omnibar.reset()
+        args = {"key": key, "proxy": proxy, 'headers': headers, "detect": load_placeholer,
+                "generate_html": generate_html,
+                "generate_schema": generate_schema,
+                "generate_queries": generate_queries,
+                "target": target if flag != "JSON" else None,
+                "schema_json_file": target if flag == "JSON" else None}
 
         # call init method from Introspection tool
         init(AttrDict(args.copy()))
-        self.fileview.filetree.refresh()
+        self._fileview.refresh()
         return
 
 if __name__ == "__main__":

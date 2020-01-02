@@ -151,6 +151,8 @@ def main():
     args = parser.parse_args()
     # -----------------------
 
+    print(args['schema_json_file'])
+
     mkdir_p(args.output_directory)
     os.chdir(args.output_directory)
 
@@ -187,6 +189,7 @@ def init(args, print_help=None):
         proxyDict = {}
 
     # Generate Headers object
+    print(args)
     headers = {}
     for k, v in args.headers:
         headers[k] = v

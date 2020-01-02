@@ -72,6 +72,8 @@ class FileView:
         """
         self._payloadview.add_listener(action)
 
+    def refresh(self):
+        self._filetree.refresh()
 
 if __name__ == "__main__":
     frame = JFrame("FileView")

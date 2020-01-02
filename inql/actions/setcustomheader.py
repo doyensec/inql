@@ -19,6 +19,7 @@ class CustomHeaderSetterAction(ActionListener):
         self.requests = {}
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
+        self.menuitem.addActionListener(self)
         self._overrideheaders = overrideheaders
         self._host = None
 
@@ -33,12 +34,12 @@ class CustomHeaderSetterAction(ActionListener):
             try:
                 self._overrideheaders[self._host]
             except KeyError:
-                self._overrideheaders[self._host] = {}
+                self._overrideheaders[self._host] = []
 
-            PropertyEditor("Set Custom Header for %s" % self._host,
+            PropertyEditor.get_instance("Set Custom Header for %s" % self._host,
                            columns=["Header", "Value"],
                            data=self._overrideheaders[self._host],
-                           empty=["X-New-Header", "X-New-Header-Value"]).show_option_dialog()
+                           empty=["X-New-Header", "X-New-Header-Value"])
 
     def ctx(self, host=None, payload=None, fname=None):
         """

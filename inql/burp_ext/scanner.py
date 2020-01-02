@@ -124,6 +124,7 @@ class BurpScannerCheck(IScannerCheck):
     """
     def __init__(self, callbacks):
         self._callbacks = callbacks
+        self._helpers = callbacks.getHelpers()
 
     def _get_matches(self, response, match):
         """

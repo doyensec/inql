@@ -1,3 +1,4 @@
+import re
 import string, os, sys
 
 
@@ -63,3 +64,26 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+
+def override_headers(http_header, overrideheaders):
+    """
+    Overrides headers with the defined overrides.
+
+    :param http_header: an HTTP header content
+    :param overrideheaders: an overrideheaders object.
+    :return: a new overridden headers string
+    """
+    ree = [(
+        re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE),
+        "%s: %s" % (header, val))
+        for (header, val) in overrideheaders]
+    h = http_header
+    for find, replace in ree:
+        hn = re.sub(find, replace, h)
+        if hn == h:
+            h = "%s\n%s\n" % (hn, str(replace))
+        else:
+            h = hn
+
+    return h
