@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import platform
 
 if platform.system() != "Java":
@@ -32,8 +34,8 @@ class GraphQLTab(ITab):
         :return: Tab UI Component
         """
         overrideheaders = {}
-        repeater_sender = RepeaterSenderAction(self._callbacks, self._helpers, "Send to Repeater", overrideheaders)
-        custom_header_setter = CustomHeaderSetterAction(overrideheaders, "Set Custom Header")
+        repeater_sender = RepeaterSenderAction(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater", overrideheaders=overrideheaders)
+        custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:
             restore = self._callbacks.loadExtensionSetting(GraphQLPanel.__name__)
         except Exception as ex:

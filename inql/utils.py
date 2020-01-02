@@ -1,5 +1,7 @@
 import re
 import string, os, sys
+import time
+import threading
 
 
 def string_join(*ss):
@@ -87,3 +89,52 @@ def override_headers(http_header, overrideheaders):
             h = hn
 
     return h
+
+
+def nop_evt(evt):
+    """
+    Do nothing on events
+
+    :param evt: ignored
+    :return: None
+    """
+    pass
+
+def nop():
+    """
+    Do nothing
+
+    :return: None
+    """
+    pass
+
+stop_watch = False
+
+def stop():
+    global stop_watch
+    stop_watch = True
+
+def watch(execute=nop, interval=60):
+    global stop_watch
+    def async_run():
+        try:
+            while not stop_watch:
+                execute()
+                time.sleep(interval)
+                sys.stdout.flush()
+                sys.stderr.flush()
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+    t = threading.Thread(target=async_run)
+    t.start()
+
+def async(execute=nop):
+    def async_run():
+        try:
+            execute()
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+    threading.Thread(target=async_run).start()

@@ -1,6 +1,6 @@
-#from __future__ import print_function
-
 import platform
+
+from inql.utils import watch, stop
 
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
@@ -9,8 +9,6 @@ if platform.system() != "Java":
 import os
 import shutil
 import tempfile
-
-from java.io import PrintWriter
 
 from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 
@@ -57,4 +55,5 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         """
         os.chdir('/')
         shutil.rmtree(self._tmpdir, ignore_errors=False, onerror=None)
+        stop()
         self._tab.save()

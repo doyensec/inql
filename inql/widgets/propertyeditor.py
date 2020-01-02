@@ -42,7 +42,7 @@ class PropertyEditor(WindowAdapter):
         """
         if not actions: actions = []
         if not columns: columns = []
-        if not data: data = []
+        if data == None: data = []
         if not empty: empty = []
         try:
             PropertyEditor.instances[text]
@@ -73,7 +73,7 @@ class PropertyEditor(WindowAdapter):
     def __private_init__(self, text="Property Editor", columns=None, data=None, empty=None, add_actions=True, actions=None):
         if not actions: actions = []
         if not columns: columns = []
-        if not data: data = []
+        if data == None: data = []
         if not empty: empty = []
 
         self._text = text

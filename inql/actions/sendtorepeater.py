@@ -79,7 +79,9 @@ class RepeaterSenderAction(IProxyListener, ActionListener, IContextMenuFactory):
         if req:
             info = req[0]
             body = req[1]
-            headers = body[:info.getBodyOffset()].tostring()
+            nobody = body[:info.getBodyOffset()].tostring()
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
 
             try:
                 self._overrideheaders[self._host]
@@ -88,6 +90,7 @@ class RepeaterSenderAction(IProxyListener, ActionListener, IContextMenuFactory):
 
             repeater_body = StringUtil.toBytes(string_join(
                 override_headers(headers, self._overrideheaders[self._host]),
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
                 self._payload))
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),

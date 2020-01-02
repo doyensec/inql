@@ -1,5 +1,7 @@
 import platform
 
+from inql.utils import nop_evt
+
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
@@ -8,14 +10,6 @@ from java.awt.event import FocusListener, KeyAdapter, KeyEvent
 from javax.swing import JFrame, JPanel, JTextField, JButton
 from java.awt import (BorderLayout, Color)
 
-def _nop(evt):
-    """
-    Do nothing on events
-
-    :param evt: ignored
-    :return: None
-    """
-    pass
 
 class _HintTextField(FocusListener, KeyAdapter):
     """
@@ -24,7 +18,7 @@ class _HintTextField(FocusListener, KeyAdapter):
 
     def __init__(self, hint=None, action=None):
         if not hint: hint = 'hint'
-        if not action: action = _nop
+        if not action: action = nop_evt
         self.this = JTextField(hint)
         self._hint = hint
         self._showing_hint = True
@@ -109,7 +103,7 @@ class Omnibar:
     def __init__(self, hint=None, label=None, action=None):
         if not hint: hint = 'Omnibar hint'
         if not label: label = 'Run'
-        if not action: action = _nop
+        if not action: action = nop_evt
         self.this = JPanel()
         self.this.setLayout(BorderLayout())
 

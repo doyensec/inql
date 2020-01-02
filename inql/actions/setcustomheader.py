@@ -1,4 +1,7 @@
+from __future__ import print_function
 import platform
+
+from inql.utils import watch
 
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
@@ -34,8 +37,8 @@ class CustomHeaderSetterAction(ActionListener):
             try:
                 self._overrideheaders[self._host]
             except KeyError:
+                print("No custom header for %s, generating an empty set" % self._host)
                 self._overrideheaders[self._host] = []
-
             PropertyEditor.get_instance("Set Custom Header for %s" % self._host,
                            columns=["Header", "Value"],
                            data=self._overrideheaders[self._host],

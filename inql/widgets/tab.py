@@ -16,6 +16,7 @@ import os
 import json
 import string
 import threading
+import sys
 
 from inql.actions.executor import ExecutorAction
 from inql.actions.browser import BrowserAction
@@ -24,7 +25,7 @@ from inql.constants import *
 from inql.widgets.omnibar import Omnibar
 from inql.widgets.fileview import FileView
 from inql.widgets.propertyeditor import PropertyEditor
-from inql.utils import inherits_popup_menu, AttrDict
+from inql.utils import inherits_popup_menu, AttrDict, async, watch
 
 
 class GraphQLPanel():
@@ -80,7 +81,7 @@ class GraphQLPanel():
         try:
             if restore:
                 cfg = json.loads(restore)
-                for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
+                for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
                     self._run(target=target,
                               key=key,
                               proxy=proxy,
@@ -94,6 +95,7 @@ class GraphQLPanel():
                 self._run_config = cfg['config']
         except Exception as ex:
             print("Cannot Load old configuration: starting with a clean state: %s" % ex)
+            sys.stdout.flush()
         self._state['config'] = self._run_config
 
     def _setup_headers(self):
@@ -277,7 +279,8 @@ class GraphQLPanel():
                 target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
                 accept_invalid_certificate, flag))
             self._fileview.refresh()
-        threading.Thread(target=async_run).start()
+
+        async(async_run)
         return
 
 if __name__ == "__main__":
