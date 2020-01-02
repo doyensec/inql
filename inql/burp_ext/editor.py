@@ -20,17 +20,6 @@ class ListGQLParameters(IMessageEditorTab):
         self._editable = editable
         self._txtInput = callbacks.createTextEditor()
         self._txtInput.setEditable(editable)
-        # Define Query Indicators To Identify a GQL
-        self._GQLIndicator = [
-            '[{"operationName"',
-            '{"operationName":',
-            '[{"query":"query ',
-            '{"query":"mutation',
-            '{"query":"subscription',
-            '{"query":"',
-            '{"data":',
-            '[{"data":']
-        self._variable = 'variables": {'
 
     def getTabCaption(self):
         """
@@ -63,20 +52,13 @@ class ListGQLParameters(IMessageEditorTab):
         else:
             rBody = self._helpers.analyzeResponse(content)
 
-        message = content[rBody.getBodyOffset():].tostring()
-        for indicator in self._GQLIndicator:
-            if message.startswith(indicator):
-                isgql = True
+        message = content[rBody.getBodyOffset():].tostring().strip()
+        content = json.loads(message)
+        if isinstance(content, dict):
+            content = [content]
 
-        if len(message) > 2 and isgql:
-            return True
-        else:
-
-            var_pos = message.find(self._variable)
-            if len(message) > 2 and var_pos > 0:
-                return True
-
-        return False
+        return any(['query' in c and c['query'] in ['query', 'mutation', 'subscription']
+                    for c in content])
 
     def setMessage(self, content, isRequest):
         """
