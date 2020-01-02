@@ -17,7 +17,6 @@ import json
 import string
 
 from inql.actions.executor import ExecutorAction
-from inql.actions.flag import FlagAction
 from inql.actions.browser import BrowserAction
 from inql.introspection import init
 from inql.constants import *
@@ -82,6 +81,10 @@ class GraphQLPanel():
                 self._run(key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
 
     def _setup_headers(self):
+        """
+        Setup Headers callback
+        :return: None
+        """
         PropertyEditor.get_instance(
             text='Load Headers',
             columns=['Header', 'Value'],
@@ -89,6 +92,10 @@ class GraphQLPanel():
             empty=["X-New-Header", "X-New-Header-Value"])
 
     def _setup(self):
+        """
+        Setup callback
+        :return: None
+        """
         PropertyEditor.get_instance(
             text="Configure InQL",
             columns=['Property', 'Value'],
@@ -100,6 +107,10 @@ class GraphQLPanel():
         )
 
     def _cfg(self, key):
+        """
+        :param key: the key of the configuration
+        :return: configuration value or default if unset
+        """
         new_hash = hash(string.join([str(i) for _, i in self._run_config]))
         if self._old_config_hash != new_hash:
             self._config = {}
