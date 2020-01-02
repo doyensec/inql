@@ -7,7 +7,7 @@ setup(
    description='Pentesting tool for GraphQL triage',
    author='Andrea Brancaleoni',
    author_email='andrea@doyensec.com',
-   packages=['inql'],
+   packages=['inql', 'inql.generators'],
    scripts=['bin/inql'],
    install_requires=[],
 )
