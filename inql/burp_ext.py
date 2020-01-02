@@ -25,6 +25,7 @@ import os
 import query_process
 from widgets.tab import GraphQLPanel
 from actions.sendtorepeater import RepeaterSender
+from actions.setcustomheader import CustomHeaderSetter
 
 from java.io import PrintWriter
 
@@ -454,14 +455,18 @@ class GraphQLTab(ITab):
         return "InQL Scanner"
 
     def getUiComponent(self):
-        repeater_sender = RepeaterSender(self.callbacks, self.helpers, "Send to Repeater")
+        overrideheaders = {}
+        repeater_sender = RepeaterSender(self.callbacks, self.helpers, "Send to Repeater", overrideheaders)
+        custom_header_setter = CustomHeaderSetter(overrideheaders, "Set Custom Header")
         try:
             restore = self.callbacks.loadExtensionSetting(GraphQLPanel.__name__)
         except Exception as ex:
             print("Cannot restore state! %s" % ex)
             restore = None
         self.panel = GraphQLPanel(
-            actions=[repeater_sender],
+            actions=[
+                repeater_sender,
+                custom_header_setter],
             restore=restore)
         self.callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this

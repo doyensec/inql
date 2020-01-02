@@ -10,10 +10,23 @@ from javax.swing import JMenuItem
 from inql.constants import *
 from org.python.core.util import StringUtil
 from inql.utils import stringjoin
+import re
+
+
+def override_headers(http_header, overrideheaders):
+    ree = [(
+        re.compile("^%s\s:\s*[^\n]+$" % re.escape(header)),
+        re.compile("%s: %s" % (re.escape(header), re.escape(val))))
+        for (header, val) in overrideheaders]
+    h = http_header
+    for find, replace in ree:
+        h = re.sub(find, replace, h)
+
+    return h
 
 
 class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
-    def __init__(self, callbacks, helpers, text):
+    def __init__(self, callbacks, helpers, text, overrideheaders):
         self.requests = {}
         self.helpers = helpers
         self.callbacks = callbacks
@@ -31,6 +44,7 @@ class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
         for r in self.callbacks.getProxyHistory():
             self.processRequest(self.helpers.analyzeRequest(r), r.getRequest())
         self.callbacks.registerContextMenuFactory(self)
+        self.overrideheaders = overrideheaders
 
     def processProxyMessage(self, messageIsRequest, message):
         if messageIsRequest:
@@ -57,7 +71,16 @@ class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
             info = req[0]
             body = req[1]
             headers = body[:info.getBodyOffset()].tostring()
-            repeater_body = StringUtil.toBytes(stringjoin(headers, self.payload))
+
+            try:
+                self.overrideheaders[self.host]
+            except KeyError:
+                self.overrideheaders[self.host] = {}
+
+            repeater_body = StringUtil.toBytes(stringjoin(
+                override_headers(headers, self.overrideheaders[self.host]),
+                self.payload))
+
             self.callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                           info.getUrl().getProtocol() == 'https', repeater_body,
                                           'GraphQL #%s' % self.index)

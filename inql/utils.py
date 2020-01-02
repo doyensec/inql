@@ -27,3 +27,12 @@ def wrap_open(method, exceptions = (OSError, IOError)):
 
 
 open = wrap_open(open)
+
+
+def inheritsPopupMenu(element):
+    element.setInheritsPopupMenu(True)
+    try:
+        for e in element.getComponents():
+            inheritsPopupMenu(e)
+    except:
+        pass

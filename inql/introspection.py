@@ -58,7 +58,8 @@ if supports_color():
     posix_colors()
 
 
-def query_result(target, key, proxyDict):
+def query_result(target, key, proxyDict, headers={}):
+    headers = headers.copy()
     """
     Execute the introspection query against the GraphQL endpoint
 
@@ -83,16 +84,12 @@ def query_result(target, key, proxyDict):
     introspection_query =  "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"
     old_introspection_query =  "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description args{...InputValue}onOperation onFragment onField}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}"
     # -----------------------
+    if 'User-Agent' not in headers:
+        headers['User-Agent'] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
+
     if key:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0",
-            "Authorization": key
-            # TODO add the option for custom headers and variables
-        }
-    else:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0"
-        }
+        headers['Authorization'] = key
+
     try:
         # Issue the Introspection request against the GraphQL endpoint
         data = urllib.urlencode({"query": introspection_query})
@@ -128,8 +125,15 @@ def main():
     parser.add_argument("-k", dest="key", help="API Authentication Key")
     parser.add_argument('-p', dest="proxy", default=None,
                         help='IP of web proxy to go through (http://127.0.0.1:8080)')
+    parser.add_argument('--header', dest="headers", nargs=2, action='append')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")
+    parser.add_argument("--generate-html", dest="generate_html", action='store_true', default=True,
+                        help="Generate HTML Documentation")
+    parser.add_argument("--generate-schema", dest="generate_schema", action='store_true', default=True,
+                        help="Generate JSON Schema Documentation")
+    parser.add_argument("--generate-queries", dest="generate_queries", action='store_true', default=True,
+                        help="Generate Queries")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
                         help="Output Directory")
     args = parser.parse_args()
@@ -163,6 +167,11 @@ def init(args, print_help=None):
     else:
         proxyDict = {}
 
+    # Generate Headers object
+    headers = {}
+    for k, v in args.headers:
+        headers[k] = v
+
     if args.target is not None or args.schema_json_file is not None:
         if args.target is not None:
             # Acquire GraphQL endpoint URL as a target
@@ -170,7 +179,7 @@ def init(args, print_help=None):
         else:
             # Acquire a local JSON file as a target
             print(stringjoin(yellow, "Parsing local schema file", reset))
-            URL = "localschema"
+            URL = os.path.splitext(os.path.basename(args.schema_json_file))[0]
         if args.detect:
             print(stringjoin(yellow, "Detect arguments is ENABLED, known types will be replaced with placeholder values", reset))
         # Used to generate 'unique' file names for multiple documentation
@@ -183,7 +192,7 @@ def init(args, print_help=None):
         # Generate the documentation for the target
         if args.target is not None:
             # Parse response from the GraphQL endpoint
-            argument = query_result(args.target, args.key, proxyDict)
+            argument = query_result(args.target, args.key, proxyDict, headers)
             # returns a dict
             argument = json.loads(argument)
         else:
@@ -192,17 +201,20 @@ def init(args, print_help=None):
                 result_raw = s.read()
                 argument = json.loads(result_raw)
 
-        schema.generate(argument,
-                        fpath=os.path.join(URL, "schema-%s-%s.json" % (today, timestamp)))
-        html.generate(argument,
-                      fpath=os.path.join(URL, "doc-%s-%s.html" % (today, timestamp)),
-                      custom=custom,
-                      target=args.target)
-        query.generate(argument,
-                       qpath=os.path.join(URL, "%s", today, timestamp, "%s"),
-                       detect=args.detect,
-                       custom=custom,
-                       green_print=lambda s: print(stringjoin(green, "Writing Queries Templates", reset)))
+        if args.generate_schema:
+            schema.generate(argument,
+                            fpath=os.path.join(URL, "schema-%s-%s.json" % (today, timestamp)))
+        if args.generate_html:
+            html.generate(argument,
+                          fpath=os.path.join(URL, "doc-%s-%s.html" % (today, timestamp)),
+                          custom=custom,
+                          target=args.target)
+        if args.generate_queries:
+            query.generate(argument,
+                           qpath=os.path.join(URL, "%s", today, timestamp, "%s"),
+                           detect=args.detect,
+                           custom=custom,
+                           green_print=lambda s: print(stringjoin(green, "Writing Queries Templates", reset)))
 
     else:
         # Likely missing a required arguments

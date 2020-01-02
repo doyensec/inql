@@ -20,21 +20,13 @@ from inql.introspection import init
 from inql.constants import *
 from inql.widgets.omnibar import Omnibar
 from inql.widgets.fileview import FileView
+from inql.utils import inheritsPopupMenu
 
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
-
-
-def inheritsPopupMenu(element):
-    element.setInheritsPopupMenu(True)
-    try:
-        for e in element.getComponents():
-            inheritsPopupMenu(e)
-    except:
-        pass
 
 
 class GraphQLPanel():
@@ -44,6 +36,20 @@ class GraphQLPanel():
             text_true="Disable Load placeholders",
             text_false="Enable Load placeholders")
         self.actions.append(self.action_loadplaceholder)
+        self.action_generate_html = FlagAction(
+            text_true="Disable HTML DOC Generation",
+            text_false="Enable HTML DOC Generation",
+            enabled=False)
+        self.actions.append(self.action_generate_html)
+        self.action_generate_schema = FlagAction(
+            text_true="Disable Schema DOC Generation",
+            text_false="Enable Schema DOC Generation",
+            enabled=False)
+        self.actions.append(self.action_generate_schema)
+        self.action_generate_queries = FlagAction(
+            text_true="Disable STUB Queries Generation",
+            text_false="Enable STUB Queries Generation")
+        self.actions.append(self.action_generate_queries)
         self.actions.append(BrowserAction())
         self.actions.append(ExecutorAction("Load", self.loadurl))
         self.actions = [a for a in reversed(self.actions)]
@@ -72,8 +78,8 @@ class GraphQLPanel():
 
         self._state = []
         if restore:
-            for target, load_placeholer, flag in json.loads(restore):
-                run(self, target, load_placeholer, flag)
+            for target, load_placeholer, generate_html, generate_schema, generate_queries, flag in json.loads(restore):
+                run(self, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
 
     def state(self):
         return json.dumps(self._state)
@@ -120,30 +126,36 @@ class GraphQLPanel():
                 self.loadurl(evt)
         elif target.startswith('http://') or target.startswith('https://'):
             print("Quering GraphQL schema from: %s" % target)
-            run(self, target, self.action_loadplaceholder.enabled, "URL")
+            run(self, target, self.action_loadplaceholder.enabled,
+                self.action_generate_html.enabled,
+                self.action_generate_schema.enabled,
+                self.action_generate_queries.enabled,
+                "URL")
         elif not os.path.isfile(target):
             if self.filepicker():
                 self.loadurl(evt)
         else:
             print("Loading JSON schema from: %s" % target)
-            run(self, target, self.action_loadplaceholder.enabled, "JSON")
+            run(self, target,
+                self.action_loadplaceholder.enabled,
+                self.action_generate_html.enabled,
+                self.action_generate_schema.enabled,
+                self.action_generate_queries.enabled,
+                "JSON")
 
 
-def run(self, target, load_placeholer, flag):
-    self._state.append((target, load_placeholer, flag))
+def run(self, target, load_placeholer, generate_html, generate_schema, generate_queries, flag):
+    self._state.append((target, load_placeholer, generate_html, generate_schema, generate_queries, flag))
     self.omnibar.reset()
+    args = {"key": None, "proxy": None, "target": None, 'headers': [],
+            "generate_html": generate_html, "generage_schema": generate_schema,
+            "generate_queries": generate_queries, "detect": load_placeholer}
     if flag == "JSON":
-        if load_placeholer:
-            args = {"schema_json_file": target, "detect": True, "key": None, "proxy": None, "target": None,
-                    'headers': []}
-        else:
-            args = {"schema_json_file": target, "detect": "", "key": None, "proxy": None, "target": None, 'headers': []}
+        args["schema_json_file"] = target
     else:
-        if load_placeholer:
-            args = {"target": target, "detect": True, "key": None, "proxy": None, "schema_json_file": None,
-                    'headers': []}
-        else:
-            args = {"target": target, "detect": "", "key": None, "proxy": None, "schema_json_file": None, 'headers': []}
+        args["target"] = target
+
+    args["detect"] = load_placeholer
 
     # call init method from Introspection tool
     init(AttrDict(args.copy()))
