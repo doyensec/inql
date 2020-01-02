@@ -132,7 +132,7 @@ def main():
     """
     # Args parser definition
     # -----------------------
-    parser = argparse.ArgumentParser(prog="inql", description="GraphQL Scanner")
+    parser = argparse.ArgumentParser(prog="inql", description="InQL Scanner")
     parser.add_argument("-t", default=None, dest="target",
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")

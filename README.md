@@ -1,9 +1,9 @@
-# GraphQL Scanner
+# InQL Scanner
 A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) technology security testing efforts.
 
 ![GraphQL Official Logo](docs/graphqllogo.png)
 
-### GraphQL Introspection (stand-alone script)
+### InQL Introspection (stand-alone script)
 
 Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL
 endpoint to fetch the metadata of all the:
@@ -31,7 +31,7 @@ usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY] [-p PROXY]
             [--generate-schema] [--generate-queries] [--insecure]
             [-o OUTPUT_DIRECTORY]
 
-GraphQL Scanner
+InQL Scanner
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -73,7 +73,7 @@ Import the Extension in Burp:
 
 Now you should be able to find a GraphQL Scanner Tab:
 
-![Preview](docs/GraphQLScanner.png)
+![Preview](docs/inql.gif)
 
 Usage:
 
@@ -97,7 +97,8 @@ Directory Structure will be the following:
 
 ### Authors
 
-*Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer - [thypon](https://github.com/thypon))
+*Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
+
 *Original Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com))
 
 This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
