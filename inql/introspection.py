@@ -101,10 +101,10 @@ def query_result(target, key, proxyDict, headers={}):
         contents = urllib2.urlopen(request).read()
         return contents
 
-    except urllib2.HTTPError, e:
+    except urllib2.HTTPError as e:
         print(stringjoin(red, str(e), reset))
 
-    except urllib2.URLError, e:
+    except urllib2.URLError as e:
         print(stringjoin(red, str(e), reset))
 
 
