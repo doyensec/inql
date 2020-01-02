@@ -1,4 +1,4 @@
-from __future__ import print_function
+#from __future__ import print_function
 
 import platform
 
@@ -9,6 +9,8 @@ if platform.system() != "Java":
 import os
 import shutil
 import tempfile
+
+from java.io import PrintWriter
 
 from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 

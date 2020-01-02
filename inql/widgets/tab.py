@@ -75,11 +75,22 @@ class GraphQLPanel():
             self._popup.add(action.menuitem)
 
         self._state = {'runs': []}
-        if restore:
-            cfg = json.loads(restore)
-            for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in cfg['runs']:
-                self._run(key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
-            self._run_config = cfg['config']
+        try:
+            if restore:
+                cfg = json.loads(restore)
+                for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in cfg['runs']:
+                    self._run(target=target,
+                              key=key,
+                              proxy=proxy,
+                              headers=headers,
+                              load_placeholer=load_placeholer,
+                              generate_html=generate_html,
+                              generate_schema=generate_schema,
+                              generate_queries=generate_queries,
+                              flag=flag)
+                self._run_config = cfg['config']
+        except Exception as ex:
+            print("Cannot Load old configuration: starting with a clean state: %s" % ex)
         self._state['config'] = self._run_config
 
     def _setup_headers(self):
@@ -244,8 +255,7 @@ class GraphQLPanel():
         :param flag: "JSON" file or normal target otherwise
         :return: None
         """
-        self._state['runs'].append((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
-        print((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
+        self._state['runs'].append((target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, flag))
         self._omnibar.reset()
         args = {"key": key, "proxy": proxy, 'headers': headers, "detect": load_placeholer,
                 "generate_html": generate_html,

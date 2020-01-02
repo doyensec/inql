@@ -20,6 +20,7 @@ class ListGQLParameters(IMessageEditorTab):
         self._editable = editable
         self._txtInput = callbacks.createTextEditor()
         self._txtInput.setEditable(editable)
+        self._currentMessage = ''
 
     def getTabCaption(self):
         """
@@ -52,13 +53,13 @@ class ListGQLParameters(IMessageEditorTab):
             rBody = self._helpers.analyzeResponse(content)
 
         message = content[rBody.getBodyOffset():].tostring().strip()
-        content = json.loads(message)
-        print(content)
-        if isinstance(content, dict):
-            content = [content]
+        try:
+            content = json.loads(str(message))
 
-        return any(['query' in c and c['query'] in ['query', 'mutation', 'subscription']
-                    for c in content])
+            return 'query' in content and \
+                   any([content['query'].strip().startswith(qtype) for qtype in ['query', 'mutation', 'subscription']])
+        except ValueError:
+            return False
 
     def setMessage(self, content, isRequest):
         """
@@ -73,36 +74,18 @@ class ListGQLParameters(IMessageEditorTab):
             self._txtInput.setText(None)
             self._txtInput.setEditable(False)
         else:
-            if isRequest:
-                rBody = self._helpers.analyzeRequest(content)
-            else:
-                rBody = self._helpers.analyzeResponse(content)
+            r = self._helpers.analyzeRequest(content)
 
-            message = content[rBody.getBodyOffset():].tostring()
+            message = content[r.getBodyOffset():].tostring()
 
             try:
-                limit = min(
-                    message.index('{') if '{' in message else len(message),
-                    message.index('[') if '[' in message else len(message)
-                )
+                data = json.loads(str(message))
+
+                self._txtInput.setText(data['query'])
+                self._txtInput.setEditable(self._editable)
+                self._currentMessage = content
             except ValueError:
-                print("Sorry, this doesnt look like a Graph Query!")
-                return
-
-            garbage = message[:limit]
-            clean = message[limit:]
-
-            try:
-                gql_msg = "\n".join(garbage.strip(), json.dumps(json.loads(clean), indent=4))
-            except Exception:
-                print("A problem occurred parsing the setMessage")
-                print(Exception)
-                gql_msg = string_join(garbage, clean)
-
-            self._txtInput.setText(gql_msg)
-            self._txtInput.setEditable(self._editable)
-
-        self._currentMessage = content
+                pass
 
     def getMessage(self):
         """
@@ -111,19 +94,19 @@ class ListGQLParameters(IMessageEditorTab):
         :return: the current message
         """
         if self._txtInput.isTextModified():
-            data = ""
             try:
-                # self._manual = True
-                data = self._txtInput.getText()
+                query = self._txtInput.getText().tostring()
 
-            except Exception:
-                print("A problem occurred getting the message after modification")
+                r = self._helpers.analyzeRequest(self._currentMessage)
+                message = self._currentMessage[r.getBodyOffset():].tostring()
+                data = json.loads(str(message))
+                data['query'] = query
+                request_body = json.dumps(data, indent=4)
+                return self._helpers.buildHttpMessage(r.getHeaders(), request_body)
+            except Exception as ex:
+                print(ex)
+                return self._helpers.buildHttpMessage(r.getHeaders(), self._currentMessage[r.getBodyOffset():].tostring())
 
-            # Update Request After Modification
-            r = self._helpers.analyzeRequest(self._currentMessage)
-
-            # return self._helpers.buildHttpMessage(r.getHeaders(), self._helpers.stringToBytes(data))
-            return self._helpers.buildHttpMessage(r.getHeaders(), data)
 
     def isModified(self):
         """

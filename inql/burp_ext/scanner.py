@@ -165,7 +165,6 @@ class BurpScannerCheck(IScannerCheck):
             matches = self._get_matches(baseRequestResponse.getResponse(), bytearray(check))
             if len(matches) != 0:
                 # report the issue
-                # httpService, url, httpMessages, name, detail, severity, confidence, issue background, remediation background, remediation details
                 issues.extend([_CustomScanIssue(
                     http_service=baseRequestResponse.getHttpService(),
                     url=self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
@@ -185,7 +184,6 @@ class BurpScannerCheck(IScannerCheck):
             matches = self._get_matches(baseRequestResponse.getResponse(), bytearray(check))
             if len(matches) != 0:
                 # report the issue
-                # httpService, url, httpMessages, name, detail, severity, confidence, issue background, remediation background, remediation details
                 issues.extend([_CustomScanIssue(
                     http_service=baseRequestResponse.getHttpService(),
                     url=self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
@@ -227,7 +225,7 @@ class BurpScannerCheck(IScannerCheck):
         # will request the URLS, passive scanner will do the grep and match
         for url in URLS:
             path = self._callbacks.getHelpers().analyzeRequest(baseRequestResponse).getUrl().getPath()
-            # this thing replace the path inside the old bytearray for the new request
+            # replace the path inside the old bytearray for the new request
             newReq = self._callbacks.getHelpers().bytesToString(baseRequestResponse.getRequest()).replace(path, url,
                                                                                                           1)
             result = self._callbacks.makeHttpRequest(baseRequestResponse.getHttpService(), newReq)
@@ -236,7 +234,6 @@ class BurpScannerCheck(IScannerCheck):
                 matches = self._get_matches(result.getResponse(), bytearray(check))
                 if len(matches) != 0:
                     # report the issue
-                    # httpService, url, httpMessages, name, detail, severity, confidence, issue background, remediation background, remediation details
                     issues.extend([_CustomScanIssue(
                         http_service=result.getHttpService(),
                         url=self._helpers.analyzeRequest(result).getUrl(),
@@ -256,7 +253,6 @@ class BurpScannerCheck(IScannerCheck):
                 matches = self._get_matches(result.getResponse(), bytearray(check))
                 if len(matches) != 0:
                     # report the issue
-                    # httpService, url, httpMessages, name, detail, severity, confidence, issue background, remediation background, remediation details
                     issues.extend([_CustomScanIssue(
                         http_service=result.getHttpService(),
                         url=self._helpers.analyzeRequest(result).getUrl(),
