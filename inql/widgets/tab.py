@@ -46,7 +46,6 @@ class GraphQLPanel():
         self._default_config = {}
         for k, v in self._run_config:
             self._default_config[k] = v
-        print(self._default_config)
         self._old_config_hash = None
         self._actions.append(BrowserAction())
         self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
@@ -75,10 +74,13 @@ class GraphQLPanel():
         for action in self._actions:
             self._popup.add(action.menuitem)
 
-        self._state = []
+        self._state = {'runs': []}
         if restore:
-            for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in json.loads(restore):
+            cfg = json.loads(restore)
+            for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in cfg['runs']:
                 self._run(key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag)
+            self._run_config = cfg['config']
+        self._state['config'] = self._run_config
 
     def _setup_headers(self):
         """
@@ -242,7 +244,7 @@ class GraphQLPanel():
         :param flag: "JSON" file or normal target otherwise
         :return: None
         """
-        self._state.append((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
+        self._state['runs'].append((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
         print((target, key, proxy, load_placeholer, generate_html, generate_schema, generate_queries, flag))
         self._omnibar.reset()
         args = {"key": key, "proxy": proxy, 'headers': headers, "detect": load_placeholer,
@@ -283,9 +285,12 @@ if __name__ == "__main__":
     frame.setForeground(Color.black)
     frame.setBackground(Color.lightGray)
     cp = frame.getContentPane()
-    cp.add(GraphQLPanel(actions=[TestAction("test it")]).this)
+    gql = GraphQLPanel(actions=[TestAction("test it")])
+    cp.add(gql.this)
     frame.pack()
     frame.setVisible(True)
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
-    from threading import Event
-    Event().wait()
+    import time
+    while True:
+        time.sleep(5)
+        print(gql.state())

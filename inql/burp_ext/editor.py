@@ -45,7 +45,6 @@ class ListGQLParameters(IMessageEditorTab):
         :param isRequest: check if is request
         :return: True or False depending if the request is enabled to be edited with this tab.
         """
-        isgql = False
         if isRequest:
             rBody = self._helpers.analyzeRequest(content)
 
@@ -54,6 +53,7 @@ class ListGQLParameters(IMessageEditorTab):
 
         message = content[rBody.getBodyOffset():].tostring().strip()
         content = json.loads(message)
+        print(content)
         if isinstance(content, dict):
             content = [content]
 
