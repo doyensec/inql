@@ -89,6 +89,12 @@ class FileTree:
         return curDir
 
     def add_tree_selection_listener(self, listener):
+        """
+        Wrapper for the inner tree selection listener callback register function
+
+        :param listener: a new listener
+        :return: None
+        """
         self._tree.addTreeSelectionListener(listener)
 
 

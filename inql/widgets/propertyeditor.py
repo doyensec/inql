@@ -29,6 +29,17 @@ class PropertyEditor(WindowAdapter):
 
     @staticmethod
     def get_instance(text="Property Editor", columns=None, data=None, empty=None, add_actions=True, actions=None):
+        """
+        Singleton Method based on the text property. It tries to generate only one property configuration page per text.
+
+        :param text: getinstance key
+        :param columns: proparty columns it should be an array alike
+        :param data: it contains the current property rows
+        :param empty: empty row property when adding a new one
+        :param add_actions: include or not new actions
+        :param actions: default set of actions to be appended to Add and Delete Rows
+        :return: a new instance of PropertyEditor or a reused one.
+        """
         if not actions: actions = []
         if not columns: columns = []
         if not data: data = []
