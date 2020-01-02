@@ -4,54 +4,81 @@ if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
-from burp import IProxyListener, IContextMenuFactory
-from java.awt.event import ActionListener
-from javax.swing import JMenuItem
-from inql.constants import *
-from org.python.core.util import StringUtil
-from inql.utils import stringjoin
 import re
 
+from java.awt.event import ActionListener
+from javax.swing import JMenuItem
+from org.python.core.util import StringUtil
 
-def override_headers(http_header, overrideheaders):
+from burp import IProxyListener, IContextMenuFactory
+
+from inql.constants import *
+from inql.utils import string_join
+
+def _override_headers(http_header, overrideheaders):
+    """
+    Overrides headers with the defined overrides.
+
+    :param http_header: an HTTP header content
+    :param overrideheaders: an overrideheaders object.
+    :return: a new overridden headers string
+    """
     ree = [(
         re.compile("^%s\s:\s*[^\n]+$" % re.escape(header)),
         re.compile("%s: %s" % (re.escape(header), re.escape(val))))
         for (header, val) in overrideheaders]
     h = http_header
     for find, replace in ree:
-        h = re.sub(find, replace, h)
+        hn = re.sub(find, replace, h)
+        if hn == h:
+            h = "%s\n%s\n" % (hn, str(replace))
+        else:
+            h = hn
 
     return h
 
 
-class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
+class RepeaterSenderAction(IProxyListener, ActionListener, IContextMenuFactory):
     def __init__(self, callbacks, helpers, text, overrideheaders):
         self.requests = {}
-        self.helpers = helpers
-        self.callbacks = callbacks
+        self._helpers = helpers
+        self._callbacks = callbacks
         self.menuitem = JMenuItem(text)
-        self.burp_menuitem = JMenuItem("inql: %s" % text)
-        self.callbacks.registerProxyListener(self)
+        self._burp_menuitem = JMenuItem("inql: %s" % text)
+        self._callbacks.registerProxyListener(self)
         self.menuitem.addActionListener(self)
         self.menuitem.setEnabled(False)
-        self.burp_menuitem.addActionListener(self)
-        self.burp_menuitem.setEnabled(False)
-        self.index = 0
-        self.host = None
-        self.payload = None
-        self.fname = None
-        for r in self.callbacks.getProxyHistory():
-            self.processRequest(self.helpers.analyzeRequest(r), r.getRequest())
-        self.callbacks.registerContextMenuFactory(self)
-        self.overrideheaders = overrideheaders
+        self._burp_menuitem.addActionListener(self)
+        self._burp_menuitem.setEnabled(False)
+        self._index = 0
+        self._host = None
+        self._payload = None
+        self._fname = None
+        for r in self._callbacks.getProxyHistory():
+            self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
+        self._callbacks.registerContextMenuFactory(self)
+        self._overrideheaders = overrideheaders
 
     def processProxyMessage(self, messageIsRequest, message):
-        if messageIsRequest:
-            self.processRequest(self.helpers.analyzeRequest(message.getMessageInfo()),
-                                message.getMessageInfo().getRequest())
+        """
+        Implements IProxyListener method
 
-    def processRequest(self, reqinfo, reqbody):
+        :param messageIsRequest: True if BURP Message is a request
+        :param message: message content
+        :return: None
+        """
+        if messageIsRequest:
+            self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
+                                  message.getMessageInfo().getRequest())
+
+    def _process_request(self, reqinfo, reqbody):
+        """
+        Process request and extract key values
+
+        :param reqinfo:
+        :param reqbody:
+        :return:
+        """
         url = str(reqinfo.getUrl())
         if any([url.endswith(x) for x in URLS]):
             for h in reqinfo.getHeaders():
@@ -66,48 +93,69 @@ class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
             self.requests[domain][method] = (reqinfo, reqbody)
 
     def actionPerformed(self, e):
-        req = self.requests[self.host]['POST'] or self.requests[self.host]['PUT'] or self.requests[self.host]['GET']
+        """
+        Overrides ActionListener behaviour. Send current query to repeater.
+
+        :param e: unused
+        :return: None
+        """
+        req = self.requests[self._host]['POST'] or self.requests[self._host]['PUT'] or self.requests[self._host]['GET']
         if req:
             info = req[0]
             body = req[1]
             headers = body[:info.getBodyOffset()].tostring()
 
             try:
-                self.overrideheaders[self.host]
+                self._overrideheaders[self._host]
             except KeyError:
-                self.overrideheaders[self.host] = {}
+                self._overrideheaders[self._host] = {}
 
-            repeater_body = StringUtil.toBytes(stringjoin(
-                override_headers(headers, self.overrideheaders[self.host]),
-                self.payload))
+            repeater_body = StringUtil.toBytes(string_join(
+                _override_headers(headers, self._overrideheaders[self._host]),
+                self._payload))
 
-            self.callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                          info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL #%s' % self.index)
-            self.index += 1
+            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
+                                           info.getUrl().getProtocol() == 'https', repeater_body,
+                                          'GraphQL #%s' % self._index)
+            self._index += 1
 
     def ctx(self, host=None, payload=None, fname=None):
-        self.host = host
-        self.payload = payload
-        self.fname = fname
+        """
+        When a fname is specified and is a query file or a request is selected in the other tabs,
+        enables the context menu to send to repeater tab
 
-        if not self.fname.endswith('.query'):
+        :param host: should be not null
+        :param payload: should be not null
+        :param fname: should be not null
+        :return: None
+        """
+        self._host = host
+        self._payload = payload
+        self._fname = fname
+
+        if not self._fname.endswith('.query'):
             self.menuitem.setEnabled(False)
-            self.burp_menuitem.setEnabled(False)
+            self._burp_menuitem.setEnabled(False)
             return
 
         try:
             self.requests[host]
             self.menuitem.setEnabled(True)
-            self.burp_menuitem.setEnabled(True)
+            self._burp_menuitem.setEnabled(True)
         except KeyError:
             self.menuitem.setEnabled(False)
-            self.burp_menuitem.setEnabled(False)
+            self._burp_menuitem.setEnabled(False)
 
     def createMenuItems(self, invocation):
+        """
+        Overrides IContextMenuFactory callback
+
+        :param invocation: handles menu selected invocation
+        :return:
+        """
         try:
             r = invocation.getSelectedMessages()[0]
-            info = self.helpers.analyzeRequest(r)
+            info = self._helpers.analyzeRequest(r)
             url = str(info.getUrl())
             if not any([x in url for x in URLS]):
                 return None
@@ -118,7 +166,7 @@ class RepeaterSender(IProxyListener, ActionListener, IContextMenuFactory):
 
             self.ctx(fname='dummy.query', host=domain, payload=body)
             mymenu = []
-            mymenu.append(self.burp_menuitem)
+            mymenu.append(self._burp_menuitem)
         except Exception as ex:
             return None
         return mymenu

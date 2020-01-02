@@ -6,6 +6,7 @@ if platform.system() != "Java":
 
 import os
 import json
+
 from javax.swing import JSplitPane, JFrame
 from java.awt import BorderLayout, Color
 
@@ -13,17 +14,26 @@ from filetree import FileTree
 from payloadview import PayloadView
 
 class FileView:
+    """
+    SplitPane containing an editoresque (Sublime-alike) filetree+editor widget
+    """
     def __init__(self, dir=None, filetree_label=None, payloadview_label=None):
         if not dir: dir = os.getcwd()
-        self.filetree = FileTree(dir=dir, label=filetree_label)
-        self.payloadview = PayloadView(label=payloadview_label)
+        self._filetree = FileTree(dir=dir, label=filetree_label)
+        self._payloadview = PayloadView(label=payloadview_label)
         self.this = JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                           self.filetree.this, self.payloadview.this)
+                               self._filetree.this, self._payloadview.this)
         self.this.setOneTouchExpandable(True)
-        self.filetree.tree.addTreeSelectionListener(self.treeListener)
+        self._filetree.add_tree_selection_listener(self._tree_listener)
         self.this.getRightComponent().setVisible(False)
 
-    def treeListener(self, e):
+    def _tree_listener(self, e):
+        """
+        Listen for tree selection adn fill the payloadview
+
+        :param e: unused
+        :return: None
+        """
         try:
             fpath = os.path.join(*[str(p) for p in e.getPath().getPath()][1:])
 
@@ -33,22 +43,34 @@ class FileView:
 
             with open(fpath, 'r') as f:
                 payload = f.read()
-                self.payloadview.setEditable(False)
+                self._payloadview.set_editable(False)
                 if fpath.endswith('.query'):
                     j = json.loads(payload)
                     payload = j['query']
-                    self.payloadview.setEditable(True)
-                self.payloadview.refresh(payload)
+                    self._payloadview.set_editable(True)
+                self._payloadview.refresh(payload)
                 self.this.getRightComponent().setVisible(True)
                 self.this.setDividerLocation(0.25)
         except IOError:
             pass
 
     def addTreeListener(self, action):
-        self.filetree.tree.addTreeSelectionListener(action)
+        """
+        Add a new Tree ActionListener
+
+        :param action: actionListener lambda
+        :return:
+        """
+        self._filetree.add_tree_selection_listener(action)
 
     def addPayloadListener(self, action):
-        self.payloadview.addListener(action)
+        """
+        Add a new PayloadView Listener
+
+        :param action: actionListener lambda
+        :return:
+        """
+        self._payloadview.add_listener(action)
 
 
 if __name__ == "__main__":

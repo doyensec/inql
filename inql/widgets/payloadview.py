@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import platform
 
 if platform.system() != "Java":
@@ -10,7 +11,10 @@ from javax.swing.event import DocumentListener
 from java.awt import BorderLayout, Color
 
 
-class PayloadListener(DocumentListener):
+class _PayloadListener(DocumentListener):
+    """
+    PayloadListener wrapper is a java DocumentListener wrapper for python lambdas
+    """
     def __init__(self, event_listener=lambda e: None, changed_update=None, remove_update=None, insert_update=None):
         self.changed_update = changed_update if changed_update else event_listener
         self.remove_update = changed_update if changed_update else event_listener
@@ -27,6 +31,9 @@ class PayloadListener(DocumentListener):
 
 
 class PayloadView:
+    """
+    PayloadView is a TextView viewer and editor.
+    """
     def __init__(self, payload=None, label=None):
         if not label: label = "PayloadView"
 
@@ -38,29 +45,47 @@ class PayloadView:
 
         # Create textarea here and add to the JPanel
         scrollPane = JScrollPane()
-        self.textarea = JTextArea()
-        self.textarea.setColumns(20)
-        self.textarea.setRows(5)
-        self.textarea.setLineWrap(True)
-        self.textarea.setWrapStyleWord(True)
-        self.textarea.setEditable(True)
-        self.textarea.setName("TextArea")
-        self.textarea.setSelectionColor(Color(255, 153, 51))
-        self.textarea.requestFocus()
-        scrollPane.setViewportView(self.textarea)
+        self._textarea = JTextArea()
+        self._textarea.setColumns(20)
+        self._textarea.setRows(5)
+        self._textarea.setLineWrap(True)
+        self._textarea.setWrapStyleWord(True)
+        self._textarea.setEditable(True)
+        self._textarea.setName("TextArea")
+        self._textarea.setSelectionColor(Color(255, 153, 51))
+        self._textarea.requestFocus()
+        scrollPane.setViewportView(self._textarea)
         self.this.add(BorderLayout.CENTER, scrollPane)
 
         self.refresh(payload)
 
-    def setEditable(self, editable):
-        self.textarea.setEditable(editable)
+    def set_editable(self, editable):
+        """
+        Enable or Disable the editable textview
+
+        :param editable: boolean parameter representing the editability
+        :return: None
+        """
+        self._textarea.setEditable(editable)
 
     def refresh(self, payload):
-        if payload:
-            self.textarea.setText(payload)
+        """
+        Refresh the textarea content with a new payload, if present
 
-    def addListener(self, listener):
-        self.textarea.getDocument().addDocumentListener(PayloadListener(listener))
+        :param payload:
+        :return: None
+        """
+        if payload:
+            self._textarea.setText(payload)
+
+    def add_listener(self, listener):
+        """
+        add a new listener to the textarea
+
+        :param listener: this parameter should be a lambda or a method
+        :return: None
+        """
+        self._textarea.getDocument().addDocumentListener(_PayloadListener(listener))
 
 if __name__ == "__main__":
     frame = JFrame("PayloadView")
@@ -68,7 +93,7 @@ if __name__ == "__main__":
     frame.setBackground(Color.lightGray)
     cp = frame.getContentPane()
     ft = PayloadView(payload='Payload')
-    ft.addListener(lambda e: print(e))
+    ft.add_listener(lambda e: print(e))
     cp.add(ft.this)
     frame.pack()
     frame.setVisible(True)

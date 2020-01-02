@@ -1,10 +1,22 @@
 import string, os, sys
 
 
-def stringjoin(*ss):
-	return string.join(ss)
+def string_join(*ss):
+    """
+    String joins with arbitrary lengthy parameters
+
+    :param ss: strings to be joined
+    :return: strings joined
+    """
+    return string.join(ss)
+
 
 def mkdir_p(path):
+    """
+    Create Directory if it does not exist, exit otherwise
+    :param path:
+    :return:
+    """
     try:
         os.makedirs(path)
     except:
@@ -14,8 +26,8 @@ def mkdir_p(path):
             raise
 
 
-# Wrap open to create directory before opening a file
 def wrap_open(method, exceptions = (OSError, IOError)):
+    """Wrap Open method in order to create containing directories if they does not exist"""
     def fn(*args, **kwargs):
         try:
             mkdir_p(os.path.dirname(args[0]))
@@ -29,10 +41,25 @@ def wrap_open(method, exceptions = (OSError, IOError)):
 open = wrap_open(open)
 
 
-def inheritsPopupMenu(element):
+def inherits_popup_menu(element):
+    """
+    Inherits popup menu on each and every child widgets.
+
+    :param element: current widget.
+    :return: None
+    """
     element.setInheritsPopupMenu(True)
     try:
         for e in element.getComponents():
-            inheritsPopupMenu(e)
+            inherits_popup_menu(e)
     except:
         pass
+
+
+class AttrDict(dict):
+    """
+    HACK: this class will generate a class object with fields from a dict
+    """
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self

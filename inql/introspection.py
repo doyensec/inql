@@ -8,7 +8,8 @@ import json
 import sys
 from urlparse import urlparse
 from datetime import date
-from utils import stringjoin, mkdir_p
+
+from utils import string_join, mkdir_p
 from generators import html, query, schema
 
 # Hack-ish way to handle unicode (finger crossed)
@@ -17,6 +18,12 @@ sys.setdefaultencoding('UTF8')
 
 
 def wrap_exit(method, exceptions = (OSError, IOError)):
+    """
+    Wrap exit method to write the error and reset colors to the output before exiting.
+    :param method: exit method
+    :param exceptions:
+    :return:
+    """
     def fn(*args, **kwargs):
         try:
             print(reset)
@@ -35,6 +42,10 @@ yellow = ""
 reset = ""
 
 def posix_colors():
+    """
+    Setup global POSIX shell colors.
+    :return: None
+    """
     global red, green, white, yellow, reset
     red = "\033[1;31;10m[!] "
     green = "\033[1;32;10m[+] "
@@ -54,12 +65,12 @@ def supports_color():
     is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
     return supported_platform and is_a_tty
 
+
 if supports_color():
     posix_colors()
 
 
 def query_result(target, key, proxyDict, headers={}):
-    headers = headers.copy()
     """
     Execute the introspection query against the GraphQL endpoint
 
@@ -79,6 +90,7 @@ def query_result(target, key, proxyDict, headers={}):
     :return:
         Returns a dictionary objects to be parsed
     """
+    headers = headers.copy()
     # Introspection Query
     # -----------------------
     introspection_query =  "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"
@@ -102,10 +114,10 @@ def query_result(target, key, proxyDict, headers={}):
         return contents
 
     except urllib2.HTTPError as e:
-        print(stringjoin(red, str(e), reset))
+        print(string_join(red, str(e), reset))
 
     except urllib2.URLError as e:
-        print(stringjoin(red, str(e), reset))
+        print(string_join(red, str(e), reset))
 
 
 def main():
@@ -146,23 +158,30 @@ def main():
 
 
 def init(args, print_help=None):
+    """
+    Main Introspection method.
+
+    :param args: arg parser alike arguments
+    :param print_help: print help lambda
+    :return: None
+    """
     # At least one between -t or -f (target) parameters must be set
     if args.target is None and args.schema_json_file is None:
-        print(stringjoin(red, "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!", reset))
+        print(string_join(red, "Remote GraphQL Endpoint OR a Schema file in JSON format must be specified!", reset))
         if print_help:
             print_help()
             exit(1)
 
     # Only one of them -t OR -f :)
     if args.target is not None and args.schema_json_file is not None:
-        print(stringjoin(red, "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!", reset))
+        print(string_join(red, "Only a Remote GraphQL Endpoint OR a Schema file in JSON format must be specified, not both!", reset))
         if print_help:
             print_help()
             exit(1)
 
     # Takes care of any configured proxy (-p param)
     if args.proxy is not None:
-        print(stringjoin(yellow, "Proxy ENABLED: ", args.proxy, reset))
+        print(string_join(yellow, "Proxy ENABLED: ", args.proxy, reset))
         proxyDict = {"http": args.proxy, "https": args.proxy}
     else:
         proxyDict = {}
@@ -178,10 +197,10 @@ def init(args, print_help=None):
             URL = urlparse(args.target).netloc
         else:
             # Acquire a local JSON file as a target
-            print(stringjoin(yellow, "Parsing local schema file", reset))
+            print(string_join(yellow, "Parsing local schema file", reset))
             URL = os.path.splitext(os.path.basename(args.schema_json_file))[0]
         if args.detect:
-            print(stringjoin(yellow, "Detect arguments is ENABLED, known types will be replaced with placeholder values", reset))
+            print(string_join(yellow, "Detect arguments is ENABLED, known types will be replaced with placeholder values", reset))
         # Used to generate 'unique' file names for multiple documentation
         timestamp = str(int(time.time()))  # Can be printed with: str(int(timestamp))
         today = str(date.today())
@@ -214,7 +233,7 @@ def init(args, print_help=None):
                            qpath=os.path.join(URL, "%s", today, timestamp, "%s"),
                            detect=args.detect,
                            custom=custom,
-                           green_print=lambda s: print(stringjoin(green, "Writing Queries Templates", reset)))
+                           green_print=lambda s: print(string_join(green, "Writing Queries Templates", reset)))
 
     else:
         # Likely missing a required arguments
@@ -231,4 +250,5 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         # Catch CTRL+C, it will abruptly kill the script
-        print(stringjoin(red, "Exiting...", reset))
+        print(string_join(red, "Exiting...", reset))
+        exit(-1)

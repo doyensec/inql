@@ -86,6 +86,15 @@ div.box {
 
 
 def generate(argument, fpath, custom=False, target="empty"):
+    """
+    Generate HTML Documentation
+
+    :param argument: introspection query result
+    :param fpath: output result
+    :param custom: enable or disable custom types, disabled by default
+    :param target: who is the owner of that graphql endpoint
+    :return: None
+    """
     with open(fpath, 'w') as output_file:
         result = argument.copy()
         # Write HTML header for the documentation

@@ -9,24 +9,54 @@ from javax.swing import JMenuItem
 
 
 class FlagAction(ActionListener):
+    """
+    FlagAction represent a modifiable boolean setting associated with a menuitem.
+    """
     def __init__(self, text_true="Flag Enabled", text_false="Flag Disabled", enabled=True):
-        self.text_true = text_true
-        self.text_false = text_false
-        self.enabled = enabled
+        self._text_true = text_true
+        self._text_false = text_false
+        self._enabled = enabled
         self.menuitem = JMenuItem()
         self.menuitem.addActionListener(self)
-        self.update()
+        self._update()
 
-    def update(self):
-        if self.enabled:
-            txt = self.text_true
+    def enabled(self):
+        """
+        Returns true if enabled False otherwise
+
+        :return: True if enabled, False otherwise
+        """
+        return self._enabled
+
+    def _update(self):
+        """
+        Updates the tooltip state according to the enabled status.
+
+        :return: None
+        """
+        if self._enabled:
+            txt = self._text_true
         else:
-            txt = self.text_false
+            txt = self._text_false
         self.menuitem.setText(txt)
 
     def actionPerformed(self, e):
-        self.enabled = not self.enabled
-        self.update()
+        """
+        Overrides ActionListener behaviour. Toggle the enabled state.
+
+        :param e: unused
+        :return: None
+        """
+        self._enabled = not self._enabled
+        self._update()
 
     def ctx(self, host=None, payload=None, fname=None):
+        """
+        Do nothing. The flag action is context free.
+
+        :param host: unused
+        :param payload: unused
+        :param fname: unused
+        :return: None
+        """
         pass

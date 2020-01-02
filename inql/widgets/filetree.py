@@ -4,23 +4,25 @@ if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
-from java.awt import (BorderLayout, Color, Container, Dimension, Component)
+import os
 
+from java.awt import (BorderLayout, Color, Container, Dimension, Component)
 from java.io import File
 from java.util import Vector, Collections
-
 from javax.swing import (BoxLayout, JFrame, JPanel, JScrollPane, JTree, JLabel)
 from javax.swing.tree import (DefaultMutableTreeNode, DefaultTreeModel)
 
-import os
-
 
 class FileTree:
+    """
+    TreeView widget containing a filetree
+    """
+
     def __init__(self, dir=None, label=None):
         if not dir: dir = os.getcwd()
         if not label: label = "FileTree"
         dir = File(dir)
-        self.dir = dir
+        self._dir = dir
         self.this = JPanel()
         self.this.setLayout(BorderLayout())
 
@@ -28,9 +30,9 @@ class FileTree:
         self.this.add(BorderLayout.PAGE_START, JLabel(label))
 
         # Make a tree list with all the nodes, and make it a JTree
-        tree = JTree(self.addNodes(None, dir))
+        tree = JTree(self._add_nodes(None, dir))
         tree.setRootVisible(False)
-        self.tree = tree
+        self._tree = tree
 
         # Lastly, put the JTree into a JScrollPane.
         scrollpane = JScrollPane()
@@ -38,9 +40,21 @@ class FileTree:
         self.this.add(BorderLayout.CENTER, scrollpane)
 
     def refresh(self):
-        self.tree.setModel(DefaultTreeModel(self.addNodes(None, self.dir)))
+        """
+        Refresh TreeModel when the directory is updated
 
-    def addNodes(self, curTop, dir):
+        :return: None
+        """
+        self._tree.setModel(DefaultTreeModel(self._add_nodes(None, self._dir)))
+
+    def _add_nodes(self, curTop, dir):
+        """
+        Recursive implementation to fill the tree with filenames and directories
+
+        :param curTop: current top directory
+        :param dir: next directory
+        :return: None
+        """
         curPath = dir.getPath()
         if os.path.isdir(curPath):
             nodePath = os.path.basename(curPath)
@@ -56,13 +70,13 @@ class FileTree:
         # Make two passes, one for Dirs and one for Files. This is #1.
         for i in xrange(0, ol.size()):
             thisObject = ol.elementAt(i)
-            if curPath == self.dir:
+            if curPath == self._dir:
                 newPath = thisObject
             else:
                 newPath = os.path.join(curPath, thisObject)
             f = File(newPath)
             if f.isDirectory():
-                self.addNodes(curDir, f)
+                self._add_nodes(curDir, f)
             else:
                 files.addElement(thisObject)
 
@@ -73,6 +87,9 @@ class FileTree:
             #if f.split('.')[-1] != 'html':
             curDir.add(DefaultMutableTreeNode(files.elementAt(i)))
         return curDir
+
+    def add_tree_selection_listener(self, listener):
+        self._tree.addTreeSelectionListener(listener)
 
 
 if __name__ == "__main__":

@@ -4,31 +4,53 @@ if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
-from inql.widgets.propertyeditor import PropertyEditor
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 
+from inql.widgets.propertyeditor import PropertyEditor
 
-class CustomHeaderSetter(ActionListener):
+
+class CustomHeaderSetterAction(ActionListener):
+    """
+    Set Custom Header Action
+    """
+
     def __init__(self, overrideheaders, text="Set Custom Header"):
         self.requests = {}
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
-        self.overrideheaders = overrideheaders
+        self._overrideheaders = overrideheaders
+        self._host = None
 
     def actionPerformed(self, e):
-        if self.host:
-            try:
-                self.overrideheaders[self.host]
-            except KeyError:
-                self.overrideheaders[self.host] = {}
+        """
+        Overrides ActionListener behaviour, when clicked it opens the headers property editor for the given host.
 
-            PropertyEditor("Set Custom Header for %s" % self.host,
+        :param e: unused
+        :return:
+        """
+        if self._host:
+            try:
+                self._overrideheaders[self._host]
+            except KeyError:
+                self._overrideheaders[self._host] = {}
+
+            PropertyEditor("Set Custom Header for %s" % self._host,
                            columns=["Header", "Value"],
-                           data=self.overrideheaders[self.host],
+                           data=self._overrideheaders[self._host],
                            empty=["X-New-Header", "X-New-Header-Value"]).show_option_dialog()
 
     def ctx(self, host=None, payload=None, fname=None):
+        """
+        implements the context setting behaviour
+
+        :param host: when host is not null set it and enable the menuitem.
+        :param payload: ignored
+        :param fname: ignored
+        :return:
+        """
         if host:
             self.menuitem.setEnabled(True)
-        self.host = host
+        else:
+            self.menuitem.setEnabled(False)
+        self._host = host

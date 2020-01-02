@@ -1,0 +1,2 @@
+Generators are file generator, they get the introspection query result as first argument and they generate different
+kind of file documentation in specifed output sites.

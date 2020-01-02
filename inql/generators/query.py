@@ -1,5 +1,6 @@
 from __future__ import print_function
-from inql.utils import stringjoin, open
+
+from inql.utils import string_join, open
 
 
 def detect_type(types):
@@ -18,7 +19,7 @@ def detect_type(types):
     # Switch between known args types
     if "String" in types:
         # needed for Burp Repeater string handling
-        types = stringjoin('\\"', types, '\\"')
+        types = string_join('\\"', types, '\\"')
         types = types.replace("String", "asd")
     elif "Boolean" in types:
         types = types.replace("Boolean", "TRUE")
@@ -57,6 +58,22 @@ def query_write(opath, type, qname, content, mode):
 
 
 def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lambda s: print(s)):
+    """
+    Generate query templates
+
+    :param argument: introspection query result
+    :param custom: enable or disable custom types, disabled by default
+    :param qpath:
+        directory template where to output the queries, first parameter is type of query and second is query name
+
+    :param detect:
+        retrieve placeholders according to arg type
+
+    :param green_print:
+        implements print in green
+
+    :return: None
+    """
     # -----------------------
     # Setup lists for templates generation
     # -----------------------
