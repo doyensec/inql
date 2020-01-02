@@ -6,6 +6,7 @@ import time
 import os
 import json
 import sys
+import ssl
 from urlparse import urlparse
 from datetime import date
 
@@ -70,7 +71,7 @@ if supports_color():
     posix_colors()
 
 
-def query_result(target, key, proxyDict, headers={}):
+def query_result(target, key, headers={}, verify_certificate=True):
     """
     Execute the introspection query against the GraphQL endpoint
 
@@ -82,10 +83,6 @@ def query_result(target, key, proxyDict, headers={}):
         Optional parameter to be used as authentication header
         "Basic dXNlcjp0ZXN0"
         "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-
-    :param proxyDict:
-        Optional parameter to be used as web proxy to go through
-        ex. http://127.0.0.1:8080
 
     :return:
         Returns a dictionary objects to be parsed
@@ -104,13 +101,18 @@ def query_result(target, key, proxyDict, headers={}):
 
     try:
         # Issue the Introspection request against the GraphQL endpoint
-        data = urllib.urlencode({"query": introspection_query})
-        if proxyDict:
-            proxy = urllib2.ProxyHandler(proxyDict)
-            opener = urllib2.build_opener(proxy)
-            urllib2.install_opener(opener)
-        request = urllib2.Request(target, data, headers=headers)
-        contents = urllib2.urlopen(request).read()
+        request = urllib2.Request(target, json.dumps({"query": introspection_query}), headers=headers)
+        request.add_header('Content-Type', 'application/json')
+
+        if verify_certificate:
+            contents = urllib2.urlopen(request).read()
+        else:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
+            contents = urllib2.urlopen(request, context=ctx).read()
+
         return contents
 
     except urllib2.HTTPError as e:
@@ -146,12 +148,12 @@ def main():
                         help="Generate JSON Schema Documentation")
     parser.add_argument("--generate-queries", dest="generate_queries", action='store_true', default=True,
                         help="Generate Queries")
+    parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
+                        help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
                         help="Output Directory")
     args = parser.parse_args()
     # -----------------------
-
-    print(args['schema_json_file'])
 
     mkdir_p(args.output_directory)
     os.chdir(args.output_directory)
@@ -184,15 +186,14 @@ def init(args, print_help=None):
     # Takes care of any configured proxy (-p param)
     if args.proxy is not None:
         print(string_join(yellow, "Proxy ENABLED: ", args.proxy, reset))
-        proxyDict = {"http": args.proxy, "https": args.proxy}
-    else:
-        proxyDict = {}
+        os.environ['http_proxy'] = args.proxy
+        os.environ['https_proxy'] = args.proxy
 
     # Generate Headers object
-    print(args)
     headers = {}
-    for k, v in args.headers:
-        headers[k] = v
+    if args.headers:
+        for k, v in args.headers:
+            headers[k] = v
 
     if args.target is not None or args.schema_json_file is not None:
         if args.target is not None:
@@ -214,7 +215,10 @@ def init(args, print_help=None):
         # Generate the documentation for the target
         if args.target is not None:
             # Parse response from the GraphQL endpoint
-            argument = query_result(args.target, args.key, proxyDict, headers)
+            argument = query_result(target=args.target,
+                                    key=args.key,
+                                    headers=headers,
+                                    verify_certificate=not args.insecure_certificate)
             # returns a dict
             argument = json.loads(argument)
         else:

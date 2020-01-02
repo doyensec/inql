@@ -15,6 +15,7 @@ from java.io import File
 import os
 import json
 import string
+import threading
 
 from inql.actions.executor import ExecutorAction
 from inql.actions.browser import BrowserAction
@@ -41,7 +42,8 @@ class GraphQLPanel():
             ['Load Placeholders', True],
             ['Generate HTML DOC', False],
             ['Generate Schema DOC', False],
-            ['Generate Stub Queries', True]
+            ['Generate Stub Queries', True],
+            ['Accept Invalid SSL Certificate', False]
         ]
         self._default_config = {}
         for k, v in self._run_config:
@@ -78,7 +80,7 @@ class GraphQLPanel():
         try:
             if restore:
                 cfg = json.loads(restore)
-                for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, flag in cfg['runs']:
+                for key, proxy, headers, target, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
                     self._run(target=target,
                               key=key,
                               proxy=proxy,
@@ -87,6 +89,7 @@ class GraphQLPanel():
                               generate_html=generate_html,
                               generate_schema=generate_schema,
                               generate_queries=generate_queries,
+                              accept_invalid_certificate=accept_invalid_certificate,
                               flag=flag)
                 self._run_config = cfg['config']
         except Exception as ex:
@@ -217,32 +220,35 @@ class GraphQLPanel():
             self._omnibar.reset()
         elif target.startswith('http://') or target.startswith('https://'):
             print("Quering GraphQL schema from: %s" % target)
-            self._run(target,
-                      self._cfg('Authorization Key'),
-                      self._cfg('Proxy'),
-                      self._load_headers,
-                      self._cfg('Load Placeholders'),
-                      self._cfg('Generate HTML DOC'),
-                      self._cfg('Generate Schema DOC'),
-                      self._cfg('Generate Stub Queries'),
-                      "URL")
+            self._run(target=target,
+                      key=self._cfg('Authorization Key'),
+                      proxy=self._cfg('Proxy'),
+                      headers=self._load_headers,
+                      load_placeholer=self._cfg('Load Placeholders'),
+                      generate_html=self._cfg('Generate HTML DOC'),
+                      generate_schema=self._cfg('Generate Schema DOC'),
+                      generate_queries=self._cfg('Generate Stub Queries'),
+                      accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
+                      flag="URL")
         elif not os.path.isfile(target):
             if self._filepicker():
                 self._loadurl(evt)
         else:
             print("Loading JSON schema from: %s" % target)
-            self._run(target,
-                      self._cfg('Authorization Key'),
-                      self._cfg('Proxy'),
-                      self._load_headers,
-                      self._cfg('Load Placeholders'),
-                      self._cfg('Generate HTML DOC'),
-                      self._cfg('Generate Schema DOC'),
-                      self._cfg('Generate Stub Queries'),
-                      "JSON")
+            self._run(target=target,
+                      key=self._cfg('Authorization Key'),
+                      proxy=self._cfg('Proxy'),
+                      headers=self._load_headers,
+                      load_placeholer=self._cfg('Load Placeholders'),
+                      generate_html=self._cfg('Generate HTML DOC'),
+                      generate_schema=self._cfg('Generate Schema DOC'),
+                      generate_queries=self._cfg('Generate Stub Queries'),
+                      accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
+                      flag="JSON")
 
 
-    def _run(self, target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, flag):
+    def _run(self, target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
+             accept_invalid_certificate, flag):
         """
         Run the actual analysis, this method is a wrapper for the non-UI version of the tool and basically calls the
         main/init method by itself.
@@ -255,18 +261,23 @@ class GraphQLPanel():
         :param flag: "JSON" file or normal target otherwise
         :return: None
         """
-        self._state['runs'].append((target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, flag))
         self._omnibar.reset()
         args = {"key": key, "proxy": proxy, 'headers': headers, "detect": load_placeholer,
                 "generate_html": generate_html,
                 "generate_schema": generate_schema,
                 "generate_queries": generate_queries,
                 "target": target if flag != "JSON" else None,
-                "schema_json_file": target if flag == "JSON" else None}
+                "schema_json_file": target if flag == "JSON" else None,
+                "insecure_certificate": accept_invalid_certificate}
 
         # call init method from Introspection tool
-        init(AttrDict(args.copy()))
-        self._fileview.refresh()
+        def async_run():
+            init(AttrDict(args.copy()))
+            self._state['runs'].append((
+                target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
+                accept_invalid_certificate, flag))
+            self._fileview.refresh()
+        threading.Thread(target=async_run).start()
         return
 
 if __name__ == "__main__":
