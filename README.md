@@ -1,16 +1,22 @@
 # GraphQL Scanner
 A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) technology security testing efforts.
 
-*Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com)) 
-
 ![GraphQL Official Logo](docs/graphqllogo.png)
 
 ### GraphQL Introspection (stand-alone script)
 
-Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL endpoint in order to dump all the: Queries, Mutations, Subscriptions; retrieve their fields and arguments; retrieve objects and custom objects types in order to generate a clean documentation.
-The script will also generate templates (with optional placeholders values) for all the known types (usefull for Burp Suite repeater).
+Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL
+endpoint to fetch the metadata of all the:
+- Queries, Mutations, Subscriptions
+- their fields and arguments
+- objects and custom objects types
 
-The resulting HTML documentation page will contain details for all available Queries, Mutations and Subscriptions as shown here:
+InQL can inspect the introspection query result and generate clean documentation in different formats such as
+HTML and JSON Schema.
+
+InQL is also able to generate templates (with optional placeholders' values) for all the known types.
+
+The resulting HTML documentation page will contain details for all available Queries, Mutations, and Subscriptions as shown here:
 
 ![Preview](docs/GraphQL_Introspection_Output.png)
 
@@ -20,19 +26,27 @@ Templates Generation:
 
 Usage:
 ```
-usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE]
-                                [-k KEY] [-p PROXY] [-d]
+usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY] [-p PROXY]
+            [--header HEADERS HEADERS] [-d] [--generate-html]
+            [--generate-schema] [--generate-queries] [--insecure]
+            [-o OUTPUT_DIRECTORY]
 
-arguments:
-  -h, --help           show this help message and exit
-  -t TARGET            Remote GraphQL Endpoint (https://<Target_IP>/graphql)
-  -f SCHEMA_JSON_FILE  Schema file in JSON format
-  -k KEY               API Authentication Key
-  -p PROXY             IP of web proxy to go through (http://127.0.0.1:8080)
-  -d                   Replace known GraphQL arguments types with placeholder
-                       values (useful for Burp Suite)
-  
-$python inql -t http://192.168.1.82/examples/04-bank/graphql
+GraphQL Scanner
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -t TARGET             Remote GraphQL Endpoint (https://<Target_IP>/graphql)
+  -f SCHEMA_JSON_FILE   Schema file in JSON format
+  -k KEY                API Authentication Key
+  -p PROXY              IP of web proxy to go through (http://127.0.0.1:8080)
+  --header HEADERS HEADERS
+  -d                    Replace known GraphQL arguments types with placeholder
+                        values (useful for Burp Suite)
+  --generate-html       Generate HTML Documentation
+  --generate-schema     Generate JSON Schema Documentation
+  --generate-queries    Generate Queries
+  --insecure            Accept any SSL/TLS certificate
+  -o OUTPUT_DIRECTORY   Output Directory
 ```
 
 Terminal Output:
@@ -41,9 +55,11 @@ Terminal Output:
 
 ### Burp Suite Extension
 
-It will retains (pretty much) the same capabilities of the `inql` tool; it will also implements the following checks:
-+ search for known GraphQL paths; it will grep and match knwown values to detect GraphQL Technology usage in the website
-+ search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground and common consoles
+Since v1.0 InQL was extended to also support BURP as a plugin. In that mode it will retain all the capabilities of the `inql` tool;
+including a handy user interface to manipulate the queries and the documentation. Following the most important capabilities
+of the UI tool:
++ search for known GraphQL paths; it will grep and match known values to detect GraphQL Technology usage in the website
++ search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground, and common consoles
 + add a GraphQL Tab for every request/response using GraphQL Technology
 + add a GraphQL Scanner Tab inside Burp Suite; GUI for the Introspection Tool
 
@@ -52,8 +68,8 @@ Import the Extension in Burp:
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
 + Extender Tab > Exrtension > Add > Extension Type > Select python
-+ Extension File > Set the location of `GraphQLScanner.py` > Next
-+ The output should now show the following message: `GraphQL Scanner Started!`
++ Extension File > Set the location of `inql_burp.py` > Next
++ The output should now show the following message: `InQL Scanner Started!`
 
 Now you should be able to find a GraphQL Scanner Tab:
 
@@ -70,27 +86,18 @@ Usage:
 Directory Structure will be the following:
 + url
 + - query
-+	- - timestamp 1
-+	- - - query1.txt
-+	- - - query2.txt
-+	- - timestamp 2
-+	- - - query1.txt
-+	- - - query2.txt
++  - - timestamp 1
++  - - - query1.query
++  - - - query2.query
++  - - timestamp 2
++  - - - query1.query
++  - - - query2.query
 + - mutation
 + - subscription
 
-### Future Updates
+### Authors
 
-In v2.0 the Burp Extension will be able to:
-+ Handle custom authentication (Bearer Token) parameter (-k)
-+ Automatically follow the “login steps" (JWT token) in order to retrieve different tokens for different types of users.
-+ Build a matrix based on users and endpoints in order to visually represent probable misconfigured endpoints, missing or broken access controls, and test for privileges escalation.
+*Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer - [thypon](https://github.com/thypon))
+*Original Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com))
 
-Example:
-
-|  | Endpoints | | | |
-| ------------- | ------------- | ------------- | ------------- | ------------- |
-|  __Users__| /profile | /admin-dashboard | /tenant-admin |
-| simple user | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) V (200) | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) X (403) | ![#f03c15](https://placehold.it/15/f03c15/000000?text=+) V (200) |
-| admin | ![#1589F0](https://placehold.it/15/1589F0/000000?text=+) Err (503) | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) V (200) | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) X (403) |
-| tenant admin | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) V (200) | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) V (200) | ![#c5f015](https://placehold.it/15/c5f015/000000?text=+) V (200) |
+This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
