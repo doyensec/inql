@@ -1,7 +1,7 @@
 import platform
 
 if platform.system() != "Java":
-    print("Load this file inside Burp Suite/jython, if you need the stand-alone tool run: inql")
+    print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
 from java.awt import (BorderLayout, Color, Container, Dimension, Component)
