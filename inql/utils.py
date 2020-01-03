@@ -11,7 +11,7 @@ def string_join(*ss):
     :param ss: strings to be joined
     :return: strings joined
     """
-    return string.join(ss)
+    return "".join(ss)
 
 
 def mkdir_p(path):
@@ -130,7 +130,7 @@ def watch(execute=nop, interval=60):
     t = threading.Thread(target=async_run)
     t.start()
 
-def async(execute=nop):
+def run_async(execute=nop):
     def async_run():
         try:
             execute()

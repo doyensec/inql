@@ -25,7 +25,7 @@ from inql.constants import *
 from inql.widgets.omnibar import Omnibar
 from inql.widgets.fileview import FileView
 from inql.widgets.propertyeditor import PropertyEditor
-from inql.utils import inherits_popup_menu, AttrDict, async, watch
+from inql.utils import inherits_popup_menu, AttrDict, run_async, watch
 
 
 class GraphQLPanel():
@@ -280,7 +280,7 @@ class GraphQLPanel():
                 accept_invalid_certificate, flag))
             self._fileview.refresh()
 
-        async(async_run)
+        run_async(async_run)
         return
 
 if __name__ == "__main__":

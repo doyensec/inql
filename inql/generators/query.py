@@ -343,9 +343,9 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     m_args_type.reverse()
     s_args_type.reverse()
     # replacing None items to String for a smooth exec
-    q_type = map(str, q_type)
-    m_type = map(str, m_type)
-    s_type = map(str, s_type)
+    q_type = list(map(str, q_type))
+    m_type = list(map(str, m_type))
+    s_type = list(map(str, s_type))
     # --------------------
     # QUERY
     # --------------------

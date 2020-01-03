@@ -12,4 +12,4 @@ def generate(argument, fpath="introspection.json"):
     :return: None
     """
     with open(fpath, "w") as schema_file:
-        schema_file.write(json.dumps(argument, indent=4))
+        schema_file.write(json.dumps(argument, indent=4, sort_keys=True))

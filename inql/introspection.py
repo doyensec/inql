@@ -1,21 +1,31 @@
 from __future__ import print_function
 
-import urllib2, urllib
+try:
+    import urllib.request as urllib_request # for Python 3
+except ImportError:
+    import urllib2 as urllib_request # for Python 2 and Jython
+try:
+    from urllib.parse import urlparse # for Python 3
+except ImportError:
+    from urlparse import urlparse # for Python 2 and Jython
+
 import argparse
 import time
 import os
 import json
 import sys
 import ssl
-from urlparse import urlparse
 from datetime import date
 
-from utils import string_join, mkdir_p
-from generators import html, query, schema
+from .utils import string_join, mkdir_p
+from .generators import html, query, schema
 
-# Hack-ish way to handle unicode (finger crossed)
-reload(sys)
-sys.setdefaultencoding('UTF8')
+try:
+    # Use UTF8 On Python2 and Jython
+    reload(sys)
+    sys.setdefaultencoding('UTF8')
+except NameError:
+    pass # Nothing Needed in Python3
 
 
 def wrap_exit(method, exceptions = (OSError, IOError)):
@@ -101,26 +111,22 @@ def query_result(target, key, headers={}, verify_certificate=True):
 
     try:
         # Issue the Introspection request against the GraphQL endpoint
-        request = urllib2.Request(target, json.dumps({"query": introspection_query}), headers=headers)
+        request = urllib_request.Request(target, json.dumps({"query": introspection_query}, sort_keys=True).encode('UTF-8'), headers=headers)
         request.add_header('Content-Type', 'application/json')
 
         if verify_certificate:
-            contents = urllib2.urlopen(request).read()
+            contents = urllib_request.urlopen(request).read()
         else:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-            contents = urllib2.urlopen(request, context=ctx).read()
+            contents = urllib_request.urlopen(request, context=ctx).read()
 
         return contents
 
-    except urllib2.HTTPError as e:
+    except Exception as e:
         print(string_join(red, str(e), reset))
-
-    except urllib2.URLError as e:
-        print(string_join(red, str(e), reset))
-
 
 def main():
     """
