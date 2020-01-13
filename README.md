@@ -7,9 +7,10 @@ A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) 
 
 Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL
 endpoint to fetch the metadata of all the:
+
 - Queries, Mutations, Subscriptions
-- their fields and arguments
-- objects and custom objects types
+- Its fields and arguments
+- Objects and custom objects types
 
 InQL can inspect the introspection query result and generate clean documentation in different formats such as
 HTML and JSON Schema.
@@ -55,15 +56,17 @@ Terminal Output:
 
 ### Burp Suite Extension
 
-Since v1.0 InQL was extended to also support BURP as a plugin. In that mode it will retain all the capabilities of the `inql` tool;
-including a handy user interface to manipulate the queries and the documentation. Following the most important capabilities
-of the UI tool:
-+ search for known GraphQL paths; it will grep and match known values to detect GraphQL Technology usage in the website
-+ search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground, and common consoles
-+ add a GraphQL Tab for every request/response using GraphQL Technology
-+ add a GraphQL Scanner Tab inside Burp Suite; GUI for the Introspection Tool
+Since the v1.0 version, InQL was extended to also support BURP as a plugin. In that mode it will retain all the capabilities of the `inql` tool including a handy user interface to manipulate the queries and the documentation. 
+
+Following the most important capabilities of the UI tool:
+
++ Search for known GraphQL paths; it will grep and match known values to detect GraphQL Technology usage in the website
++ Search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground, and common consoles
++ Add a GraphQL Tab for every request/response using GraphQL Technology
++ Add a GraphQL Scanner Tab inside Burp Suite; GUI for the Introspection Tool
 
 Import the Extension in Burp:
+
 + Download [Jython](https://www.jython.org/downloads.html) Jar
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
@@ -84,6 +87,7 @@ Usage:
 + Selecting any query/mutation/subscription will load its template in the main text area on the right
 
 Directory Structure will be the following:
+
 + url
 + - query
 +  - - timestamp 1
