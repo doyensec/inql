@@ -1,31 +1,30 @@
 # InQL Scanner
-A Burp Extension/stand-alone tool to facilitate [GraphQL](https://graphql.org/) technology security testing efforts.
+A security testing tool to facilitate [GraphQL](https://graphql.org/) technology security auditing efforts.
 
 ![GraphQL Official Logo](docs/graphqllogo.png)
 
-### InQL Introspection (stand-alone script)
+InQL can be used as a stand-alone script, or as a [Burp Suite](https://portswigger.net/burp) extension.
 
-Running `inql` from python will issue an [Introspection](https://graphql.org/learn/introspection/) query to a GraphQL
-endpoint to fetch the metadata of all the:
+## InQL Stand-Alone
 
-- Queries, Mutations, Subscriptions
+Running `inql` from Python will issue an [Introspection](https://graphql.org/learn/introspection/) query to the target GraphQL endpoint in order fetch metadata information for:
+
+- Queries, mutations, subscriptions
 - Its fields and arguments
 - Objects and custom objects types
 
-InQL can inspect the introspection query result and generate clean documentation in different formats such as
-HTML and JSON Schema.
+InQL can inspect the introspection query results and generate clean documentation in different formats, such as
+HTML and JSON schema. InQL is also able to generate templates (with optional placeholders) for all the known data types.
 
-InQL is also able to generate templates (with optional placeholders' values) for all the known types.
-
-The resulting HTML documentation page will contain details for all available Queries, Mutations, and Subscriptions as shown here:
+The resulting HTML documentation page will contain details for all available `Queries`, `Mutations`, and `Subscriptions` as shown here:
 
 ![Preview](docs/GraphQL_Introspection_Output.png)
 
-Templates Generation:
+The following screenshot shows the use of templates generation:
 
 ![Preview](docs/Introspection_Templates.png)
 
-Usage:
+For all supported options, check the command line help:
 ```
 usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY] [-p PROXY]
             [--header HEADERS HEADERS] [-d] [--generate-html]
@@ -50,44 +49,39 @@ optional arguments:
   -o OUTPUT_DIRECTORY   Output Directory
 ```
 
-Terminal Output:
+## InQL Burp Suite Extension
 
-![Preview](docs/Terminal_Output.png)
+Since version 1.0 of the tool, InQL was extended to operate within Burp Suite. In this mode, the tool will retain all the capabilities of the stand-alone script plus a handy user interface to manipulate queries. 
 
-### Burp Suite Extension
+Using the `inql` extension for Burp Suite, you can:
 
-Since the v1.0 version, InQL was extended to also support BURP as a plugin. In that mode it will retain all the capabilities of the `inql` tool including a handy user interface to manipulate the queries and the documentation. 
++ Search for known GraphQL URL paths; the tool will grep and match known values to detect GraphQL endpoints within the target website
++ Search for exposed GraphQL development consoles (*GraphiQL*, *GraphQL Playground*, and other common consoles)
++ Use a custom GraphQL tab displayed on each HTTP request/response containing GraphQL
++ Leverage the templates generation by sending those requests to Burp's Repeater tool
++ Configure the tool by using a custom settings tab
 
-Following the most important capabilities of the UI tool:
+![Preview](docs/inql.gif)
 
-+ Search for known GraphQL paths; it will grep and match known values to detect GraphQL Technology usage in the website
-+ Search for exposed GraphQL development consoles; reports GraphiQL, GraphQL Playground, and common consoles
-+ Add a GraphQL Tab for every request/response using GraphQL Technology
-+ Add a GraphQL Scanner Tab inside Burp Suite; GUI for the Introspection Tool
-
-Import the Extension in Burp:
+To use `inql` in Burp Suite, import the Python extension:
 
 + Download [Jython](https://www.jython.org/downloads.html) Jar
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
-+ Extender Tab > Exrtension > Add > Extension Type > Select python
++ Extender Tab > Extension > Add > Extension Type > Select python
 + Extension File > Set the location of `inql_burp.py` > Next
 + The output should now show the following message: `InQL Scanner Started!`
 
-Now you should be able to find a GraphQL Scanner Tab:
+*In future, we might consider integrating the extension within Burp's BApp Store.*
 
-![Preview](docs/inql.gif)
+### Burp Extension Usage
 
-Usage:
+Getting started with `inql` Burp extension is easy:
 
-+ Load a GraphQL endpoint or a JSON schema file location inside the input box
-+ (Optional) Check the 'load template placeholders' checkbox; It will replace known GraphQL arguments types with placeholder values (useful to use in conjunction with the Repeater Tab)
-+ Press the corresponding Button (Load URL/Load JSON)
-+ After some seconds the left panel will refresh loading the directory structure for the selected endpoint
-+ Selecting any query/mutation/subscription will load its template in the main text area on the right
-
-Directory Structure will be the following:
-
+1. Load a GraphQL endpoint or a JSON schema file location inside the top input box
+2. *(Optional)* Check the 'load template placeholders' checkbox; This will replace known GraphQL arguments types with placeholder values (useful to use in conjunction with the Repeater Tab)
+3. Press the corresponding button (*Load URL* or *Load JSON*)
+4. After few seconds, the left panel will refresh loading the directory structure for the selected endpoint
 + url
 + - query
 +  - - timestamp 1
@@ -98,11 +92,11 @@ Directory Structure will be the following:
 +  - - - query2.query
 + - mutation
 + - subscription
+5.  Selecting any *query*/*mutation*/*subscription* will load the corresponding template in the main text area
 
-### Authors
+## Credits
 
 *Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
-
 *Original Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com))
 
 This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
