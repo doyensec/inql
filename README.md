@@ -65,7 +65,7 @@ Using the `inql` extension for Burp Suite, you can:
 
 To use `inql` in Burp Suite, import the Python extension:
 
-+ Download the [Jython](https://www.jython.org/downloads.html) Jar
++ Download the [Jython](https://www.jython.org/download) Jar
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
 + Extender Tab > Extension > Add > Extension Type > Select Python
