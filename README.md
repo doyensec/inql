@@ -14,7 +14,7 @@ Running `inql` from Python will issue an [Introspection](https://graphql.org/lea
 - Objects and custom objects types
 
 InQL can inspect the introspection query results and generate clean documentation in different formats, such as
-HTML and JSON schema. InQL is also able to generate templates (with optional placeholders) for all the known data types.
+HTML and JSON schema. InQL is also able to generate templates (with optional placeholders) for all known basic data types.
 
 The resulting HTML documentation page will contain details for all available `Queries`, `Mutations`, and `Subscriptions` as shown here:
 
@@ -65,23 +65,22 @@ Using the `inql` extension for Burp Suite, you can:
 
 To use `inql` in Burp Suite, import the Python extension:
 
-+ Download [Jython](https://www.jython.org/downloads.html) Jar
++ Download the [Jython](https://www.jython.org/downloads.html) Jar
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
-+ Extender Tab > Extension > Add > Extension Type > Select python
++ Extender Tab > Extension > Add > Extension Type > Select Python
 + Extension File > Set the location of `inql_burp.py` > Next
 + The output should now show the following message: `InQL Scanner Started!`
 
-*In future, we might consider integrating the extension within Burp's BApp Store.*
+*In future, we might consider integrating the extension within the Burp's BApp Store.*
 
 ### Burp Extension Usage
 
 Getting started with `inql` Burp extension is easy:
 
-1. Load a GraphQL endpoint or a JSON schema file location inside the top input box
-2. *(Optional)* Check the 'load template placeholders' checkbox; This will replace known GraphQL arguments types with placeholder values (useful to use in conjunction with the Repeater Tab)
-3. Press the corresponding button (*Load URL* or *Load JSON*)
-4. After few seconds, the left panel will refresh loading the directory structure for the selected endpoint
+1. Load a GraphQL endpoint or a JSON schema file location inside the top input field
+2. Press the "Load" button
+3. After few seconds, the left panel will refresh loading the directory structure for the selected endpoint as in the following example:
 + url
 + - query
 +  - - timestamp 1
@@ -92,11 +91,12 @@ Getting started with `inql` Burp extension is easy:
 +  - - - query2.query
 + - mutation
 + - subscription
-5.  Selecting any *query*/*mutation*/*subscription* will load the corresponding template in the main text area
+4.  Selecting any *query*/*mutation*/*subscription* will load the corresponding template in the main text area
 
 ## Credits
 
 *Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
+
 *Original Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com))
 
 This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
