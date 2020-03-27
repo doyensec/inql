@@ -69,6 +69,7 @@ To use `inql` in Burp Suite, import the Python extension:
 + Start Burp Suite
 + Extender Tab > Options > Python Enviroment > Set the location of Jython standalone JAR
 + Extender Tab > Extension > Add > Extension Type > Select Python
++ Download the latest `inql_burp.py` release [here](https://github.com/doyensec/inql/releases)
 + Extension File > Set the location of `inql_burp.py` > Next
 + The output should now show the following message: `InQL Scanner Started!`
 
