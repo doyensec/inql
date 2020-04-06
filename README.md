@@ -1,7 +1,7 @@
 # InQL Scanner
 A security testing tool to facilitate [GraphQL](https://graphql.org/) technology security auditing efforts.
 
-![GraphQL Official Logo](docs/graphqllogo.png)
+![InQL Logo](docs/inql.jpg)
 
 InQL can be used as a stand-alone script, or as a [Burp Suite](https://portswigger.net/burp) extension.
 
