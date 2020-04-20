@@ -46,6 +46,7 @@ class GraphQLPanel():
             ['Generate Stub Queries', True],
             ['Accept Invalid SSL Certificate', False]
         ]
+        self._init_config = json.loads(json.dumps(self._run_config))
         self._default_config = {}
         for k, v in self._run_config:
             self._default_config[k] = v
@@ -120,7 +121,9 @@ class GraphQLPanel():
             data=self._run_config,
             actions=[
                 ExecutorAction("Setup Load Headers",
-                               lambda _: self._setup_headers())
+                               lambda _: self._setup_headers()),
+                ExecutorAction("Reset",
+                               lambda _: self._reset())
             ]
         )
 
@@ -150,6 +153,13 @@ class GraphQLPanel():
         :return: the current status in JSON format, this will be saved in BURP preferences for later reuse
         """
         return json.dumps(self._state)
+
+    def _reset(self):
+        """Reset configuration state"""
+        self._state['config'] = json.loads(json.dumps(self._init_config))
+        self._run_config = self._state['config']
+        self._state['runs'] = {}
+
 
     def _tree_listener(self, e):
         """
