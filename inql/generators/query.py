@@ -22,7 +22,7 @@ def detect_type(types):
         types = string_join('\\"', types, '\\"')
         types = types.replace("String", "asd")
     elif "Boolean" in types:
-        types = types.replace("Boolean", "TRUE")
+        types = types.replace("Boolean", "true")
     elif "Float" in types:
         types = types.replace("Float", "0.5")
     elif "Int" in types:
