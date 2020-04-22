@@ -391,21 +391,23 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     index = 0
     for mname in m_name:
         print(" |  %s" % str(mname))
-        query_write(qpath, "mutation", mname, "{\"query\":\"mutation{%s(" % mname, "w")
-        for argsname in m_args_name[index]:
-            # POP out of the list empty values
-            if argsname != "":
-                # if detect type (-d param) is enabled, retrieve placeholders according to arg type
-                if detect:
-                    query_write(qpath, "mutation", mname,
-                               "%s:%s " % (argsname, detect_type(m_args_type.pop())), "a")
+        query_write(qpath, "mutation", mname, "{\"query\":\"mutation { %s " % mname, "w")
+        if len(m_args_name[index]) != 0:
+            query_write(qpath, "mutation", mname, "(", "a")
+            for argsname in m_args_name[index]:
+                # POP out of the list empty values
+                if argsname != "":
+                    # if detect type (-d param) is enabled, retrieve placeholders according to arg type
+                    if detect:
+                        query_write(qpath, "mutation", mname,
+                                   "%s:%s " % (argsname, detect_type(m_args_type.pop())), "a")
+                    else:
+                        query_write(qpath, "mutation", mname,
+                                   "%s:%s " % (argsname, m_args_type.pop()), "a")
                 else:
-                    query_write(qpath, "mutation", mname,
-                               "%s:%s " % (argsname, m_args_type.pop()), "a")
-            else:
-                m_args_type.pop()
-        # Mutation name
-        query_write(qpath, "mutation", mname, ")", "a")
+                    m_args_type.pop()
+            # Mutation name
+            query_write(qpath, "mutation", mname, ")", "a")
         # Mutation fields
         fields_str = ""
         f_index = 0
@@ -427,22 +429,25 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     index = 0
     for sname in s_name:
         print(" |  %s" % str(sname))
-        query_write(qpath, "subscription", sname, "{\"query\":\"subscription{%s(" % sname,
+        query_write(qpath, "subscription", sname, "{\"query\":\"subscription { %s " % sname,
                    "w")
-        for argsname in s_args_name[index]:
-            # POP out of the list empty values
-            if argsname != "":
-                # if detect type (-d param) is enabled, retrieve placeholders according to arg type
-                if detect:
-                    query_write(qpath, "subscription", sname,
-                               "%s:%s " % (argsname, detect_type(s_args_type.pop())), "a")
+        if len(s_args_name[index]) != 0:
+            query_write(qpath, "subscription", sname, "(", "a")
+
+            for argsname in s_args_name[index]:
+                # POP out of the list empty values
+                if argsname != "":
+                    # if detect type (-d param) is enabled, retrieve placeholders according to arg type
+                    if detect:
+                        query_write(qpath, "subscription", sname,
+                                   "%s:%s " % (argsname, detect_type(s_args_type.pop())), "a")
+                    else:
+                        query_write(qpath, "subscription", sname,
+                                   "%s:%s " % (argsname, s_args_type.pop()), "a")
                 else:
-                    query_write(qpath, "subscription", sname,
-                               "%s:%s " % (argsname, s_args_type.pop()), "a")
-            else:
-                s_args_type.pop()
-        # Subscription name
-        query_write(qpath, "subscription", sname, ")", "a")
+                    s_args_type.pop()
+            # Subscription name
+            query_write(qpath, "subscription", sname, ")", "a")
         # Subscription fields
         f_index = 0
         fields_str = ""
