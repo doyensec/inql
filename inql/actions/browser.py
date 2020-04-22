@@ -11,6 +11,7 @@ except ImportError:
 
 import subprocess
 import os
+import json
 
 from java.awt.event import ActionListener
 from java.awt import Desktop
@@ -80,7 +81,7 @@ class GraphIQLAction(ActionListener):
     The idea is to show HTML documentation in a Browser, when generated and the context is correct
     """
 
-    def __init__(self, text="Open GraphIQL Console"):
+    def __init__(self, text="Open in GraphIQL Console"):
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
         self.menuitem.addActionListener(self)
@@ -108,11 +109,13 @@ class GraphIQLAction(ActionListener):
             try:
                 target = "%s://%s/graphiql" % (protocol, host)
                 if not target in self.lookup:
-                    urllib_request.urlopen(urllib_request.Request(target))
+                    urllib_request.urlopen(urllib_request.Request(target, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36'}))
                 self.target = "%s://%s/graphiql" % (protocol, host)
                 self.lookup[target] = True
-            except:
-                pass
+                if os.path.abspath(fname).endswith('.query'):
+                    self.target += "?query=%s" % urllib_request.quote(json.loads(payload)['query'])
+            except Exception as ex:
+                print(ex)
 
         if self.target:
             self.menuitem.setEnabled(True)
