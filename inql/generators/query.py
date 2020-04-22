@@ -370,17 +370,19 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
                     q_args_type.pop()
             # Query name
             query_write(qpath, "query", qname, ")", "a")
-        query_write(qpath, "query", qname, "{", "a")
         # Query fields
         f_index = 0
+        fields_str = ""
         for fieldsnames in fields_names:
             if q_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    query_write(qpath, "query", qname, "\\n\\t%s " % items, "a")
+                    fields_str += "\\n\\t%s " % items
                 break
             f_index += 1
         # Close query
-        query_write(qpath, "query", qname, "\\n}}\"}", "a")
+        if fields_str != "":
+            query_write(qpath, "query", qname, "{%s\\n}" % fields_str, "a")
+        query_write(qpath, "query", qname, "\\n}\"}", "a")
         index += 1
     # --------------------
     # MUTATION
@@ -403,17 +405,20 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
             else:
                 m_args_type.pop()
         # Mutation name
-        query_write(qpath, "mutation", mname, "){", "a")
+        query_write(qpath, "mutation", mname, ")", "a")
         # Mutation fields
+        fields_str = ""
         f_index = 0
         for fieldsnames in fields_names:
             if m_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    query_write(qpath, "mutation", mname, "\\n\\t%s " % items, "a")
+                    fields_str += "\\n\\t%s " % items
                 break
             f_index += 1
         # Close mutation
-        query_write(qpath, "mutation", mname, "\\n}}\"}", "a")
+        if fields_str != "":
+            query_write(qpath, "mutation", mname, "{%s\\n}" % fields_str, "a")
+        query_write(qpath, "mutation", mname, "\\n}\"}", "a")
         index += 1
     # --------------------
     # SUBSCRIPTION
@@ -437,17 +442,20 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
             else:
                 s_args_type.pop()
         # Subscription name
-        query_write(qpath, "subscription", sname, "){", "a")
+        query_write(qpath, "subscription", sname, ")", "a")
         # Subscription fields
         f_index = 0
+        fields_str = ""
         for fieldsnames in fields_names:
             if s_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    query_write(qpath, "subscription", sname, "\\n\\t%s " % items, "a")
+                    fields_str += "\\n\\t%s " % items
                 break
             f_index += 1
         # Close subscription
-        query_write(qpath, "subscription", sname, "\\n}}\"}", "a")
+        if fields_str != "":
+            query_write(qpath, "subscription", sname, "{%s\\n}" % fields_str, "a")
+        query_write(qpath, "subscription", sname, "\\n}\"}", "a")
         index += 1
     # --------------------
     # THE END, they all lived happily ever after (hopefully)
