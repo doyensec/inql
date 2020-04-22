@@ -19,7 +19,7 @@ import threading
 import sys
 
 from inql.actions.executor import ExecutorAction
-from inql.actions.browser import BrowserAction
+from inql.actions.browser import BrowserAction, GraphIQLAction
 from inql.introspection import init
 from inql.constants import *
 from inql.widgets.omnibar import Omnibar
@@ -41,7 +41,7 @@ class GraphQLPanel():
             ['Proxy', None],
             ['Authorization Key', None],
             ['Load Placeholders', True],
-            ['Generate HTML DOC', False],
+            ['Generate HTML DOC', True],
             ['Generate Schema DOC', False],
             ['Generate Stub Queries', True],
             ['Accept Invalid SSL Certificate', False]
@@ -52,6 +52,7 @@ class GraphQLPanel():
             self._default_config[k] = v
         self._old_config_hash = None
         self._actions.append(BrowserAction())
+        self._actions.append(GraphIQLAction())
         self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
         self._actions.append(ExecutorAction("Load", self._loadurl))
         self._actions = [a for a in reversed(self._actions)]
