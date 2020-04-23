@@ -34,17 +34,17 @@ class GraphQLPanel():
 
     It can run standalone with limited functionalities with: jython -m inql.widgets.tab
     """
-    def __init__(self, actions=[], restore=None):
+    def __init__(self, actions=[], restore=None, proxy=None):
         self._actions = actions
         self._load_headers = []
         self._run_config = [
-            ['Proxy', None],
+            ['Proxy', proxy],
             ['Authorization Key', None],
             ['Load Placeholders', True],
             ['Generate HTML DOC', True],
             ['Generate Schema DOC', False],
             ['Generate Stub Queries', True],
-            ['Accept Invalid SSL Certificate', False]
+            ['Accept Invalid SSL Certificate', True]
         ]
         self._init_config = json.loads(json.dumps(self._run_config))
         self._default_config = {}

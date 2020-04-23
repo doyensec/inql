@@ -6,6 +6,8 @@ if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
+import json
+
 from burp import ITab
 
 from inql.actions.sendtorepeater import RepeaterSenderAction
@@ -41,11 +43,19 @@ class GraphQLTab(ITab):
         except Exception as ex:
             print("Cannot restore state! %s" % ex)
             restore = None
+
+        for request_listener in json.loads(self._callbacks.saveConfigAsJson())["proxy"]["request_listeners"]:
+            if request_listener["running"]:
+                proxy = "localhost:%s" % request_listener["listener_port"]
+                break
+
         self.panel = GraphQLPanel(
             actions=[
                 repeater_sender,
                 custom_header_setter],
-            restore=restore)
+            restore=restore,
+            proxy=proxy
+        )
         self._callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this
 
