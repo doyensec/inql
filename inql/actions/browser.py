@@ -115,7 +115,7 @@ class GraphIQLAction(ActionListener):
                 if os.path.abspath(fname).endswith('.query'):
                     self.target += "?query=%s" % urllib_request.quote(json.loads(payload)['query'])
             except Exception as ex:
-                print(ex)
+                pass
 
         if self.target:
             self.menuitem.setEnabled(True)
