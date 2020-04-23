@@ -44,6 +44,8 @@ class GraphQLTab(ITab):
             print("Cannot restore state! %s" % ex)
             restore = None
 
+        proxy = None
+
         for request_listener in json.loads(self._callbacks.saveConfigAsJson())["proxy"]["request_listeners"]:
             if request_listener["running"]:
                 proxy = "localhost:%s" % request_listener["listener_port"]
