@@ -15,6 +15,7 @@ import os
 import json
 import sys
 import ssl
+import platform
 from datetime import date
 
 from .utils import string_join, mkdir_p
@@ -139,6 +140,9 @@ def main():
     # Args parser definition
     # -----------------------
     parser = argparse.ArgumentParser(prog="inql", description="InQL Scanner")
+    if platform.system() == "Java":
+        parser.add_argument("--nogui", default=False, dest="nogui",
+                            action="store_true", help="Start InQL Scanner Without Standalone GUI")
     parser.add_argument("-t", default=None, dest="target",
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
@@ -164,7 +168,12 @@ def main():
     mkdir_p(args.output_directory)
     os.chdir(args.output_directory)
 
-    return init(args, lambda: parser.print_help())
+    if platform.system() == "Java" and args.nogui is not True:
+        from inql.widgets.tab import GraphQLPanel
+        return GraphQLPanel(
+        ).app()
+    else:
+        return init(args, lambda: parser.print_help())
 
 
 def init(args, print_help=None):

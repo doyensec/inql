@@ -15,7 +15,7 @@ from java.io import File
 import os
 import json
 import string
-import threading
+import time
 import sys
 
 from inql.actions.executor import ExecutorAction
@@ -294,6 +294,18 @@ class GraphQLPanel():
         run_async(async_run)
         return
 
+    def app(self, label="InQL Scanner"):
+        frame = JFrame(label)
+        frame.setForeground(Color.black)
+        frame.setBackground(Color.lightGray)
+        cp = frame.getContentPane()
+        cp.add(self.this)
+        frame.pack()
+        frame.setVisible(True)
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
+        while frame.isVisible():
+            time.sleep(1)
+
 if __name__ == "__main__":
     import tempfile
     tmpdir = tempfile.mkdtemp()
@@ -316,16 +328,4 @@ if __name__ == "__main__":
             pass
     print("Changing dir to %s" % tmpdir)
     os.chdir(tmpdir)
-    frame = JFrame("Burp TAB Tester")
-    frame.setForeground(Color.black)
-    frame.setBackground(Color.lightGray)
-    cp = frame.getContentPane()
-    gql = GraphQLPanel(actions=[TestAction("test it")])
-    cp.add(gql.this)
-    frame.pack()
-    frame.setVisible(True)
-    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
-    import time
-    while True:
-        time.sleep(5)
-        print(gql.state())
+    GraphQLPanel(actions=[TestAction("test it")]).app()

@@ -19,7 +19,7 @@ setup(
    long_description_content_type="text/markdown",
    author='Andrea Brancaleoni',
    author_email='andrea@doyensec.com',
-   packages=['inql', 'inql.generators'],
+   packages=['inql', 'inql.generators', 'inql.widgets', 'inql.actions'],
    scripts=['bin/inql'],
    install_requires=[],
 )
