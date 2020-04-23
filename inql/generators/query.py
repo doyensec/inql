@@ -353,35 +353,33 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     index = 0
     for qname in q_name:
         print(" |  %s" % str(qname))
-        query_write(qpath, "query", qname, "{\"query\":\"query %s {%s" % (qname, qname), "w")
+        query_write(qpath, "query", qname, "{\"query\":\"query {\\n\\t%s" % qname, "w")
         if len(q_args_name[index]) != 0:
-            query_write(qpath, "query", qname, "(", "a")
+            arguments = []
             for argsname in q_args_name[index]:
                 # POP out of the list empty values
                 if argsname != "":
                     # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                     if detect:
-                        query_write(qpath, "query", qname,
-                                   "%s:%s " % (argsname, detect_type(q_args_type.pop())), "a")
+                        arguments.append("%s:%s" % (argsname, detect_type(q_args_type.pop())))
                     else:
-                        query_write(qpath, "query", qname,
-                                   "%s:%s " % (argsname, q_args_type.pop()), "a")
+                        arguments.append("%s:%s" % (argsname, q_args_type.pop()))
                 else:
                     q_args_type.pop()
             # Query name
-            query_write(qpath, "query", qname, ")", "a")
+            query_write(qpath, "query", qname, "(%s)" % " ".join(arguments), "a")
         # Query fields
         f_index = 0
         fields_str = ""
         for fieldsnames in fields_names:
             if q_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    fields_str += "\\n\\t%s " % items
+                    fields_str += "\\n\\t\\t%s " % items
                 break
             f_index += 1
         # Close query
         if fields_str != "":
-            query_write(qpath, "query", qname, "{%s\\n}" % fields_str, "a")
+            query_write(qpath, "query", qname, " {%s\\n\\t}" % fields_str, "a")
         query_write(qpath, "query", qname, "\\n}\"}", "a")
         index += 1
     # --------------------
@@ -391,35 +389,33 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     index = 0
     for mname in m_name:
         print(" |  %s" % str(mname))
-        query_write(qpath, "mutation", mname, "{\"query\":\"mutation { %s " % mname, "w")
+        query_write(qpath, "mutation", mname, "{\"query\":\"mutation {\\n\\t%s" % mname, "w")
         if len(m_args_name[index]) != 0:
-            query_write(qpath, "mutation", mname, "(", "a")
+            arguments = []
             for argsname in m_args_name[index]:
                 # POP out of the list empty values
                 if argsname != "":
                     # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                     if detect:
-                        query_write(qpath, "mutation", mname,
-                                   "%s:%s " % (argsname, detect_type(m_args_type.pop())), "a")
+                        arguments.append("%s:%s" % (argsname, detect_type(m_args_type.pop())))
                     else:
-                        query_write(qpath, "mutation", mname,
-                                   "%s:%s " % (argsname, m_args_type.pop()), "a")
+                        arguments.append("%s:%s" % (argsname, m_args_type.pop()))
                 else:
                     m_args_type.pop()
             # Mutation name
-            query_write(qpath, "mutation", mname, ")", "a")
+            query_write(qpath, "mutation", mname, "(%s)" % " ".join(arguments), "a")
         # Mutation fields
         fields_str = ""
         f_index = 0
         for fieldsnames in fields_names:
             if m_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    fields_str += "\\n\\t%s " % items
+                    fields_str += "\\n\\t\\t%s " % items
                 break
             f_index += 1
         # Close mutation
         if fields_str != "":
-            query_write(qpath, "mutation", mname, "{%s\\n}" % fields_str, "a")
+            query_write(qpath, "mutation", mname, " {%s\\n\\t}" % fields_str, "a")
         query_write(qpath, "mutation", mname, "\\n}\"}", "a")
         index += 1
     # --------------------
@@ -429,37 +425,34 @@ def generate(argument, custom=False, qpath="%s/%s", detect=True, green_print=lam
     index = 0
     for sname in s_name:
         print(" |  %s" % str(sname))
-        query_write(qpath, "subscription", sname, "{\"query\":\"subscription { %s " % sname,
+        query_write(qpath, "subscription", sname, "{\"query\":\"subscription {\\n\\t%s" % sname,
                    "w")
         if len(s_args_name[index]) != 0:
-            query_write(qpath, "subscription", sname, "(", "a")
-
+            arguments = []
             for argsname in s_args_name[index]:
                 # POP out of the list empty values
                 if argsname != "":
                     # if detect type (-d param) is enabled, retrieve placeholders according to arg type
                     if detect:
-                        query_write(qpath, "subscription", sname,
-                                   "%s:%s " % (argsname, detect_type(s_args_type.pop())), "a")
+                        arguments.append("%s:%s" % (argsname, detect_type(s_args_type.pop())))
                     else:
-                        query_write(qpath, "subscription", sname,
-                                   "%s:%s " % (argsname, s_args_type.pop()), "a")
+                        arguments.append("%s:%s" % (argsname, s_args_type.pop()))
                 else:
                     s_args_type.pop()
             # Subscription name
-            query_write(qpath, "subscription", sname, ")", "a")
+            query_write(qpath, "subscription", sname, "(%s)" % " ".join(arguments), "a")
         # Subscription fields
         f_index = 0
         fields_str = ""
         for fieldsnames in fields_names:
             if s_type[index] in fields_names[f_index][0]:
                 for items in fields_names[f_index][1:]:
-                    fields_str += "\\n\\t%s " % items
+                    fields_str += "\\n\\t\\t%s " % items
                 break
             f_index += 1
         # Close subscription
         if fields_str != "":
-            query_write(qpath, "subscription", sname, "{%s\\n}" % fields_str, "a")
+            query_write(qpath, "subscription", sname, " {%s\\n\\t}" % fields_str, "a")
         query_write(qpath, "subscription", sname, "\\n}\"}", "a")
         index += 1
     # --------------------
