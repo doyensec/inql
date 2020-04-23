@@ -18,6 +18,7 @@ from java.awt import Desktop
 from javax.swing import JMenuItem
 from java.net import URI
 
+
 class URLOpener():
     def __init__(self):
         self.openers = [
@@ -40,6 +41,8 @@ class URLOpener():
                 return
             except:
                 pass
+        print("Cannot open url %s!!!" % url)
+
 
 class BrowserAction(ActionListener):
     """
@@ -58,7 +61,7 @@ class BrowserAction(ActionListener):
         :param e: unused
         :return:
         """
-        URLOpener().open(self.target)
+        URLOpener().open("file://%s" % self.target)
 
     def ctx(self, host=None, payload=None, fname=None):
         """
@@ -106,16 +109,21 @@ class GraphIQLAction(ActionListener):
         protocols = ['http', 'https']
         self.target = None
         for protocol in protocols:
+            target = "%s://%s/graphiql" % (protocol, host)
+            if target in self.lookup and self.lookup[target] is False:
+                continue
             try:
-                target = "%s://%s/graphiql" % (protocol, host)
-                if not target in self.lookup:
-                    urllib_request.urlopen(urllib_request.Request(target, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36'}))
+                if target not in self.lookup:
+                    os.environ['http_proxy'] = None
+                    os.environ['https_proxy'] = None
+                    urllib_request.urlopen(
+                        urllib_request.Request(target, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.163 Safari/537.36'}))
                 self.target = "%s://%s/graphiql" % (protocol, host)
                 self.lookup[target] = True
                 if os.path.abspath(fname).endswith('.query'):
                     self.target += "?query=%s" % urllib_request.quote(json.loads(payload)['query'])
             except Exception as ex:
-                pass
+                self.lookup[target] = False
 
         if self.target:
             self.menuitem.setEnabled(True)
