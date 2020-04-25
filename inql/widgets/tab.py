@@ -19,13 +19,13 @@ import time
 import sys
 
 from inql.actions.executor import ExecutorAction
-from inql.actions.browser import BrowserAction, GraphIQLAction
+from inql.actions.browser import BrowserAction
 from inql.introspection import init
 from inql.constants import *
 from inql.widgets.omnibar import Omnibar
 from inql.widgets.fileview import FileView
 from inql.widgets.propertyeditor import PropertyEditor
-from inql.utils import inherits_popup_menu, AttrDict, run_async, watch
+from inql.utils import inherits_popup_menu, AttrDict, run_async
 
 
 class GraphQLPanel():
@@ -52,7 +52,6 @@ class GraphQLPanel():
             self._default_config[k] = v
         self._old_config_hash = None
         self._actions.append(BrowserAction())
-        self._actions.append(GraphIQLAction())
         self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
         self._actions.append(ExecutorAction("Load", self._loadurl))
         self._actions = [a for a in reversed(self._actions)]

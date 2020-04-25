@@ -10,7 +10,7 @@ import json
 
 from burp import ITab
 
-from inql.actions.sendtorepeater import RepeaterSenderAction
+from inql.actions.sendto import RepeaterSenderAction, OmniMenuItem, EnhancedRequestBuilder, GraphIQLSenderAction
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.tab import GraphQLPanel
 
@@ -36,7 +36,12 @@ class GraphQLTab(ITab):
         :return: Tab UI Component
         """
         overrideheaders = {}
-        repeater_sender = RepeaterSenderAction(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater", overrideheaders=overrideheaders)
+        repeater_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater")
+        graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphIQL")
+        request_builder = EnhancedRequestBuilder(
+            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders)
+        repeater_sender = RepeaterSenderAction(omnimenu=repeater_omnimenu, requestbuilder=request_builder)
+        graphiql_sender = GraphIQLSenderAction(omnimenu=graphiql_omnimenu, requestbuilder=request_builder)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:
             restore = self._callbacks.loadExtensionSetting(GraphQLPanel.__name__)
@@ -54,12 +59,17 @@ class GraphQLTab(ITab):
         self.panel = GraphQLPanel(
             actions=[
                 repeater_sender,
+                graphiql_sender,
                 custom_header_setter],
             restore=restore,
             proxy=proxy
         )
         self._callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this
+
+    def bring_in_front(self):
+        self.panel.this.setAlwaysOnTop(True)
+        self.panel.this.setAlwaysOnTop(False)
 
     def save(self):
         """
