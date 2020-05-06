@@ -55,6 +55,8 @@ class ListGQLParameters(IMessageEditorTab):
         message = content[rBody.getBodyOffset():].tostring().strip()
         try:
             content = json.loads(str(message))
+            if isinstance(content, list):
+                content = content[0]
 
             return 'query' in content and \
                    any([content['query'].strip().startswith(qtype) for qtype in ['query', 'mutation', 'subscription']])
@@ -80,6 +82,8 @@ class ListGQLParameters(IMessageEditorTab):
 
             try:
                 data = json.loads(str(message))
+                if isinstance(data, list):
+                    data = data[0]
 
                 self._txtInput.setText(data['query'])
                 self._txtInput.setEditable(self._editable)
@@ -100,7 +104,10 @@ class ListGQLParameters(IMessageEditorTab):
                 r = self._helpers.analyzeRequest(self._currentMessage)
                 message = self._currentMessage[r.getBodyOffset():].tostring()
                 data = json.loads(str(message))
-                data['query'] = query
+                if isinstance(data, list):
+                    data[0]['query'] = query
+                else:
+                    data['query'] = query
                 request_body = json.dumps(data, indent=4)
                 return self._helpers.buildHttpMessage(r.getHeaders(), request_body)
             except Exception as ex:
