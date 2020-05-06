@@ -245,8 +245,12 @@ class GraphIQLSenderAction(ActionListener):
         :param e: unused
         :return:
         """
+        content = json.loads(self._payload)
+        if isinstance(content, list):
+            content = content[0]
+
         URLOpener().open(self._http_mutator.get_graphiql_target(
-            self._server.server_port, self._host, json.loads(self._payload)['query']))
+            self._server.server_port, self._host, content['query']))
 
     def ctx(self, host=None, payload=None, fname=None):
         """
