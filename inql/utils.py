@@ -338,7 +338,8 @@ def make_http_handler(http_mutator=None):
                 else:
                     contents = urllib_request.urlopen(request).read()
 
-                if len(json.loads(contents)['errors']) > 0 and "IntrospectionQuery" in body:
+                jres = json.loads(contents)
+                if 'errors' in jres and len(jres['errors']) > 0 and "IntrospectionQuery" in body:
                     raise Exception("IntrospectionQuery request contains errors")
 
                 self.send_response(200)
