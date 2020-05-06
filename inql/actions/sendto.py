@@ -86,7 +86,7 @@ class SimpleMenuItem:
         self.menuitem.setEnabled(enabled)
 
 
-class EnhancedRequestBuilder(IProxyListener):
+class EnhancedHTTPMutator(IProxyListener):
     def __init__(self, callbacks, helpers, overrideheaders):
         self._requests = {}
         self._helpers = helpers
@@ -96,6 +96,7 @@ class EnhancedRequestBuilder(IProxyListener):
             self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
         self._overrideheaders = overrideheaders
         self._index = 0
+        self._stub_responses = {}
 
 
     def _process_request(self, reqinfo, reqbody):
@@ -152,6 +153,12 @@ class EnhancedRequestBuilder(IProxyListener):
             # TODO: Implement custom headers in threads. It is not easy to share them with the current architecture.
             return urllib_request.Request(endpoint, payload, headers=original_request.headers)
 
+    def get_stub_response(self, host):
+        return self._stub_responses[host] if host in self._stub_responses else None
+
+    def set_stub_response(self, host, payload):
+        self._stub_responses[host] = payload
+
     def send_to_repeater(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
         if req:
@@ -179,8 +186,8 @@ class EnhancedRequestBuilder(IProxyListener):
 
 
 class RepeaterSenderAction(ActionListener):
-    def __init__(self, omnimenu, requestbuilder):
-        self._requestbuilder = requestbuilder
+    def __init__(self, omnimenu, http_mutator):
+        self._http_mutator = http_mutator
         self._omnimenu = omnimenu
         self._omnimenu.add_action_listener(self)
         self.menuitem = self._omnimenu.menuitem
@@ -195,7 +202,7 @@ class RepeaterSenderAction(ActionListener):
         :param e: unused
         :return: None
         """
-        self._requestbuilder.send_to_repeater(self._host, self._payload)
+        self._http_mutator.send_to_repeater(self._host, self._payload)
 
     def ctx(self, host=None, payload=None, fname=None):
         """
@@ -215,19 +222,19 @@ class RepeaterSenderAction(ActionListener):
             self._omnimenu.set_enabled(False)
             return
 
-        if self._requestbuilder.has_host(host):
+        if self._http_mutator.has_host(host):
             self._omnimenu.set_enabled(True)
         else:
             self._omnimenu.set_enabled(False)
 
 
 class GraphIQLSenderAction(ActionListener):
-    def __init__(self, omnimenu, requestbuilder):
-        self._requestbuilder = requestbuilder
+    def __init__(self, omnimenu, http_mutator):
+        self._http_mutator = http_mutator
         self._omnimenu = omnimenu
         self._omnimenu.add_action_listener(self)
         self.menuitem = self._omnimenu.menuitem
-        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(requestbuilder))
+        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(http_mutator))
         t = threading.Thread(target=self._server.serve_forever)
         #t.daemon = True
         t.start()
@@ -238,7 +245,7 @@ class GraphIQLSenderAction(ActionListener):
         :param e: unused
         :return:
         """
-        URLOpener().open(self._requestbuilder.get_graphiql_target(
+        URLOpener().open(self._http_mutator.get_graphiql_target(
             self._server.server_port, self._host, json.loads(self._payload)['query']))
 
     def ctx(self, host=None, payload=None, fname=None):
@@ -259,7 +266,7 @@ class GraphIQLSenderAction(ActionListener):
             self._omnimenu.set_enabled(False)
             return
 
-        if self._requestbuilder.has_host(host):
+        if self._http_mutator.has_host(host):
             self._omnimenu.set_enabled(True)
         else:
             self._omnimenu.set_enabled(False)

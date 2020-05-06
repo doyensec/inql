@@ -213,11 +213,11 @@ def init(args, print_help=None):
     if args.target is not None or args.schema_json_file is not None:
         if args.target is not None:
             # Acquire GraphQL endpoint URL as a target
-            URL = urlparse(args.target).netloc
+            host = urlparse(args.target).netloc
         else:
             # Acquire a local JSON file as a target
             print(string_join(yellow, "Parsing local schema file", reset))
-            URL = os.path.splitext(os.path.basename(args.schema_json_file))[0]
+            host = os.path.splitext(os.path.basename(args.schema_json_file))[0]
         if args.detect:
             print(string_join(yellow, "Detect arguments is ENABLED, known types will be replaced with placeholder values", reset))
         # Used to generate 'unique' file names for multiple documentation
@@ -244,15 +244,15 @@ def init(args, print_help=None):
 
         if args.generate_schema:
             schema.generate(argument,
-                            fpath=os.path.join(URL, "schema-%s-%s.json" % (today, timestamp)))
+                            fpath=os.path.join(host, "schema-%s-%s.json" % (today, timestamp)))
         if args.generate_html:
             html.generate(argument,
-                          fpath=os.path.join(URL, "doc-%s-%s.html" % (today, timestamp)),
+                          fpath=os.path.join(host, "doc-%s-%s.html" % (today, timestamp)),
                           custom=custom,
                           target=args.target)
         if args.generate_queries:
             query.generate(argument,
-                           qpath=os.path.join(URL, "%s", today, timestamp, "%s"),
+                           qpath=os.path.join(host, "%s", today, timestamp, "%s"),
                            detect=args.detect,
                            custom=custom,
                            green_print=lambda s: print(string_join(green, "Writing Queries Templates", reset)))

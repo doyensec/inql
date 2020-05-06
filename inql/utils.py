@@ -1,8 +1,9 @@
 import re
-import string, os, sys
+import os, sys
 import time
 import threading
 import ssl
+import json
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -157,7 +158,7 @@ def run_async(execute=nop):
     threading.Thread(target=async_run).start()
 
 
-def make_http_handler(requestbuilder=None):
+def make_http_handler(http_mutator=None):
     class GraphQLRequestHandler(BaseHTTPRequestHandler):
         def graphiql_page(self, address, extrascript=""):
             """
@@ -280,7 +281,7 @@ def make_http_handler(requestbuilder=None):
             self.end_headers()
 
             # Send the html message
-            if requestbuilder:
+            if http_mutator:
                 page = self.graphiql_page(self.path, extrascript="""(function() {
               var toolbar = document.querySelector('.toolbar');
               var sendToRepeater = document.createElement('button');
@@ -308,6 +309,8 @@ def make_http_handler(requestbuilder=None):
             except AttributeError:  # python3 has not the getheader type, use get instead
                 content_len = int(self.headers.get('Content-Length'))
 
+            host = None
+            body = None
             try:
                 idx = self.path.find('?')
                 if idx != -1:
@@ -322,10 +325,10 @@ def make_http_handler(requestbuilder=None):
                     host = url.netloc
                 self.headers['Host'] = host
                 body = self.rfile.read(content_len)
-                if not requestbuilder:
+                if not http_mutator:
                     request = urllib_request.Request(endpoint, body, headers=self.headers)
                 else:
-                    request = requestbuilder.build_python_request(endpoint, host, body)
+                    request = http_mutator.build_python_request(endpoint, host, body)
 
                 if 'http_proxy' in os.environ or 'https_proxy' in os.environ:
                     ctx = ssl.create_default_context()
@@ -335,12 +338,21 @@ def make_http_handler(requestbuilder=None):
                 else:
                     contents = urllib_request.urlopen(request).read()
 
+                if len(json.loads(contents)['errors']) > 0 and "IntrospectionQuery" in body:
+                    raise Exception("IntrospectionQuery request contains errors")
+
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
 
                 self.wfile.write(contents)
             except Exception as ex:
+                if host and http_mutator and http_mutator.get_stub_response(host) and "IntrospectionQuery" in body:
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(http_mutator.get_stub_response(host))
+                    return
                 print(ex)
                 self.send_response(400)
                 self.send_header('Content-type', 'application/json')
@@ -359,14 +371,14 @@ def make_http_handler(requestbuilder=None):
             except AttributeError:  # python3 has not the getheader type, use get instead
                 content_len = int(self.headers.get('Content-Length'))
 
-            if requestbuilder:
+            if http_mutator:
                 body = self.rfile.read(content_len)
                 url = urlparse(self.path[1:])
                 if url.scheme == "https" and url.port == 443 or url.scheme == "http" and url.port == 80:
                     host = url.hostname
                 else:
                     host = url.netloc
-                requestbuilder.send_to_repeater(host, body)
+                http_mutator.send_to_repeater(host, body)
             else:
                 print(self.path)
                 print(self.rfile.read(content_len))

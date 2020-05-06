@@ -34,7 +34,7 @@ class GraphQLPanel():
 
     It can run standalone with limited functionalities with: jython -m inql.widgets.tab
     """
-    def __init__(self, actions=[], restore=None, proxy=None):
+    def __init__(self, actions=[], restore=None, proxy=None, http_mutator=None):
         self._actions = actions
         self._load_headers = []
         self._run_config = [
@@ -55,6 +55,7 @@ class GraphQLPanel():
         self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
         self._actions.append(ExecutorAction("Load", self._loadurl))
         self._actions = [a for a in reversed(self._actions)]
+        self._http_mutator = http_mutator
 
         self.this = JPanel()
         self.this.setLayout(BorderLayout())
@@ -283,6 +284,11 @@ class GraphQLPanel():
                 "insecure_certificate": accept_invalid_certificate}
 
         # call init method from Introspection tool
+        if flag == 'JSON':
+            with open(target, 'r') as f:
+                host = os.path.splitext(os.path.basename(target))[0]
+                self._http_mutator.set_stub_response(host, f.read())
+
         def async_run():
             init(AttrDict(args.copy()))
             self._state['runs'].append((
