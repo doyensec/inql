@@ -8,19 +8,25 @@ import json
 
 from burp import IMessageEditorTab
 
-from inql.utils import string_join
+from javax.swing import JSplitPane
 
 
-class ListGQLParameters(IMessageEditorTab):
+class GraphQLEditorTab(IMessageEditorTab):
     """
     GraphQL Editor TAB
     """
     def __init__(self,  callbacks, editable):
         self._helpers = callbacks.getHelpers()
         self._editable = editable
-        self._txtInput = callbacks.createTextEditor()
-        self._txtInput.setEditable(editable)
+        self._queryinput = callbacks.createTextEditor()
+        self._queryinput.setEditable(editable)
+        self._variablesinput = callbacks.createTextEditor()
+        self._variablesinput.setEditable(editable)
         self._currentMessage = ''
+        self.this = JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                               self._queryinput.getComponent(), self._variablesinput.getComponent())
+        self.this.setOneTouchExpandable(True)
+
 
     def getTabCaption(self):
         """
@@ -36,7 +42,7 @@ class ListGQLParameters(IMessageEditorTab):
 
         :return: UI txt component
         """
-        return self._txtInput.getComponent()
+        return self.this
 
     def isEnabled(self, content, isRequest):
         """
@@ -59,7 +65,7 @@ class ListGQLParameters(IMessageEditorTab):
                 content = content[0]
 
             return 'query' in content and \
-                   any([content['query'].strip().startswith(qtype) for qtype in ['query', 'mutation', 'subscription']])
+                   any([content['query'].strip().startswith(qtype) for qtype in ['query', 'mutation', 'subscription', '{']])
         except ValueError:
             return False
 
@@ -73,8 +79,10 @@ class ListGQLParameters(IMessageEditorTab):
         """
         if content is None:
             # Display Nothing for NoContent
-            self._txtInput.setText(None)
-            self._txtInput.setEditable(False)
+            self._queryinput.setText(None)
+            self._queryinput.setEditable(False)
+            self._variablesinput.setText(None)
+            self._variablesinput.setEditable(False)
         else:
             r = self._helpers.analyzeRequest(content)
 
@@ -85,8 +93,15 @@ class ListGQLParameters(IMessageEditorTab):
                 if isinstance(data, list):
                     data = data[0]
 
-                self._txtInput.setText(data['query'])
-                self._txtInput.setEditable(self._editable)
+                self._queryinput.setText(data['query'])
+                self._queryinput.setEditable(self._editable)
+                if 'variables' in data:
+                    self.this.getBottomComponent().setVisible(True)
+                    self._variablesinput.setText(json.dumps(data['variables'], indent=4))
+                else:
+                    self.this.getBottomComponent().setVisible(False)
+                    self._variablesinput.setText("{}")
+                self._variablesinput.setEditable(self._editable)
                 self._currentMessage = content
             except ValueError:
                 pass
@@ -97,17 +112,20 @@ class ListGQLParameters(IMessageEditorTab):
 
         :return: the current message
         """
-        if self._txtInput.isTextModified():
+        if self.isModified():
             try:
-                query = self._txtInput.getText().tostring()
+                query = self._queryinput.getText().tostring()
+                variables = json.loads(self._variablesinput.getText().tostring())
 
                 r = self._helpers.analyzeRequest(self._currentMessage)
                 message = self._currentMessage[r.getBodyOffset():].tostring()
                 data = json.loads(str(message))
                 if isinstance(data, list):
                     data[0]['query'] = query
+                    data[0]['variables'] = variables
                 else:
                     data['query'] = query
+                    data['variables'] = variables
                 request_body = json.dumps(data, indent=4)
                 return self._helpers.buildHttpMessage(r.getHeaders(), request_body)
             except Exception as ex:
@@ -121,7 +139,7 @@ class ListGQLParameters(IMessageEditorTab):
 
         :return: True if the message was modified.
         """
-        return self._txtInput.isTextModified()
+        return self._queryinput.isTextModified() or self._variablesinput.isTextModified()
 
     def getSeletedData(self):
         """
@@ -129,4 +147,4 @@ class ListGQLParameters(IMessageEditorTab):
 
         :return: the selected string.
         """
-        return self._txtInput.getSelectedText()
+        return self._queryinput.getSelectedText()

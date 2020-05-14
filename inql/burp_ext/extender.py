@@ -12,7 +12,7 @@ import tempfile
 
 from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 
-from inql.burp_ext.editor import ListGQLParameters
+from inql.burp_ext.editor import GraphQLEditorTab
 from inql.burp_ext.scanner import BurpScannerCheck
 from inql.burp_ext.tab import GraphQLTab
 from inql.constants import SCANNER_VERSION
@@ -37,7 +37,7 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         callbacks.issueAlert("InQL Scanner Started")
         print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
         # Registering GraphQL Tab
-        callbacks.registerMessageEditorTabFactory(lambda _, editable: ListGQLParameters(callbacks, editable))
+        callbacks.registerMessageEditorTabFactory(lambda _, editable: GraphQLEditorTab(callbacks, editable))
         # Register ourselves as a custom scanner check
         callbacks.registerScannerCheck(BurpScannerCheck(callbacks))
         # Register Suite Tab
