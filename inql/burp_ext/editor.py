@@ -8,14 +8,15 @@ import json
 
 from burp import IMessageEditorTab
 
-from javax.swing import JSplitPane
+from javax.swing import JFrame, JPanel, JLabel, JSplitPane
+from java.awt import BorderLayout
 
 
 class GraphQLEditorTab(IMessageEditorTab):
     """
     GraphQL Editor TAB
     """
-    def __init__(self,  callbacks, editable):
+    def __init__(self,  callbacks, editable, query_label="Query:", variables_label="Variables:"):
         self._helpers = callbacks.getHelpers()
         self._editable = editable
         self._queryinput = callbacks.createTextEditor()
@@ -23,8 +24,16 @@ class GraphQLEditorTab(IMessageEditorTab):
         self._variablesinput = callbacks.createTextEditor()
         self._variablesinput.setEditable(editable)
         self._currentMessage = ''
-        self.this = JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                               self._queryinput.getComponent(), self._variablesinput.getComponent())
+        querypanel = JPanel()
+        querypanel.setLayout(BorderLayout())
+        querypanel.add(BorderLayout.PAGE_START, JLabel(query_label))
+        querypanel.add(BorderLayout.CENTER, self._queryinput.getComponent())
+        variablespanel = JPanel()
+        variablespanel.setLayout(BorderLayout())
+        variablespanel.add(BorderLayout.PAGE_START, JLabel(variables_label))
+        variablespanel.add(BorderLayout.CENTER, self._variablesinput.getComponent())
+
+        self.this = JSplitPane(JSplitPane.VERTICAL_SPLIT, querypanel, variablespanel)
         self.this.setOneTouchExpandable(True)
 
 
