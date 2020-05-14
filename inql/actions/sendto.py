@@ -133,9 +133,19 @@ class EnhancedHTTPMutator(IProxyListener):
             self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
                                   message.getMessageInfo().getRequest())
 
-    def get_graphiql_target(self, server_port, host, payload):
-        return "http://localhost:%s/%s?query=%s" % \
-               (server_port, self._requests[host]['url'], urllib_request.quote(payload))
+    def get_graphiql_target(self, server_port, host=None, query=None, variables=None):
+        base_url = "http://localhost:%s/%s" % (server_port, self._requests[host]['url'])
+        arguments = ""
+        if query or variables:
+            arguments += '?'
+            args = []
+            if host:
+                args.append("query=%s" % urllib_request.quote(query))
+            if variables:
+                args.append("variables=%s" % urllib_request.quote(json.dumps(variables)))
+            arguments += "&".join(args)
+
+        return base_url + arguments
 
     def has_host(self, host):
         try:
@@ -250,7 +260,9 @@ class GraphIQLSenderAction(ActionListener):
             content = content[0]
 
         URLOpener().open(self._http_mutator.get_graphiql_target(
-            self._server.server_port, self._host, content['query']))
+            self._server.server_port, self._host,
+            content['query'] if 'query' in content else None,
+            content['variables'] if 'variables' in content else None))
 
     def ctx(self, host=None, payload=None, fname=None):
         """

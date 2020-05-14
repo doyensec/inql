@@ -293,7 +293,9 @@ def make_http_handler(http_mutator=None):
                 var xhr = new XMLHttpRequest();
                 xhr.open("PUT", address, true);
                 xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.send(JSON.stringify(parameters));
+                var params = JSON.parse(JSON.stringify(parameters));
+                params['variables'] = JSON.parse(params['variables']);
+                xhr.send(JSON.stringify(params));
               }
               toolbar.appendChild(sendToRepeater);
             } ());""")
