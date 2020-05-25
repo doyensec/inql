@@ -34,7 +34,7 @@ class GraphQLPanel():
 
     It can run standalone with limited functionalities with: jython -m inql.widgets.tab
     """
-    def __init__(self, actions=[], restore=None, proxy=None, http_mutator=None):
+    def __init__(self, actions=[], restore=None, proxy=None, http_mutator=None, texteditor_factory=None):
         self._actions = actions
         self._load_headers = []
         self._run_config = [
@@ -67,7 +67,7 @@ class GraphQLPanel():
         self._fileview = FileView(
             dir=os.getcwd(),
             filetree_label="Queries, Mutations and Subscriptions",
-            payloadview_label="Content")
+            texteditor_factory=texteditor_factory)
         self.this.add(BorderLayout.CENTER, self._fileview.this)
         self._fileview.addTreeListener(self._tree_listener)
         self._fileview.addPayloadListener(self._payload_listener)

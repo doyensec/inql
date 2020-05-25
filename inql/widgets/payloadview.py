@@ -49,14 +49,12 @@ class PayloadView:
     """
     PayloadView is a TextView viewer and editor.
     """
-    def __init__(self, payload=None, label=None, texteditor_factory=None, editable=True):
-        if not label: label = "PayloadView"
-        self.label = label
-
+    def __init__(self, payload=None, texteditor_factory=None, editable=True):
         self._idx = 0
 
         self._texteditor_factory = texteditor_factory
         self._textareas = {}
+        self._texteditors = {}
         self._widgets = {}
 
         self._listener = None
@@ -64,8 +62,28 @@ class PayloadView:
         self.this = JTabbedPane()
         self.this.setUI(SneakTabbedPaneUI(self.this))
 
-        self.refresh(payload)
+        if payload:
+            self.refresh(payload)
         self.set_editable(editable)
+
+    def _get_textarea(self, element):
+        """
+        Inherits popup menu on each and every child widgets.
+
+        :param element: current widget.
+        :return: None
+        """
+        try:
+            if 'getDocument' in dir(element) and 'append' in dir(element):
+                return element
+
+            for e in element.getComponents():
+                ret = self._get_textarea(e)
+                if ret:
+                    return ret
+
+        except:
+            return None
 
     def _create_texteditor(self, name=None, label=None):
         _textarea = None
@@ -85,8 +103,11 @@ class PayloadView:
             this.add(BorderLayout.PAGE_START, JLabel(label))
 
         if self._texteditor_factory:
-            _textarea = self._texteditor_factory()
-            this.add(BorderLayout.CENTER, _textarea)
+            _texteditor = self._texteditor_factory()
+            self._texteditors[name] = _texteditor
+            _component = _texteditor.getComponent()
+            this.add(BorderLayout.CENTER, _component)
+            _textarea = self._get_textarea(_component)
         else:
             _textarea = JTextArea()
             _textarea.setColumns(20)
@@ -170,7 +191,7 @@ class PayloadView:
         """
 
         if payload:
-            self.this.addTab("Raw", self._create_texteditor(name="raw", label=self.label))
+            self.this.addTab("Raw", self._create_texteditor(name="raw", label='Raw'))
             self._textareas['raw'].setText(payload)
             if self._listener:
                 self.add_listener(self._listener)
@@ -251,6 +272,8 @@ class PayloadView:
         self._refresh_queries(payload)
         self._refresh_raw(payload)
         inherits_popup_menu(self.this)
+    def texteditor(self):
+        return self._texteditors['raw']
 
     def add_listener(self, listener):
         """

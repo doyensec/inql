@@ -63,7 +63,8 @@ class GraphQLTab(ITab):
                 custom_header_setter],
             restore=restore,
             proxy=proxy,
-            http_mutator=http_mutator
+            http_mutator=http_mutator,
+            texteditor_factory=self._callbacks.createTextEditor
         )
         self._callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this

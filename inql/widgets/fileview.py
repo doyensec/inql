@@ -17,10 +17,10 @@ class FileView:
     """
     SplitPane containing an editoresque (Sublime-alike) filetree+editor widget
     """
-    def __init__(self, dir=None, filetree_label=None, payloadview_label=None):
+    def __init__(self, dir=None, filetree_label=None, texteditor_factory=None):
         if not dir: dir = os.getcwd()
         self._filetree = FileTree(dir=dir, label=filetree_label)
-        self._payloadview = PayloadView(label=payloadview_label)
+        self._payloadview = PayloadView(texteditor_factory=texteditor_factory)
         self.this = JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                                self._filetree.this, self._payloadview.this)
         self.this.setOneTouchExpandable(True)
@@ -43,11 +43,6 @@ class FileView:
 
             with open(fpath, 'r') as f:
                 payload = f.read()
-                #self._payloadview.set_editable(False)
-                #if fpath.endswith('.query'):
-                #    j = json.loads(payload)
-                #    payload = j['query']
-                #    self._payloadview.set_editable(True)
                 self._payloadview.set_editable(True)
                 self._payloadview.refresh(payload)
                 self.this.getRightComponent().setVisible(True)
