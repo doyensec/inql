@@ -90,7 +90,7 @@ class GraphQLEditorTab(IMessageEditorTab):
         """
         if self.isModified():
             try:
-                request_body = self.payload_view.texteditor().getText().tostring()
+                request_body = self.payload_view.textarea().getText()
                 r = self._helpers.analyzeRequest(self._currentMessage)
                 return self._helpers.buildHttpMessage(r.getHeaders(), request_body)
             except Exception as ex:
@@ -104,7 +104,9 @@ class GraphQLEditorTab(IMessageEditorTab):
 
         :return: True if the message was modified.
         """
-        return self.payload_view.texteditor().isTextModified()
+        r = self._helpers.analyzeRequest(self._currentMessage)
+        return self._currentMessage[r.getBodyOffset():].tostring() != self.payload_view.textarea().getText()
+
 
     def getSeletedData(self):
         """
@@ -112,4 +114,4 @@ class GraphQLEditorTab(IMessageEditorTab):
 
         :return: the selected string.
         """
-        return  self.payload_view.texteditor().getSeletedText()
+        return  self.payload_view.textarea().getSeletedText()

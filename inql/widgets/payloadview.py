@@ -54,7 +54,6 @@ class PayloadView:
 
         self._texteditor_factory = texteditor_factory
         self._textareas = {}
-        self._texteditors = {}
         self._widgets = {}
 
         self._listener = None
@@ -104,11 +103,11 @@ class PayloadView:
 
         if self._texteditor_factory:
             _texteditor = self._texteditor_factory()
-            self._texteditors[name] = _texteditor
             _component = _texteditor.getComponent()
             this.add(BorderLayout.CENTER, _component)
             _textarea = self._get_textarea(_component)
-        else:
+
+        if not _textarea:
             _textarea = JTextArea()
             _textarea.setColumns(20)
             _textarea.setRows(5)
@@ -272,8 +271,9 @@ class PayloadView:
         self._refresh_queries(payload)
         self._refresh_raw(payload)
         inherits_popup_menu(self.this)
-    def texteditor(self):
-        return self._texteditors['raw']
+
+    def textarea(self):
+        return self._textareas['raw']
 
     def add_listener(self, listener):
         """
