@@ -29,7 +29,7 @@ class FileView:
 
     def _tree_listener(self, e):
         """
-        Listen for tree selection adn fill the payloadview
+        Listen for tree selection and fill the payloadview
 
         :param e: unused
         :return: None
@@ -43,11 +43,12 @@ class FileView:
 
             with open(fpath, 'r') as f:
                 payload = f.read()
-                self._payloadview.set_editable(False)
-                if fpath.endswith('.query'):
-                    j = json.loads(payload)
-                    payload = j['query']
-                    self._payloadview.set_editable(True)
+                #self._payloadview.set_editable(False)
+                #if fpath.endswith('.query'):
+                #    j = json.loads(payload)
+                #    payload = j['query']
+                #    self._payloadview.set_editable(True)
+                self._payloadview.set_editable(True)
                 self._payloadview.refresh(payload)
                 self.this.getRightComponent().setVisible(True)
                 self.this.setDividerLocation(0.25)

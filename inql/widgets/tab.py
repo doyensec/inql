@@ -67,7 +67,7 @@ class GraphQLPanel():
         self._fileview = FileView(
             dir=os.getcwd(),
             filetree_label="Queries, Mutations and Subscriptions",
-            payloadview_label="Query Template")
+            payloadview_label="Content")
         self.this.add(BorderLayout.CENTER, self._fileview.this)
         self._fileview.addTreeListener(self._tree_listener)
         self._fileview.addPayloadListener(self._payload_listener)
@@ -191,11 +191,9 @@ class GraphQLPanel():
 
         try:
             doc = e.getDocument()
-            payload = {
-                "query": doc.getText(0, doc.getLength())
-            }
+            payload = doc.getText(0, doc.getLength())
             for action in self._actions:
-                action.ctx(host=self._host, payload=json.dumps(payload), fname=self._fname)
+                action.ctx(host=self._host, payload=payload, fname=self._fname)
         except Exception:
             pass
 
