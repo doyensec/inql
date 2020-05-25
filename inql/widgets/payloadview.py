@@ -63,6 +63,7 @@ class PayloadView:
 
         if payload:
             self.refresh(payload)
+        self.editable = editable
         self.set_editable(editable)
 
     def _get_textarea(self, element):
@@ -122,6 +123,8 @@ class PayloadView:
             _scrollpane.setViewportView(_textarea)
             this.add(BorderLayout.CENTER, _scrollpane)
 
+        _textarea.setEditable(self.editable)
+
         self._textareas[name] = _textarea
         self._widgets[name] = this
 
@@ -161,6 +164,7 @@ class PayloadView:
         :param editable: boolean parameter representing the editability
         :return: None
         """
+        self.editable = editable
         for t in self._textareas.values():
             t.setEditable(editable)
 
