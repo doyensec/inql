@@ -23,7 +23,11 @@ from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 from org.python.core.util import StringUtil
 
-from burp import IProxyListener, IContextMenuFactory
+try:
+    from burp import IProxyListener, IContextMenuFactory
+except ImportError:
+    IProxyListener = object
+    IContextMenuFactory = object
 
 from inql.constants import *
 from inql.utils import string_join, override_headers, make_http_handler, HTTPRequest
@@ -31,7 +35,7 @@ from inql.actions.browser import URLOpener
 
 
 class OmniMenuItem(IContextMenuFactory):
-    def __init__(self, helpers, callbacks, text):
+    def __init__(self, helpers=None, callbacks=None, text=''):
         self._helpers = helpers
         self._callbacks = callbacks
         self.menuitem = JMenuItem(text)
@@ -75,7 +79,7 @@ class OmniMenuItem(IContextMenuFactory):
 
 
 class SimpleMenuItem:
-    def __init__(self, text):
+    def __init__(self, text=None):
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
 
@@ -87,16 +91,19 @@ class SimpleMenuItem:
 
 
 class EnhancedHTTPMutator(IProxyListener):
-    def __init__(self, callbacks, helpers, overrideheaders):
-        self._requests = {}
-        self._helpers = helpers
-        self._callbacks = callbacks
-        self._callbacks.registerProxyListener(self)
-        for r in self._callbacks.getProxyHistory():
-            self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
-        self._overrideheaders = overrideheaders
+    def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None):
+        self._requests = requests if requests is not None else {}
+        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
+        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
         self._index = 0
-        self._stub_responses = {}
+        self._stub_responses = stub_responses if stub_responses is not None else {}
+
+        if helpers and callbacks:
+            self._helpers = helpers
+            self._callbacks = callbacks
+            self._callbacks.registerProxyListener(self)
+            for r in self._callbacks.getProxyHistory():
+                self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
 
 
     def _process_request(self, reqinfo, reqbody):
@@ -117,7 +124,7 @@ class EnhancedHTTPMutator(IProxyListener):
             try:
                 self._requests[domain]
             except KeyError:
-                self._requests[domain] = {'POST': None, 'PUT': None, 'GET': None}
+                self._requests[domain] = {'POST': None, 'PUT': None, 'GET': None, 'url': None}
             self._requests[domain][method] = (reqinfo, reqbody)
             self._requests[domain]['url'] = url
 
@@ -129,7 +136,7 @@ class EnhancedHTTPMutator(IProxyListener):
         :param message: message content
         :return: None
         """
-        if messageIsRequest:
+        if self._helpers and self._callbacks and messageIsRequest:
             self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
                                   message.getMessageInfo().getRequest())
 
@@ -171,7 +178,7 @@ class EnhancedHTTPMutator(IProxyListener):
 
     def send_to_repeater(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req:
+        if req and self._callbacks and self._helpers:
             info = req[0]
             body = req[1]
             nobody = body[:info.getBodyOffset()].tostring()

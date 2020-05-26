@@ -402,3 +402,29 @@ class HTTPRequest(BaseHTTPRequestHandler):
     def send_error(self, code, message):
         self.error_code = code
         self.error_message = message
+
+def raw_request(request):
+    """
+    At this point it is completely built and ready
+    to be fired; it is "prepared".
+
+    However pay attention at the formatting used in
+    this function because it is programmed to be pretty
+    printed and may differ from the actual request.
+    """
+    headers = request.headers.copy()
+    if 'Connection' not in headers:
+        headers['Connection'] = 'close'
+    if 'User-Agent' not in headers:
+        headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:55.0) Gecko/20100101 Firefox/55.0'
+    if 'Accept-Encoding' not in headers:
+        headers['Accept-Encoding'] = 'gzip, deflate'
+    url = urlparse(request.get_full_url())
+    headers['Host'] = url.netloc
+    path = url.path if len(url.path) else '/'
+
+    return '{}\r\n{}\r\n\r\n{}'.format(
+        request.get_method() + ' ' + path + ' HTTP/1.1',
+        '\r\n'.join('{}: {}'.format(k, v) for k, v in headers.items()),
+        request.data if request.data else '',
+    )

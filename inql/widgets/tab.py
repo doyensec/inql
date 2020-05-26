@@ -34,7 +34,9 @@ class GraphQLPanel():
 
     It can run standalone with limited functionalities with: jython -m inql.widgets.tab
     """
-    def __init__(self, actions=[], restore=None, proxy=None, http_mutator=None, texteditor_factory=None):
+    def __init__(self, actions=[], restore=None, proxy=None, http_mutator=None, texteditor_factory=None, requests=None, stub_responses=None):
+        self._requests = requests if requests is not None else {}
+        self._stub_responses = stub_responses if stub_responses is not None else {}
         self._actions = actions
         self._load_headers = []
         self._run_config = [
@@ -83,17 +85,18 @@ class GraphQLPanel():
         try:
             if restore:
                 cfg = json.loads(restore)
-                for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
-                    self._run(target=target,
-                              key=key,
-                              proxy=proxy,
-                              headers=headers,
-                              load_placeholer=load_placeholer,
-                              generate_html=generate_html,
-                              generate_schema=generate_schema,
-                              generate_queries=generate_queries,
-                              accept_invalid_certificate=accept_invalid_certificate,
-                              flag=flag)
+                if 'runs' in cfg:
+                    for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
+                        self._run(target=target,
+                                  key=key,
+                                  proxy=proxy,
+                                  headers=headers,
+                                  load_placeholer=load_placeholer,
+                                  generate_html=generate_html,
+                                  generate_schema=generate_schema,
+                                  generate_queries=generate_queries,
+                                  accept_invalid_certificate=accept_invalid_certificate,
+                                  flag=flag)
                 self._run_config = cfg['config']
         except Exception as ex:
             print("Cannot Load old configuration: starting with a clean state: %s" % ex)
@@ -279,7 +282,9 @@ class GraphQLPanel():
                 "generate_queries": generate_queries,
                 "target": target if flag != "JSON" else None,
                 "schema_json_file": target if flag == "JSON" else None,
-                "insecure_certificate": accept_invalid_certificate}
+                "insecure_certificate": accept_invalid_certificate,
+                "requests": self._requests,
+                "stub_responses": self._stub_responses}
 
         # call init method from Introspection tool
         if flag == 'JSON':

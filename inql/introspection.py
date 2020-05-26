@@ -18,7 +18,7 @@ import ssl
 import platform
 from datetime import date
 
-from .utils import string_join, mkdir_p
+from .utils import string_join, mkdir_p, raw_request
 from .generators import html, query, schema
 
 try:
@@ -82,7 +82,7 @@ if supports_color():
     posix_colors()
 
 
-def query_result(target, key, headers={}, verify_certificate=True):
+def query_result(target, key, headers=None, verify_certificate=True, requests=None, stub_responses=None):
     """
     Execute the introspection query against the GraphQL endpoint
 
@@ -98,7 +98,9 @@ def query_result(target, key, headers={}, verify_certificate=True):
     :return:
         Returns a dictionary objects to be parsed
     """
-    headers = headers.copy()
+    headers = headers.copy() if headers else {}
+    requests = requests if requests is not None else {}
+    stub_responses = stub_responses if stub_responses is not None else {}
     # Introspection Query
     # -----------------------
     introspection_query =  "query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}fragment FullType on __Type{kind name description fields(includeDeprecated:true){name description args{...InputValue}type{...TypeRef}isDeprecated deprecationReason}inputFields{...InputValue}interfaces{...TypeRef}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{...TypeRef}}fragment InputValue on __InputValue{name description type{...TypeRef}defaultValue}fragment TypeRef on __Type{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"
@@ -115,6 +117,13 @@ def query_result(target, key, headers={}, verify_certificate=True):
         request = urllib_request.Request(target, json.dumps({"query": introspection_query}, sort_keys=True).encode('UTF-8'), headers=headers)
         request.add_header('Content-Type', 'application/json')
 
+        url = urlparse(target)
+        reqbody = raw_request(request)
+        if url.netloc not in requests:
+            requests[url.netloc] = {}
+        requests[url.netloc]['POST'] = (None, reqbody)
+        requests[url.netloc]['url'] = target
+
         if verify_certificate:
             contents = urllib_request.urlopen(request).read()
         else:
@@ -123,6 +132,8 @@ def query_result(target, key, headers={}, verify_certificate=True):
             ctx.verify_mode = ssl.CERT_NONE
 
             contents = urllib_request.urlopen(request, context=ctx).read()
+
+        stub_responses[url.netloc] = contents
 
         return contents
 
@@ -164,13 +175,39 @@ def main():
                         help="Output Directory")
     args = parser.parse_args()
     # -----------------------
+    args.requests = {}
+    args.stub_responses = {}
 
     mkdir_p(args.output_directory)
     os.chdir(args.output_directory)
 
     if platform.system() == "Java" and args.nogui is not True:
         from inql.widgets.tab import GraphQLPanel
+        from inql.actions.sendto import SimpleMenuItem, EnhancedHTTPMutator, GraphIQLSenderAction
+        from inql.actions.setcustomheader import CustomHeaderSetterAction
+        overrideheaders = {}
+        graphiql_omnimenu = SimpleMenuItem(text="Send to GraphIQL")
+        http_mutator = EnhancedHTTPMutator(
+            requests=args.requests,
+            stub_responses=args.stub_responses,
+            overrideheaders=overrideheaders)
+        graphiql_sender = GraphIQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
+        custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
+        cfg = [
+            ['Proxy', args.proxy],
+            ['Authorization Key', args.key],
+            ['Load Placeholders', args.detect],
+            ['Generate HTML DOC', args.generate_html],
+            ['Generate Schema DOC', args.generate_schema],
+            ['Generate Stub Queries', args.generate_queries],
+            ['Accept Invalid SSL Certificate', args.insecure_certificate]
+        ]
         return GraphQLPanel(
+            actions=[custom_header_setter, graphiql_sender],
+            restore=json.dumps({'config': cfg}),
+            http_mutator=None,
+            requests=args.requests,
+            stub_responses=args.stub_responses
         ).app()
     else:
         return init(args, lambda: parser.print_help())
@@ -233,7 +270,9 @@ def init(args, print_help=None):
             argument = query_result(target=args.target,
                                     key=args.key,
                                     headers=headers,
-                                    verify_certificate=not args.insecure_certificate)
+                                    verify_certificate=not args.insecure_certificate,
+                                    requests=args.requests,
+                                    stub_responses=args.stub_responses)
             # returns a dict
             argument = json.loads(argument)
         else:
