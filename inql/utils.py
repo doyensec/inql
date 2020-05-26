@@ -268,7 +268,11 @@ def make_http_handler(http_mutator=None):
                 onEditOperationName: onEditOperationName
               }),
               document.getElementById('graphiql'),
-              );
+            );
+            while (document.querySelector('.title') == null) {
+                // wait for the title to be something
+            }            
+            document.querySelector('.title').innerHTML = '<a href="https://github.com/doyensec/inql"><img src="https://github.com/doyensec/inql/blob/master/docs/inql.png?raw=true" style="display: block; height:6em; z-index: 10; position: relative"></img></a>';
             %s
           </script>
         </body>
