@@ -33,7 +33,7 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()
-        callbacks.setExtensionName("InQL Scanner %s" % SCANNER_VERSION)
+        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % SCANNER_VERSION)
         callbacks.issueAlert("InQL Scanner Started")
         print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
         # Registering GraphQL Tab
