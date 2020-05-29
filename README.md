@@ -4,7 +4,7 @@ A security testing tool to facilitate [GraphQL](https://graphql.org/) technology
 
 ![InQL Logo](docs/inql.jpg)
 
-InQL can be used as a stand-alone script, or as a [Burp Suite](https://portswigger.net/burp) extension.
+InQL can be used as a stand-alone script or as a [Burp Suite](https://portswigger.net/burp) extension.
 
 ## InQL Stand-Alone CLI
 
@@ -12,9 +12,9 @@ Running `inql` from Python will issue an [Introspection](https://graphql.org/lea
 
 - Queries, mutations, subscriptions
 - Its fields and arguments
-- Objects and custom objects types
+- Objects and custom object types
 
-InQL can inspect the introspection query results and generate clean documentation in different formats, such as
+InQL can inspect the introspection query results and generate clean documentation in different formats such as
 HTML and JSON schema. InQL is also able to generate templates (with optional placeholders) for all known basic data types.
 
 For all supported options, check the command line help:
@@ -46,7 +46,7 @@ optional arguments:
 
 ## InQL Burp Suite Extension
 
-Since version 1.0.0 of the tool, InQL was extended to operate within Burp Suite. In this mode, the tool will retain all the capabilities of the stand-alone script plus a handy user interface to manipulate queries. 
+Since version 1.0.0 of the tool, InQL was extended to operate within Burp Suite. In this mode, the tool will retain all the capabilities of the stand-alone script and add a handy user interface for manipulating queries. 
 
 Using the `inql` extension for Burp Suite, you can:
 
@@ -69,11 +69,11 @@ To use `inql` in Burp Suite, import the Python extension:
 + Extension File > Set the location of `inql_burp.py` > Next
 + The output should now show the following message: `InQL Scanner Started!`
 
-*In future, we might consider integrating the extension within the Burp's BApp Store.*
+*In the future we might consider integrating the extension within Burp's BApp Store.*
 
 ### Burp Extension Usage
 
-Getting started with `inql` Burp extension is easy:
+Getting started with the `inql` Burp extension is easy:
 
 1. Load a GraphQL endpoint or a JSON schema file location inside the top input field
 2. Press the "Load" button
@@ -95,8 +95,8 @@ Getting started with `inql` Burp extension is easy:
 Since version 2.0.0, InQL UI is now able to operate without requiring BURP.
 It is now possible to install InQL stand-alone for `jython` and run the Scanner UI.
 
-In this mode InQL maintain most of his Burp Scanner capabilities with the exception of advanced 
-interaction such as "Send To Repeater" and automatic authorization header generation, available through BURP.
+In this mode InQL maintains most of the Burp Scanner capabilities with the exception of advanced 
+interactions such as "Send To Repeater" and automatic authorization header generation, available through BURP.
 
 To use `inql` stand-alone UI:
 
@@ -106,7 +106,7 @@ To use `inql` stand-alone UI:
 
 ## InQL Documentation Generator
 
-Either in BURP or in Stand-Alone mode, InQL is able to generate meaningful documentation for available GraphQL entities.
+In either BURP or in Stand-Alone mode, InQL is able to generate meaningful documentation for available GraphQL entities.
 Results are available as HTML pages or query templates.
 
 The resulting HTML documentation page will contain details for all available `Queries`, `Mutations`, and `Subscriptions` as shown here:
@@ -121,7 +121,5 @@ The following screenshot shows the use of templates generation:
 ## Credits
 
 *Author and Maintainer:* Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
-
-*Original Author:* Paolo Stagno ([@Void_Sec](https://twitter.com/Void_Sec) - [voidsec.com](https://voidsec.com))
 
 This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
