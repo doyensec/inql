@@ -169,7 +169,7 @@ def make_http_handler(http_mutator=None):
             """
             return """<html>
         <head>
-          <title>InQL GraphIQL Console</title>
+          <title>InQL GraphiQL Console</title>
           <link href="https://unpkg.com/graphiql/graphiql.min.css" rel="stylesheet" />
         </head>
         <body style="margin: 0;">
@@ -366,7 +366,7 @@ def make_http_handler(http_mutator=None):
                 self.end_headers()
 
                 try:
-                    # Try to get the 400 page error content since it is used by the GraphIQL Console
+                    # Try to get the 400 page error content since it is used by the GraphiQL Console
                     self.wfile.write(ex.read())
                 except:
                     pass

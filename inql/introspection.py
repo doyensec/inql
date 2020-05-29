@@ -153,7 +153,7 @@ def main():
     parser = argparse.ArgumentParser(prog="inql", description="InQL Scanner")
     if platform.system() == "Java":
         parser.add_argument("--nogui", default=False, dest="nogui",
-                            action="store_true", help="Start InQL Scanner Without Standalone GUI")
+                            action="store_true", help="Start InQL Without Standalone GUI [Jython-only]")
     parser.add_argument("-t", default=None, dest="target",
                         help="Remote GraphQL Endpoint (https://<Target_IP>/graphql)")
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
@@ -183,15 +183,15 @@ def main():
 
     if platform.system() == "Java" and args.nogui is not True:
         from inql.widgets.tab import GraphQLPanel
-        from inql.actions.sendto import SimpleMenuItem, EnhancedHTTPMutator, GraphIQLSenderAction
+        from inql.actions.sendto import SimpleMenuItem, EnhancedHTTPMutator, GraphiQLSenderAction
         from inql.actions.setcustomheader import CustomHeaderSetterAction
         overrideheaders = {}
-        graphiql_omnimenu = SimpleMenuItem(text="Send to GraphIQL")
+        graphiql_omnimenu = SimpleMenuItem(text="Send to GraphiQL")
         http_mutator = EnhancedHTTPMutator(
             requests=args.requests,
             stub_responses=args.stub_responses,
             overrideheaders=overrideheaders)
-        graphiql_sender = GraphIQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
+        graphiql_sender = GraphiQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         cfg = [
             ['Proxy', args.proxy],

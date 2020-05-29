@@ -10,7 +10,7 @@ import json
 
 from burp import ITab
 
-from inql.actions.sendto import RepeaterSenderAction, OmniMenuItem, EnhancedHTTPMutator, GraphIQLSenderAction
+from inql.actions.sendto import RepeaterSenderAction, OmniMenuItem, EnhancedHTTPMutator, GraphiQLSenderAction
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.tab import GraphQLPanel
 
@@ -37,11 +37,11 @@ class GraphQLTab(ITab):
         """
         overrideheaders = {}
         repeater_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater")
-        graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphIQL")
+        graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphiQL")
         http_mutator = EnhancedHTTPMutator(
             callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders)
         repeater_sender = RepeaterSenderAction(omnimenu=repeater_omnimenu, http_mutator=http_mutator)
-        graphiql_sender = GraphIQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
+        graphiql_sender = GraphiQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:
             restore = self._callbacks.loadExtensionSetting(GraphQLPanel.__name__)

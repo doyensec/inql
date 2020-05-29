@@ -245,7 +245,7 @@ class RepeaterSenderAction(ActionListener):
             self._omnimenu.set_enabled(False)
 
 
-class GraphIQLSenderAction(ActionListener):
+class GraphiQLSenderAction(ActionListener):
     def __init__(self, omnimenu, http_mutator):
         self._http_mutator = http_mutator
         self._omnimenu = omnimenu
