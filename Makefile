@@ -2,20 +2,18 @@ requirements:
 	pip install -r requirements.txt
 
 version:
-	git describe --tags --dirty > $@
+	python setup.py generate_version
 
 ext:
 	mkdir -p $@
 
 ext/inql_burp.py: requirements ext version
-	/tmp/.local/bin/stickytape inql/burp_loader.py --add-python-path . > $@
-	sed -i.bak "s/%%VERSION%%/$$(cat version)/g" $@
-	rm $@.bak
+	stickytape inql/burp_loader.py --add-python-path . > $@
 
 clean:
 	rm -rf ext
 
-package:
+package: version
 	python2 setup.py sdist bdist_wheel
 	python3 setup.py sdist bdist_wheel
 

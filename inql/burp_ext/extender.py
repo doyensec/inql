@@ -15,8 +15,7 @@ from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionState
 from inql.burp_ext.editor import GraphQLEditorTab
 from inql.burp_ext.scanner import BurpScannerCheck
 from inql.burp_ext.tab import GraphQLTab
-from inql.constants import SCANNER_VERSION
-
+from inql import __version__
 
 class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
     """
@@ -33,7 +32,7 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()
-        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % SCANNER_VERSION)
+        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % __version__)
         callbacks.issueAlert("InQL Scanner Started")
         print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
         # Registering GraphQL Tab
