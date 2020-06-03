@@ -389,3 +389,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/vim,java,linux,macos,emacs,python,windows,sublimetext,pycharm+all
+
+BappModules
+ext/
