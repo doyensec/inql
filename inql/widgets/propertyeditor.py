@@ -179,4 +179,4 @@ if __name__ == "__main__":
         time.sleep(10)
         pe = PropertyEditor.get_instance(columns=['ciao', 'bao'], data=data, empty=['e1', 'e2'])
         PropertyEditor.get_instance(text='test2', columns=['ciao', 'bao'], data=data, empty=['e1', 'e2'])
-        print pe._data
+        print(pe._data)
