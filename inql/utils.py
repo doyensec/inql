@@ -336,13 +336,7 @@ def make_http_handler(http_mutator=None):
                 else:
                     request = http_mutator.build_python_request(endpoint, host, body)
 
-                if 'http_proxy' in os.environ or 'https_proxy' in os.environ:
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    contents = urllib_request.urlopen(request, context=ctx).read()
-                else:
-                    contents = urllib_request.urlopen(request).read()
+                contents = urlopen(request, verify=not ('http_proxy' in os.environ or 'https_proxy' in os.environ)).read()
 
                 jres = json.loads(contents)
                 if 'errors' in jres and len(jres['errors']) > 0 and "IntrospectionQuery" in body:
@@ -406,6 +400,56 @@ class HTTPRequest(BaseHTTPRequestHandler):
     def send_error(self, code, message):
         self.error_code = code
         self.error_message = message
+
+try:
+    import sys
+    from javax.net.ssl import TrustManager, X509TrustManager
+    from jarray import array
+    from javax.net.ssl import SSLContext
+
+
+    class TrustAllX509TrustManager(X509TrustManager):
+
+        # Define a custom TrustManager which will blindly
+        # accept all certificates
+        def checkClientTrusted(self, chain, auth):
+            pass
+
+        def checkServerTrusted(self, chain, auth):
+            pass
+
+        def getAcceptedIssuers(self):
+            return None
+
+
+    # Create a static reference to an SSLContext which will use
+    # our custom TrustManager
+    trust_managers = array([TrustAllX509TrustManager()], TrustManager)
+    TRUST_ALL_CONTEXT = SSLContext.getInstance("SSL")
+    TRUST_ALL_CONTEXT.init(None, trust_managers, None)
+
+    # Keep a static reference to the JVM's default SSLContext for restoring
+    # at a later time
+    DEFAULT_CONTEXT = SSLContext.getDefault()
+    if 'create_default_context' not in dir(ssl):
+        SSLContext.setDefault(TRUST_ALL_CONTEXT)
+except:
+    pass
+
+def urlopen(request, verify):
+    ctx = None
+    if 'create_default_context' in dir(ssl):
+        ctx = ssl.create_default_context()
+    elif 'SSLContext' in dir(ssl) and 'PROTOCOL_TLSv1' in dir(ssl):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+
+    if not verify and ctx:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return urllib_request.urlopen(request, context=ctx)
+    else:
+        return urllib_request.urlopen(request)
+
 
 def raw_request(request):
     """

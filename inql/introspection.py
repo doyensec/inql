@@ -14,11 +14,10 @@ import time
 import os
 import json
 import sys
-import ssl
 import platform
 from datetime import date
 
-from .utils import string_join, mkdir_p, raw_request
+from .utils import string_join, mkdir_p, raw_request, urlopen
 from .generators import html, query, schema
 
 try:
@@ -124,14 +123,7 @@ def query_result(target, key, headers=None, verify_certificate=True, requests=No
         requests[url.netloc]['POST'] = (None, reqbody)
         requests[url.netloc]['url'] = target
 
-        if verify_certificate:
-            contents = urllib_request.urlopen(request).read()
-        else:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-
-            contents = urllib_request.urlopen(request, context=ctx).read()
+        contents = urlopen(request, verify=verify_certificate).read()
 
         stub_responses[url.netloc] = contents
 
