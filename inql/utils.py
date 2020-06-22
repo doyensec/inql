@@ -451,6 +451,135 @@ def urlopen(request, verify):
         return urllib_request.urlopen(request)
 
 
+def __recursive_name_get(obj):
+    try:
+        return obj['name'] or __recursive_name_get(obj['ofType'])
+    except KeyError:
+        return False
+
+
+def __recursive_kind_of(obj, target):
+    try:
+        return obj['kind'] == target or __recursive_kind_of(obj['ofType'], target)
+    except KeyError:
+        return False
+    except TypeError:
+        return False
+
+
+def simplify_introspection(data):
+    ##########################################################################################
+    # Parsing JSON response/file structure as follows
+    # data
+    #   __schema
+    #       directives
+    #       mutationType
+    #       queryType
+    #       subscriptionType
+    #       types (kind, name, description)
+    #              name (RootQuery, RootMutation, Subscriptions, [custom] OBJECT)
+    #              fields
+    #                     name (query names)
+    #                     args
+    #                            name (args names)
+    #                            type
+    #                                   name (args types)
+    ##########################################################################################
+
+    output = {}
+    output['schema'] = {}
+    schema = data['data']['__schema']
+
+    # Get the Root query type
+    if schema['queryType'] and 'name' in schema['queryType']:
+        output['schema']['query'] = {
+            "type": schema['queryType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Get the Root subscription type
+    if schema['subscriptionType'] and 'name' in schema['subscriptionType']:
+        output['schema']['subscription'] = {
+            "type": schema['subscriptionType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Get the Root mutation type
+    if schema['mutationType'] and 'name' in schema['mutationType']:
+        output['schema']['mutation'] = {
+            "type": schema['mutationType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Go over all the fields and simplify the JSON
+    output['type'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'OBJECT':
+            output['type'][type['name']] = {}
+            if type['fields']:
+                for field in type['fields']:
+                    output['type'][type['name']][field['name']] = {
+                        "type": __recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                    }
+                    if field['args']:
+                        output['type'][type['name']][field['name']]["args"] = {}
+                        for arg in field['args']:
+                            output['type'][type['name']][field['name']]['args'][arg['name']] = {
+                                "type": __recursive_name_get(arg['type']),
+                                "required": arg['type']['kind'] == 'NON_NULL',
+                                "array": __recursive_kind_of(arg['type'], 'LIST'),
+                            }
+                            if arg['defaultValue'] != None:
+                                output['type'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
+                                    'defaultValue']
+
+    # Get all the Enums
+    output['enum'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'ENUM':
+            output['enum'][type['name']] = {}
+            for v in type['enumValues']:
+                output['enum'][type['name']][v['name']] = {}
+
+    # Get all the Scalars
+    output['scalar'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'SCALAR' and type['name'] not in ['String', 'Int', 'Float', 'Boolean', 'ID']:
+            output['scalar'][type['name']] = {}
+
+    # Get all the inputs
+    output['input'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'INPUT_OBJECT':
+            output['input'][type['name']] = {}
+            if type['inputFields']:
+                for field in type['inputFields']:
+                    output['input'][type['name']][field['name']] = {
+                        "type": __recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                    }
+
+    # Get all the unions
+    output['union'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'UNION':
+            output['union'][type['name']] = {}
+            for v in type['possibleTypes']:
+                output['union'][type['name']][v['name']] = {}
+
+    return output
+
 def raw_request(request):
     """
     At this point it is completely built and ready
