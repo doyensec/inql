@@ -1,5 +1,5 @@
 import re
-import os, sys
+import os
 import time
 import threading
 import ssl
@@ -118,6 +118,7 @@ def nop_evt(evt):
     """
     pass
 
+
 def nop():
     """
     Do nothing
@@ -126,11 +127,14 @@ def nop():
     """
     pass
 
+
 stop_watch = False
+
 
 def stop():
     global stop_watch
     stop_watch = True
+
 
 def watch(execute=nop, interval=60):
     global stop_watch
@@ -148,6 +152,7 @@ def watch(execute=nop, interval=60):
     t = threading.Thread(target=async_run)
     t.start()
 
+
 def run_async(execute=nop):
     def async_run():
         try:
@@ -156,6 +161,19 @@ def run_async(execute=nop):
             sys.stdout.flush()
             sys.stderr.flush()
     threading.Thread(target=async_run).start()
+
+
+def run_timeout(execute, timeout):
+    def async_run():
+        try:
+            execute()
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+    t = threading.Thread(target=async_run)
+    t.daemon = True
+    t.start()
+    t.join(timeout=timeout)
 
 
 def make_http_handler(http_mutator=None):

@@ -1,6 +1,6 @@
 import platform
 
-from inql.utils import watch, stop
+from inql.utils import stop
 
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")

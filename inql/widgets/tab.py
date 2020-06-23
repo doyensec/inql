@@ -46,7 +46,9 @@ class GraphQLPanel():
             ['Generate HTML DOC', True],
             ['Generate Schema DOC', False],
             ['Generate Stub Queries', True],
-            ['Accept Invalid SSL Certificate', True]
+            ['Accept Invalid SSL Certificate', True],
+            ['Generate Cycles Report', True],
+            ['Cycles Report Timeout', 60]
         ]
         self._init_config = json.loads(json.dumps(self._run_config))
         self._default_config = {}
@@ -86,7 +88,7 @@ class GraphQLPanel():
             if restore:
                 cfg = json.loads(restore)
                 if 'runs' in cfg:
-                    for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, accept_invalid_certificate, flag in cfg['runs']:
+                    for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, generate_cycles, cycles_timeout, accept_invalid_certificate, flag in cfg['runs']:
                         self._run(target=target,
                                   key=key,
                                   proxy=proxy,
@@ -95,6 +97,8 @@ class GraphQLPanel():
                                   generate_html=generate_html,
                                   generate_schema=generate_schema,
                                   generate_queries=generate_queries,
+                                  generate_cycles=generate_cycles,
+                                  cycles_timeout=cycles_timeout,
                                   accept_invalid_certificate=accept_invalid_certificate,
                                   flag=flag)
                 self._run_config = cfg['config']
@@ -242,6 +246,8 @@ class GraphQLPanel():
                       generate_html=self._cfg('Generate HTML DOC'),
                       generate_schema=self._cfg('Generate Schema DOC'),
                       generate_queries=self._cfg('Generate Stub Queries'),
+                      generate_cycles=self._cfg('Generate Cycles Report'),
+                      cycles_timeout=self._cfg('Cycles Report Timeout'),
                       accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
                       flag="URL")
         elif not os.path.isfile(target):
@@ -257,12 +263,14 @@ class GraphQLPanel():
                       generate_html=self._cfg('Generate HTML DOC'),
                       generate_schema=self._cfg('Generate Schema DOC'),
                       generate_queries=self._cfg('Generate Stub Queries'),
+                      generate_cycles=self._cfg('Generate Cycles Report'),
+                      cycles_timeout=self._cfg('Cycles Report Timeout'),
                       accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
                       flag="JSON")
 
 
     def _run(self, target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
-             accept_invalid_certificate, flag):
+             generate_cycles, cycles_timeout, accept_invalid_certificate, flag):
         """
         Run the actual analysis, this method is a wrapper for the non-UI version of the tool and basically calls the
         main/init method by itself.
@@ -280,6 +288,8 @@ class GraphQLPanel():
                 "generate_html": generate_html,
                 "generate_schema": generate_schema,
                 "generate_queries": generate_queries,
+                "generate_cycles": generate_cycles,
+                "cycles_timeout": cycles_timeout,
                 "target": target if flag != "JSON" else None,
                 "schema_json_file": target if flag == "JSON" else None,
                 "insecure_certificate": accept_invalid_certificate,
@@ -296,7 +306,7 @@ class GraphQLPanel():
             init(AttrDict(args.copy()))
             self._state['runs'].append((
                 target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
-                accept_invalid_certificate, flag))
+                generate_cycles, cycles_timeout, accept_invalid_certificate, flag))
             self._fileview.refresh()
 
         run_async(async_run)

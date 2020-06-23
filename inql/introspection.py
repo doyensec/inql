@@ -17,8 +17,9 @@ import sys
 import platform
 from datetime import date
 
+
 from .utils import string_join, mkdir_p, raw_request, urlopen
-from .generators import html, query, schema
+from .generators import html, query, schema, cycles
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -161,6 +162,10 @@ def main():
                         help="Generate JSON Schema Documentation")
     parser.add_argument("--generate-queries", dest="generate_queries", action='store_true', default=True,
                         help="Generate Queries")
+    parser.add_argument("--generate-cycles", dest="generate_cycles", action='store_true', default=False,
+                        help="Generate Cycles Report")
+    parser.add_argument("--cycles-timeout", dest="cycles_timeout", default=60, type=int,
+                        help="Cycles Report Timeout (in seconds)")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -192,7 +197,9 @@ def main():
             ['Generate HTML DOC', args.generate_html],
             ['Generate Schema DOC', args.generate_schema],
             ['Generate Stub Queries', args.generate_queries],
-            ['Accept Invalid SSL Certificate', args.insecure_certificate]
+            ['Accept Invalid SSL Certificate', args.insecure_certificate],
+            ['Generate Cycles Report', args.generate_cycles],
+            ['Cycles Report Timeout', args.cycles_timeout]
         ]
         return GraphQLPanel(
             actions=[custom_header_setter, graphiql_sender],
@@ -287,6 +294,11 @@ def init(args, print_help=None):
                            detect=args.detect,
                            custom=custom,
                            green_print=lambda s: print(string_join(green, "Writing Queries Templates", reset)))
+
+        if args.generate_cycles:
+            cycles.generate(argument,
+                            fpath=os.path.join(host, "cycles-%s-%s.txt" % (today, timestamp)),
+                            timeout=args.cycles_timeout)
 
     else:
         # Likely missing a required arguments
