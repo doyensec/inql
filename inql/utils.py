@@ -578,6 +578,31 @@ def simplify_introspection(data):
             for v in type['possibleTypes']:
                 output['union'][type['name']][v['name']] = {}
 
+    # Get all the interfaces
+    output['interface'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'INTERFACE':
+            output['interface'][type['name']] = {}
+            if type['fields']:
+                for field in type['fields']:
+                    output['interface'][type['name']][field['name']] = {
+                        "type": __recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                    }
+                    if field['args']:
+                        output['interface'][type['name']][field['name']]["args"] = {}
+                        for arg in field['args']:
+                            output['interface'][type['name']][field['name']]['args'][arg['name']] = {
+                                "type": __recursive_name_get(arg['type']),
+                                "required": arg['type']['kind'] == 'NON_NULL',
+                                "array": __recursive_kind_of(arg['type'], 'LIST'),
+                            }
+                            if arg['defaultValue'] != None:
+                                output['interface'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
+                                    'defaultValue']
+
     return output
 
 def raw_request(request):
