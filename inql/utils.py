@@ -538,6 +538,14 @@ def simplify_introspection(data):
                             if arg['defaultValue'] != None:
                                 output['type'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
                                     'defaultValue']
+            if type['interfaces']:
+                output['type'][type['name']]['__implements'] = {}
+                for iface in type['interfaces']:
+                    output['type'][type['name']]['__implements'][iface['name']] = {}
+
+            if 'type' not in output['type'][type['name']] and 'args' in output['type'][type['name']]:
+                output['type'][type['name']]["type"] = output['type'][type['name']]["args"]["type"]
+
 
     # Get all the Enums
     output['enum'] = {}
@@ -602,8 +610,11 @@ def simplify_introspection(data):
                             if arg['defaultValue'] != None:
                                 output['interface'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
                                     'defaultValue']
+            if 'type' not in output['interface'][type['name']] and 'args' in output['interface'][type['name']]:
+                output['interface'][type['name']]["type"] = output['interface'][type['name']]["args"]["type"]
 
     return output
+
 
 def raw_request(request):
     """
