@@ -1,3 +1,6 @@
+from inql.utils import run_timeout
+
+
 class Graph:
     def __init__(self, data):
         self.data = data
@@ -54,6 +57,7 @@ class Graph:
                     "referenceList": tmp_reference_list
                 }
 
+    # FIXME: this thing is changing the underneath objects during the passage of the same objects, fix it
     def _connect(self):
         for vertex in self._representation.keys():
             for ref, ref_object in enumerate(self._representation[vertex]['referenceList']):
@@ -102,10 +106,11 @@ class Graph:
         return self._representation
 
 class CyclesDetector:
-    def __init__(self, graph):
+    def __init__(self, graph, timeout):
         self.graph = graph
         self.save_mode = 1
         self.data = None
+        self.timeout = timeout
 
     def detect(self, select=False):
         if self.data:
@@ -130,11 +135,15 @@ class CyclesDetector:
             return data
 
         tarjan.prune_edges()
+        single_timeout = float(self.timeout) / len(tarjan.scc)
 
         for i, _ in enumerate(tarjan.scc):
             try:
                 johnson = JohnsonAlgorithm(tarjan.scc[i])
-                johnson.execute()
+                def timeout_execute():
+                    johnson.execute()
+                run_timeout(execute=timeout_execute, timeout=single_timeout)
+                johnson.stop = True
                 data['cycles'] += johnson.cycles
                 data['numberCycles'] += len(johnson.cycles)
             except Exception as ex:
@@ -248,8 +257,10 @@ class JohnsonAlgorithm:
         self.stack_edges = []
         self.found_cycle = False
         self.start_vertex = 0
+        self.stop = False
 
     def execute(self):
+        if self.stop: return
         for vertex, _ in enumerate(self.component):
             self.start_vertex = vertex
             self.find_cycles(vertex)
@@ -257,24 +268,30 @@ class JohnsonAlgorithm:
             self.blocked_map = [[] for _ in self.component]
 
     def unblock(self, u):
+        if self.stop: return
         self.blocked[u] = False
         for w, _ in enumerate(self.blocked_map[u]):
+            if self.stop: return
             target_block = self.blocked_map[u][w]
             if self.blocked[target_block]:
                 self.unblock(target_block)
         self.blocked_map[u] = []
 
     def find_cycles(self, v):
+        if self.stop: return self.found_cycle
+
         result = []
         self.stack.append(v) # push indexdx of vertex (in component)
         self.blocked[v] = True
         for edge, _ in enumerate(self.component[v]['referenceList']):
+            if self.stop: return self.found_cycle
             edge_ref = self.component[v]['referenceList'][edge]
             if edge_ref['reference']['jIndex'] == self.start_vertex:
                 self.found_cycle = True
                 self.stack_edges.append(edge_ref['label'])
 
                 for item, _ in enumerate(self.stack):
+                    if self.stop: return self.found_cycle
                     result.append({
                         "vertex": self.component[self.stack[item]],
                         "refLabel": self.stack_edges[item]
