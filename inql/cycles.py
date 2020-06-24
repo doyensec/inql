@@ -57,9 +57,8 @@ class Graph:
                     "referenceList": tmp_reference_list
                 }
 
-    # FIXME: this thing is changing the underneath objects during the passage of the same objects, fix it
     def _connect(self):
-        for vertex in self._representation.keys():
+        for vertex in list(self._representation.keys()):
             for ref, ref_object in enumerate(self._representation[vertex]['referenceList']):
                 reference = ref_object['reference']
                 self.edges += 1
