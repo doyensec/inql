@@ -19,7 +19,7 @@ from datetime import date
 
 
 from .utils import string_join, mkdir_p, raw_request, urlopen
-from .generators import html, query, schema, cycles
+from .generators import html, schema, cycles, query
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -292,8 +292,7 @@ def init(args, print_help=None):
             query.generate(argument,
                            qpath=os.path.join(host, "%s", today, timestamp, "%s"),
                            detect=args.detect,
-                           custom=custom,
-                           green_print=lambda s: print(string_join(green, "Writing Queries Templates", reset)))
+                           green_print=lambda s: print(string_join(green, s, reset)))
 
         if args.generate_cycles:
             cycles.generate(argument,
