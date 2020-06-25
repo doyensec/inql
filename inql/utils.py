@@ -289,7 +289,7 @@ def make_http_handler(http_mutator=None):
             );
             while (document.querySelector('.title') == null) {
                 // wait for the title to be something
-            }            
+            }
             document.querySelector('.title').innerHTML = '<a href="https://github.com/doyensec/inql"><img src="https://github.com/doyensec/inql/blob/master/docs/inql.png?raw=true" style="display: block; height:6em; z-index: 10; position: relative"></img></a>';
             %s
           </script>
@@ -316,7 +316,11 @@ def make_http_handler(http_mutator=None):
                 xhr.open("PUT", address, true);
                 xhr.setRequestHeader('Content-Type', 'application/json');
                 var params = JSON.parse(JSON.stringify(parameters));
-                params['variables'] = JSON.parse(params['variables']);
+                try {
+                    params['variables'] = JSON.parse(params['variables']);
+                } catch (e) {
+                    console.log('Cannot parse parameters');
+                }
                 xhr.send(JSON.stringify(params));
               }
               toolbar.appendChild(sendToRepeater);
