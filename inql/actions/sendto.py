@@ -17,8 +17,6 @@ except ImportError:
 import threading
 import json
 
-from email.parser import HeaderParser
-
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 from org.python.core.util import StringUtil
@@ -35,6 +33,7 @@ from inql.actions.browser import URLOpener
 
 
 class OmniMenuItem(IContextMenuFactory):
+    """Menu item for burp and inql interface. IT contains same action but it is shown in multiple places"""
     def __init__(self, helpers=None, callbacks=None, text=''):
         self._helpers = helpers
         self._callbacks = callbacks
@@ -44,11 +43,17 @@ class OmniMenuItem(IContextMenuFactory):
         self._callbacks.registerContextMenuFactory(self)
 
     def add_action_listener(self, action_listener):
+        """
+        add a new action listener to the given UI items.
+        """
         self._action_listener = action_listener
         self.menuitem.addActionListener(action_listener)
         self._burp_menuitem.addActionListener(action_listener)
 
     def set_enabled(self, enabled):
+        """
+        Enables or disables the menuitme
+        """
         self.menuitem.setEnabled(enabled)
         self._burp_menuitem.setEnabled(enabled)
 
@@ -79,6 +84,9 @@ class OmniMenuItem(IContextMenuFactory):
 
 
 class SimpleMenuItem:
+    """
+    An OmniMenuItem implemented on top of a single item entry.
+    """
     def __init__(self, text=None):
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
@@ -91,6 +99,9 @@ class SimpleMenuItem:
 
 
 class EnhancedHTTPMutator(IProxyListener):
+    """
+    An implementation of an HTTPMutater which employs the Burp Utilities to enhance the requests
+    """
     def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None):
         self._requests = requests if requests is not None else {}
         self._overrideheaders = overrideheaders if overrideheaders is not None else {}
@@ -203,6 +214,9 @@ class EnhancedHTTPMutator(IProxyListener):
 
 
 class RepeaterSenderAction(ActionListener):
+    """
+    Class represeintg the action of sending something to BURP Repeater
+    """
     def __init__(self, omnimenu, http_mutator):
         self._http_mutator = http_mutator
         self._omnimenu = omnimenu
@@ -246,6 +260,9 @@ class RepeaterSenderAction(ActionListener):
 
 
 class GraphiQLSenderAction(ActionListener):
+    """
+    Class representing the action of sending something to the provided graphiql server
+    """
     def __init__(self, omnimenu, http_mutator):
         self._http_mutator = http_mutator
         self._omnimenu = omnimenu
