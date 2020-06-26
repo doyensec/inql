@@ -105,13 +105,13 @@ class Graph:
         return self._representation
 
 class CyclesDetector:
-    def __init__(self, graph, timeout):
+    def __init__(self, graph, timeout=None):
         self.graph = graph
         self.save_mode = 1
         self.data = None
         self.timeout = timeout
 
-    def detect(self, select=False):
+    def detect(self, select=False, on_cycle=None):
         if self.data:
             return self.data
 
@@ -119,7 +119,7 @@ class CyclesDetector:
         data['foundCycle'] = False
         data['cycles'] = []
         data['numberCycles'] = 0
-        tarjan = TarjanAlgorithm(self.graph, select)
+        tarjan = _TarjanAlgorithm(self.graph, select)
         tarjan.execute()
 
         data['SCCs'] = len(tarjan.scc)
@@ -134,14 +134,20 @@ class CyclesDetector:
             return data
 
         tarjan.prune_edges()
-        single_timeout = float(self.timeout) / len(tarjan.scc)
+        if self.timeout is not None:
+            single_timeout = float(self.timeout) / len(tarjan.scc)
+        else:
+            single_timeout = None
 
         for i, _ in enumerate(tarjan.scc):
             try:
-                johnson = JohnsonAlgorithm(tarjan.scc[i])
+                johnson = _JohnsonAlgorithm(tarjan.scc[i], on_cycle=on_cycle)
                 def timeout_execute():
                     johnson.execute()
-                run_timeout(execute=timeout_execute, timeout=single_timeout)
+                if self.timeout is not None:
+                    timeout_execute()
+                else:
+                    run_timeout(execute=timeout_execute, timeout=single_timeout)
                 johnson.stop = True
                 data['cycles'] += johnson.cycles
                 data['numberCycles'] += len(johnson.cycles)
@@ -161,26 +167,31 @@ class CyclesDetector:
     def __repr__(self):
         return str(self.data)
 
+    def cycle_str(cycle):
+        s = "{ "
+        for c in cycle:
+            s += c['vertex']['vertexID']
+            if c['refLabel'] == '#interface_ref':
+                s += "<~implements~ "
+            elif c['refLabel'] == '#union_ref':
+                s += " -union-> "
+            elif c["refLabel"]:
+                s += " -[%s]-> " % c["refLabel"]
+            else:
+                s += " }"
+        return s
+    cycle_str = staticmethod(cycle_str)
+
     def __str__(self):
         s = "Cycles("
         if self.data:
-            for sc, _ in enumerate(self.data['cycles']):
-                s += "\n\t{ "
-                for vert, _ in enumerate(self.data['cycles'][sc]):
-                    s += self.data['cycles'][sc][vert]['vertex']['vertexID']
-                    if self.data['cycles'][sc][vert]['refLabel'] == '#interface_ref':
-                        s += "<~implements~ "
-                    elif self.data['cycles'][sc][vert]['refLabel'] == '#union_ref':
-                        s += " -union-> "
-                    elif self.data['cycles'][sc][vert]["refLabel"]:
-                        s += " -[%s]-> " % self.data['cycles'][sc][vert]["refLabel"]
-                    else:
-                        s += " }"
+            for cycle in self.data['cycles']:
+                s += "\n\t%s" % CyclesDetector.cycle_str(cycle)
         s += "\n)"
         return s
 
 
-class TarjanAlgorithm:
+class _TarjanAlgorithm:
     # XXX: It will have destructive effect on the graph object
     def __init__(self, graph, select):
         self.graph = graph._representation
@@ -195,9 +206,9 @@ class TarjanAlgorithm:
             if self.found_cycle:
                 return True
             elif 'visited' not in self.graph[vertex]:
-                self.strong_connect(self.graph[vertex])
+                self._strong_connect(self.graph[vertex])
 
-    def strong_connect(self, vertex):
+    def _strong_connect(self, vertex):
 
         vertex['index'] = self.index
         vertex['lowlink'] = self.index
@@ -208,7 +219,7 @@ class TarjanAlgorithm:
         for reference, _ in enumerate(vertex['referenceList']):
 
             if 'visited' not in vertex['referenceList'][reference]['reference']:
-                self.strong_connect(vertex['referenceList'][reference]['reference'])
+                self._strong_connect(vertex['referenceList'][reference]['reference'])
                 vertex['lowlink'] = min(vertex['lowlink'], vertex['referenceList'][reference]['reference']['lowlink'])
             elif 'onStack' in vertex['referenceList'][reference]['reference'] and \
                     vertex['referenceList'][reference]['reference']['onStack']:
@@ -245,8 +256,8 @@ class TarjanAlgorithm:
                 scc[component][vertex]['referenceList'] = tmp_reference_list
 
 
-class JohnsonAlgorithm:
-    def __init__(self, component):
+class _JohnsonAlgorithm:
+    def __init__(self, component, on_cycle=None):
         self.component = component
         self.cycles = []
 
@@ -257,26 +268,27 @@ class JohnsonAlgorithm:
         self.found_cycle = False
         self.start_vertex = 0
         self.stop = False
+        self.on_cycle = on_cycle
 
     def execute(self):
         if self.stop: return
         for vertex, _ in enumerate(self.component):
             self.start_vertex = vertex
-            self.find_cycles(vertex)
+            self._find_cycles(vertex)
             self.blocked = [False for _ in self.component]
             self.blocked_map = [[] for _ in self.component]
 
-    def unblock(self, u):
+    def _unblock(self, u):
         if self.stop: return
         self.blocked[u] = False
         for w, _ in enumerate(self.blocked_map[u]):
             if self.stop: return
             target_block = self.blocked_map[u][w]
             if self.blocked[target_block]:
-                self.unblock(target_block)
+                self._unblock(target_block)
         self.blocked_map[u] = []
 
-    def find_cycles(self, v):
+    def _find_cycles(self, v):
         if self.stop: return self.found_cycle
 
         result = []
@@ -300,16 +312,21 @@ class JohnsonAlgorithm:
                     "refLabel": ""
                 })
                 if self.stack_edges: self.stack_edges.pop()
-                # save result
-                self.cycles.append(result)
+                # it may be memory intensive for some graph, for this reason it's better to use the callback version
+                # in these cases
+                if self.on_cycle is not None:
+                    self.on_cycle(result)
+                else:
+                    # save result
+                    self.cycles.append(result)
                 result = []
             elif not self.blocked[edge_ref['reference']['jIndex']] and self.start_vertex < edge_ref['reference']['jIndex'] \
                 and edge_ref['reference']['jIndex'] not in self.stack:
                 self.stack_edges.append(edge_ref['label'])
-                self.found_cycle = self.find_cycles(edge_ref['reference']['jIndex']) # bug ?
+                self.found_cycle = self._find_cycles(edge_ref['reference']['jIndex']) # bug ?
 
         if self.found_cycle:
-            self.unblock(v)
+            self._unblock(v)
         else:
             for wt, _ in enumerate(self.component[v]['referenceList']):
                 w = self.component[v]['referenceList'][wt]['reference']['jIndex']

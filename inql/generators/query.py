@@ -7,6 +7,34 @@ from inql.utils import open, simplify_introspection
 
 def recurse_fields(schema, reverse_lookup, t, max_nest=10, non_required_levels=1, dinput=None,
                    params_replace=lambda schema, reverse_lookup, elem: elem):
+    """
+    Generates a JSON representation of the AST object representing a query
+
+    :param schema:
+        the output of a simplified schema
+
+    :param reverse_lookup:
+        a support hash that goes from typename to graphql type, useful to navigate the schema in O(1)
+
+    :param t:
+        type that you need to generate the AST for, since it is recursive it may be anything inside the graph
+
+    :param max_nest:
+        maximum number of recursive calls before returning the type name, this is needed in particularly broken cases
+        where recurse_fields may not exit autonomously (EG. hackerone.com is using union to create sql or/and/not
+        statements.) Consider that this will partially break params_replace calls.
+
+    :param non_required_levels:
+        expand up to non_required_levels levels automatically.
+
+    :param dinput:
+        the output object, it may even be provided from the outside.
+
+    :param params_replace:
+        a callback that takes (schema, reverse_lookup, elem) as parameter and returns a replacement for parameter.
+        Needed in case you want to generate real parameters for queries.
+
+    """
     if max_nest == 0:
         return params_replace(schema, reverse_lookup, t)
     if t not in reverse_lookup:
@@ -70,6 +98,11 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=10, non_required_levels=1
 
 
 def dict_to_args(d):
+    """
+    Generates a string representing query arguments from an AST dict.
+
+    :param d: AST dict
+    """
     args = []
     for k, v in d.items():
         args.append("%s:%s" % (k, json.dumps(v).replace('"', '').replace('@', '"')))
@@ -80,6 +113,12 @@ def dict_to_args(d):
 
 
 def dict_to_qbody(d, prefix=''):
+    """
+    Generates a string representing a query body from an AST dict.
+
+    :param d: AST dict
+    :param prefix: needed in case it will recurse
+    """
     if type(d) is not dict:
         return ''
     s = ''
@@ -99,6 +138,19 @@ def dict_to_qbody(d, prefix=''):
 
 
 def preplace(schema, reverse_lookup, t):
+    """
+    Replaces basic types and enums with default values.
+
+    :param schema:
+        the output of a simplified schema
+
+    :param reverse_lookup:
+        a support hash that goes from typename to graphql type, useful to navigate the schema in O(1)
+
+    :param t:
+        type that you need to generate the AST for, since it is recursive it may be anything inside the graph
+
+    """
     if t == 'String':
         return '@code@'
     elif t == 'Int':

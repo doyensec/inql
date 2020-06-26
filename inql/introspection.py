@@ -166,6 +166,8 @@ def main():
                         help="Generate Cycles Report")
     parser.add_argument("--cycles-timeout", dest="cycles_timeout", default=60, type=int,
                         help="Cycles Report Timeout (in seconds)")
+    parser.add_argument("--cycles-streaming", dest="cycles_streaming", action='store_true', default=False,
+                        help="Some graph are too complex to generate cycles in reasonable time, stream to stdout")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -297,7 +299,8 @@ def init(args, print_help=None):
         if args.generate_cycles:
             cycles.generate(argument,
                             fpath=os.path.join(host, "cycles-%s-%s.txt" % (today, timestamp)),
-                            timeout=args.cycles_timeout)
+                            timeout=args.cycles_timeout,
+                            streaming=args.cycles_streaming)
 
     else:
         # Likely missing a required arguments

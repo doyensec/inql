@@ -290,6 +290,7 @@ class GraphQLPanel():
                 "generate_queries": generate_queries,
                 "generate_cycles": generate_cycles,
                 "cycles_timeout": cycles_timeout,
+                "cycles_streaming": False, # there is no UI to show streaming cycles.
                 "target": target if flag != "JSON" else None,
                 "schema_json_file": target if flag == "JSON" else None,
                 "insecure_certificate": accept_invalid_certificate,

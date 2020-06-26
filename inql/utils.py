@@ -473,16 +473,16 @@ def urlopen(request, verify):
         return urllib_request.urlopen(request)
 
 
-def __recursive_name_get(obj):
+def _recursive_name_get(obj):
     try:
-        return obj['name'] or __recursive_name_get(obj['ofType'])
+        return obj['name'] or _recursive_name_get(obj['ofType'])
     except KeyError:
         return False
 
 
-def __recursive_kind_of(obj, target):
+def _recursive_kind_of(obj, target):
     try:
-        return obj['kind'] == target or __recursive_kind_of(obj['ofType'], target)
+        return obj['kind'] == target or _recursive_kind_of(obj['ofType'], target)
     except KeyError:
         return False
     except TypeError:
@@ -490,7 +490,10 @@ def __recursive_kind_of(obj, target):
 
 
 def simplify_introspection(data):
-    ##########################################################################################
+    """
+    Generates a simplified introspection object based on an introspection query.
+    This utility function is after used by many of the generators.
+
     # Parsing JSON response/file structure as follows
     # data
     #   __schema
@@ -506,7 +509,9 @@ def simplify_introspection(data):
     #                            name (args names)
     #                            type
     #                                   name (args types)
-    ##########################################################################################
+
+    :type data: an introspection query dict
+    """
 
     output = {}
     output['schema'] = {}
@@ -545,17 +550,17 @@ def simplify_introspection(data):
             if type['fields']:
                 for field in type['fields']:
                     output['type'][type['name']][field['name']] = {
-                        "type": __recursive_name_get(field['type']),
+                        "type": _recursive_name_get(field['type']),
                         "required": field['type']['kind'] == 'NON_NULL',
-                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
                     }
                     if field['args']:
                         output['type'][type['name']][field['name']]["args"] = {}
                         for arg in field['args']:
                             output['type'][type['name']][field['name']]['args'][arg['name']] = {
-                                "type": __recursive_name_get(arg['type']),
+                                "type": _recursive_name_get(arg['type']),
                                 "required": arg['type']['kind'] == 'NON_NULL',
-                                "array": __recursive_kind_of(arg['type'], 'LIST'),
+                                "array": _recursive_kind_of(arg['type'], 'LIST'),
                             }
                             if arg['defaultValue'] != None:
                                 output['type'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
@@ -594,9 +599,9 @@ def simplify_introspection(data):
             if type['inputFields']:
                 for field in type['inputFields']:
                     output['input'][type['name']][field['name']] = {
-                        "type": __recursive_name_get(field['type']),
+                        "type": _recursive_name_get(field['type']),
                         "required": field['type']['kind'] == 'NON_NULL',
-                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
                     }
 
     # Get all the unions
@@ -617,17 +622,17 @@ def simplify_introspection(data):
             if type['fields']:
                 for field in type['fields']:
                     output['interface'][type['name']][field['name']] = {
-                        "type": __recursive_name_get(field['type']),
+                        "type": _recursive_name_get(field['type']),
                         "required": field['type']['kind'] == 'NON_NULL',
-                        "array": __recursive_kind_of(field['type'], 'LIST'),
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
                     }
                     if field['args']:
                         output['interface'][type['name']][field['name']]["args"] = {}
                         for arg in field['args']:
                             output['interface'][type['name']][field['name']]['args'][arg['name']] = {
-                                "type": __recursive_name_get(arg['type']),
+                                "type": _recursive_name_get(arg['type']),
                                 "required": arg['type']['kind'] == 'NON_NULL',
-                                "array": __recursive_kind_of(arg['type'], 'LIST'),
+                                "array": _recursive_kind_of(arg['type'], 'LIST'),
                             }
                             if arg['defaultValue'] != None:
                                 output['interface'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
