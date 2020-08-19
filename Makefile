@@ -1,5 +1,5 @@
 requirements:
-	pip install -rrequirements.txt
+	pip install -r requirements.txt
 
 version:
 	git describe --tags --dirty > $@
