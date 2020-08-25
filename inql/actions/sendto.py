@@ -28,7 +28,7 @@ except ImportError:
     IContextMenuFactory = object
 
 from inql.constants import *
-from inql.utils import string_join, override_headers, make_http_handler, HTTPRequest
+from inql.utils import string_join, override_headers, make_http_handler, HTTPRequest, is_query
 from inql.actions.browser import URLOpener
 
 
@@ -68,9 +68,9 @@ class OmniMenuItem(IContextMenuFactory):
             r = invocation.getSelectedMessages()[0]
             info = self._helpers.analyzeRequest(r)
             url = str(info.getUrl())
-            if not any([x in url for x in URLS]):
-                return None
             body = r.getRequest()[info.getBodyOffset():].tostring()
+            if not is_query(body):
+                return None
             for h in info.getHeaders():
                 if h.lower().startswith("host:"):
                     domain = h[5:].strip()
@@ -126,7 +126,7 @@ class EnhancedHTTPMutator(IProxyListener):
         :return:
         """
         url = str(reqinfo.getUrl())
-        if any([url.endswith(x) for x in URLS]):
+        if is_query(reqbody[reqinfo.getBodyOffset():].tostring()):
             for h in reqinfo.getHeaders():
                 if h.lower().startswith("host:"):
                     domain = h[5:].strip()

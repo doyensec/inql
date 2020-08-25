@@ -5,7 +5,7 @@ import json
 from inql.utils import open, simplify_introspection
 
 
-def recurse_fields(schema, reverse_lookup, t, max_nest=10, non_required_levels=1, dinput=None,
+def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1, dinput=None,
                    params_replace=lambda schema, reverse_lookup, elem: elem):
     """
     Generates a JSON representation of the AST object representing a query
@@ -202,6 +202,7 @@ def generate(argument, qpath="%s/%s", detect=True, green_print=lambda s: print(s
         else:
             rec = recurse_fields(s, rev, qvalues['type'], non_required_levels=2)
         for qname, qval in rec.items():
+            print("Writing %s %s" % (qname, qtype))
             with open(qpath % (qtype, '%s.query' % qname), 'w') as ofile:
                 body = "%s {\n\t%s%s\n}" % (qtype, qname, dict_to_qbody(qval, prefix='\t'))
                 if detect:

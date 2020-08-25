@@ -488,6 +488,18 @@ def _recursive_kind_of(obj, target):
     except TypeError:
         return False
 
+def is_query(body):
+    # FIXME: handle urlencoded requests too in the future
+    try:
+        content = json.loads(body)
+        if not isinstance(content, list):
+            content = [content]
+
+        ret = all(['query' in c or 'operationName' in c
+                    for c in content])
+        return ret
+    except:
+        return False
 
 def simplify_introspection(data):
     """
