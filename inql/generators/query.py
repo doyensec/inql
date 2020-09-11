@@ -105,7 +105,7 @@ def dict_to_args(d):
     """
     args = []
     for k, v in d.items():
-        args.append("%s:%s" % (k, json.dumps(v).replace('"', '').replace('@', '"')))
+        args.append("%s:%s" % (k, json.dumps(v).replace('"', '').replace("u'", "").replace("'", "").replace('@', '"')))
     if len(args) > 0:
         return "(%s)" % ', '.join(args)
     else:
