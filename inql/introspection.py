@@ -156,11 +156,11 @@ def main():
     parser.add_argument('--header', dest="headers", nargs=2, action='append')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")
-    parser.add_argument("--generate-html", dest="generate_html", action='store_true', default=True,
+    parser.add_argument("--no-generate-html", dest="generate_html", action='store_false', default=True,
                         help="Generate HTML Documentation")
-    parser.add_argument("--generate-schema", dest="generate_schema", action='store_true', default=True,
+    parser.add_argument("--no-generate-schema", dest="generate_schema", action='store_false', default=True,
                         help="Generate JSON Schema Documentation")
-    parser.add_argument("--generate-queries", dest="generate_queries", action='store_true', default=True,
+    parser.add_argument("--no-generate-queries", dest="generate_queries", action='store_false', default=True,
                         help="Generate Queries")
     parser.add_argument("--generate-cycles", dest="generate_cycles", action='store_true', default=False,
                         help="Generate Cycles Report")
