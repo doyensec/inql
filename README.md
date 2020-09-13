@@ -21,9 +21,9 @@ HTML and JSON schema. InQL is also able to generate templates (with optional pla
 For all supported options, check the command line help:
 
 ```
-usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY] [-p PROXY]
-            [--header HEADERS HEADERS] [-d] [--generate-html]
-            [--generate-schema] [--generate-queries] [--generate-cycles]
+usage: inql [-h] [--nogui] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY]
+            [-p PROXY] [--header HEADERS HEADERS] [-d] [--no-generate-html]
+            [--no-generate-schema] [--no-generate-queries] [--generate-cycles]
             [--cycles-timeout CYCLES_TIMEOUT] [--cycles-streaming]
             [--insecure] [-o OUTPUT_DIRECTORY]
 
@@ -31,6 +31,7 @@ InQL Scanner
 
 optional arguments:
   -h, --help            show this help message and exit
+  --nogui               Start InQL Without Standalone GUI [Jython-only]
   -t TARGET             Remote GraphQL Endpoint (https://<Target_IP>/graphql)
   -f SCHEMA_JSON_FILE   Schema file in JSON format
   -k KEY                API Authentication Key
@@ -38,9 +39,10 @@ optional arguments:
   --header HEADERS HEADERS
   -d                    Replace known GraphQL arguments types with placeholder
                         values (useful for Burp Suite)
-  --generate-html       Generate HTML Documentation
-  --generate-schema     Generate JSON Schema Documentation
-  --generate-queries    Generate Queries
+  --no-generate-html    Generate HTML Documentation
+  --no-generate-schema  Generate JSON Schema Documentation
+  --no-generate-queries
+                        Generate Queries
   --generate-cycles     Generate Cycles Report
   --cycles-timeout CYCLES_TIMEOUT
                         Cycles Report Timeout (in seconds)
