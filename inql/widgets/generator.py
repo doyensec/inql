@@ -28,7 +28,7 @@ from inql.widgets.propertyeditor import PropertyEditor
 from inql.utils import inherits_popup_menu, AttrDict, run_async
 
 
-class GraphQLPanel():
+class GeneratorPanel():
     """
     Compound class that represents the burp user interface tab.
 
@@ -347,4 +347,4 @@ if __name__ == "__main__":
             pass
     print("Changing dir to %s" % tmpdir)
     os.chdir(tmpdir)
-    GraphQLPanel(actions=[TestAction("test it")]).app()
+    GeneratorPanel(actions=[TestAction("test it")]).app()

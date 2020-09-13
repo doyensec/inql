@@ -181,7 +181,7 @@ def main():
     os.chdir(args.output_directory)
 
     if platform.system() == "Java" and args.nogui is not True:
-        from inql.widgets.tab import GraphQLPanel
+        from inql.widgets.generator import GeneratorPanel
         from inql.actions.sendto import SimpleMenuItem, EnhancedHTTPMutator, GraphiQLSenderAction
         from inql.actions.setcustomheader import CustomHeaderSetterAction
         overrideheaders = {}
@@ -203,7 +203,7 @@ def main():
             ['Generate Cycles Report', args.generate_cycles],
             ['Cycles Report Timeout', args.cycles_timeout]
         ]
-        return GraphQLPanel(
+        return GeneratorPanel(
             actions=[custom_header_setter, graphiql_sender],
             restore=json.dumps({'config': cfg}),
             http_mutator=None,

@@ -12,10 +12,10 @@ from burp import ITab
 
 from inql.actions.sendto import RepeaterSenderAction, OmniMenuItem, EnhancedHTTPMutator, GraphiQLSenderAction
 from inql.actions.setcustomheader import CustomHeaderSetterAction
-from inql.widgets.tab import GraphQLPanel
+from inql.widgets.generator import GeneratorPanel
 
 
-class GraphQLTab(ITab):
+class GeneratorTab(ITab):
     """
     Java GUI
     """
@@ -44,7 +44,7 @@ class GraphQLTab(ITab):
         graphiql_sender = GraphiQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:
-            restore = self._callbacks.loadExtensionSetting(GraphQLPanel.__name__)
+            restore = self._callbacks.loadExtensionSetting(GeneratorPanel.__name__)
         except Exception as ex:
             print("Cannot restore state! %s" % ex)
             restore = None
@@ -56,7 +56,7 @@ class GraphQLTab(ITab):
                 proxy = "localhost:%s" % request_listener["listener_port"]
                 break
 
-        self.panel = GraphQLPanel(
+        self.panel = GeneratorPanel(
             actions=[
                 repeater_sender,
                 graphiql_sender,
