@@ -152,7 +152,7 @@ def main():
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     parser.add_argument("-k", dest="key", help="API Authentication Key")
     parser.add_argument('-p', dest="proxy", default=None,
-                        help='IP of web proxy to go through (http://127.0.0.1:8080)')
+                        help='IP of a web proxy to go through (http://127.0.0.1:8080)')
     parser.add_argument('--header', dest="headers", nargs=2, action='append')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")

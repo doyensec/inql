@@ -35,7 +35,7 @@ optional arguments:
   -t TARGET             Remote GraphQL Endpoint (https://<Target_IP>/graphql)
   -f SCHEMA_JSON_FILE   Schema file in JSON format
   -k KEY                API Authentication Key
-  -p PROXY              IP of web proxy to go through (http://127.0.0.1:8080)
+  -p PROXY              IP of a web proxy to go through (http://127.0.0.1:8080)
   --header HEADERS HEADERS
   -d                    Replace known GraphQL arguments types with placeholder
                         values (useful for Burp Suite)
@@ -54,12 +54,12 @@ optional arguments:
 
 ## InQL Burp Suite Extension
 
-Since version 1.0.0 of the tool, InQL was extended to operate within Burp Suite. In this mode, the tool will retain all the capabilities of the stand-alone script and add a handy user interface for manipulating queries. 
+Since version 1.0.0 of the tool, InQL was extended to operate within Burp Suite. In this mode, the tool will retain all the stand-alone script capabilities and add a handy user interface for manipulating queries. 
 
 Using the `inql` extension for Burp Suite, you can:
 
 + Search for known GraphQL URL paths; the tool will grep and match known values to detect GraphQL endpoints within the target website
-+ Search for exposed GraphQL development consoles (*GraphiQL*, *GraphQL Playground*, and other common consoles)
++ Search for exposed GraphQL development consoles (*GraphiQL*, *GraphQL Playground*, and other standard consoles)
 + Use a custom GraphQL tab displayed on each HTTP request/response containing GraphQL
 + Leverage the templates generation by sending those requests to Burp's Repeater tool ("Send to Repeater")
 + Leverage the templates generation and editor support by sending those requests to embedded GraphIQL ("Send to GraphiQL")
@@ -77,15 +77,13 @@ To use `inql` in Burp Suite, import the Python extension:
 + Extension File > Set the location of `inql_burp.py` > Next
 + The output should now show the following message: `InQL Scanner Started!`
 
-*In the future we might consider integrating the extension within Burp's BApp Store.*
-
 ### Burp Extension Usage
 
 Getting started with the `inql` Burp extension is easy:
 
 1. Load a GraphQL endpoint or a JSON schema file location inside the top input field
 2. Press the "Load" button
-3. After few seconds, the left panel will refresh loading the directory structure for the selected endpoint as in the following example:
+3. After a few seconds, the left panel will refresh, loading the directory structure for the selected endpoint as in the following example:
 + url
 + - query
 +  - - timestamp 1
@@ -98,23 +96,31 @@ Getting started with the `inql` Burp extension is easy:
 + - subscription
 4.  Selecting any *query*/*mutation*/*subscription* will load the corresponding template in the main text area
 
+
+### Burp GraphQL Query Timer
+
+Since version 3.0.0, InQL now has an integrated Query Timer.
+This Query Timer is a reimagination of [Request Timer](https://github.com/PortSwigger/request-timer), which can filter for query name and body.
+
+The Query Timer is enabled by default and especially useful in conjunction with the Cycles detector. A tester can switch between the graphql editor modes (Repeater and GraphIQL) potentially dangerous [DoS queries](https://www.diva-portal.org/smash/get/diva2:1302887/FULLTEXT01.pdf). Query Timer demonstrates the ability to attack such vulnerable graphql endpoints by counting the execution time of each and every query.
+
 ## InQL Stand-Alone UI
 
 Since version 2.0.0, InQL UI is now able to operate without requiring BURP.
 It is now possible to install InQL stand-alone for `jython` and run the Scanner UI.
 
-In this mode InQL maintains most of the Burp Scanner capabilities with the exception of advanced 
+In this mode, InQL maintains most of the Burp Scanner capabilities except for advanced 
 interactions such as "Send To Repeater" and automatic authorization header generation, available through BURP.
 
 To use `inql` stand-alone UI:
 
-+ Download and Install [Jython](https://www.jython.org/download). This can be obtained on macOS through brew `brew install jython` or on Ubuntu derivates through `apt-get install -y jython`
++ Download and Install [Jython](https://www.jython.org/download). Jython can be obtained on macOS through brew `brew install jython` or on Ubuntu derivates through `apt-get install -y jython`
 + Install inql through pip with `jython -m pip install inql`
 + Start the UI through jython with `jython -m inql`
 
 ## InQL Documentation Generator
 
-In either BURP or in Stand-Alone mode, InQL is able to generate meaningful documentation for available GraphQL entities.
+In either BURP or Stand-Alone mode, InQL can generate meaningful documentation for available GraphQL entities.
 Results are available as HTML pages or query templates.
 
 The resulting HTML documentation page will contain details for all available `Queries`, `Mutations`, and `Subscriptions` as shown here:
@@ -125,6 +131,44 @@ The following screenshot shows the use of templates generation:
 
 ![Preview](docs/Introspection_Templates.png)
 
+### InQL Precise Queries
+
+Based on the 3.0.0 introduced introspection intermediate representation (IIR), InQL is able to generate arbitrarily nested queries with support to
+any scalar type, enumerations, arrays, and objects.
+
+```javascript
+query {
+  Character(id_not_in:[1334], sort:[ROLE_DESC], search:"code", id_not:1334, id:1334, id_in:[1334]) {
+    image {
+      large
+    }
+    siteUrl
+    favourites
+    modNotes
+    description(asHtml:true)
+    media(sort:[TITLE_ROMAJI], type:ANIME, perPage:1334, page:1334) {
+      edges {
+        isMainStudio
+      }
+    }
+    name {
+      last
+    }
+    id
+    isFavourite
+    updatedAt
+  }
+}
+```
+
+While this enables seamless "Send to Repeater" functionality from the Scanner to the other tool parts (Repeater and GraphiQL console), it is still impossible for the tool to infer placeholders for [GraphQL Custom Scalars](https://hasura.io/docs/1.0/graphql/core/actions/types/index.html#custom-scalars).
+
+
+### InQL Cycles Detector
+
+The new introspection intermediate representation (IIR) enables the tool to inspect for cycles in defined graphql schemas without requiring anything, if not the graphql endpoint exposing them.
+
+This functionality is especially useful and automates bothersome testing practices employing graph solving algorithm. In our test, the tool was able to find millions of cycles a minute.
 
 ## Credits
 
