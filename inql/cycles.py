@@ -30,6 +30,10 @@ class Graph:
                     else:
                         if fields[0:2] == "__":
                             continue
+                        if fields == 'type':
+                            # FIXME: 'type' key should not be here, this implies a name overload or malformed graphql
+                            #        definition. SKIP this node for the moment.
+                            continue
                         type_name = object_type[fields]['type']
 
                     if type_name not in self.graphQLTypes:
