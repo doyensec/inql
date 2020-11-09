@@ -102,7 +102,9 @@ Getting started with the `inql` Burp extension is easy:
 Since version 3.0.0, InQL now has an integrated Query Timer.
 This Query Timer is a reimagination of [Request Timer](https://github.com/PortSwigger/request-timer), which can filter for query name and body.
 
-The Query Timer is enabled by default and especially useful in conjunction with the Cycles detector. A tester can switch between the graphql editor modes (Repeater and GraphIQL) potentially dangerous [DoS queries](https://www.diva-portal.org/smash/get/diva2:1302887/FULLTEXT01.pdf). Query Timer demonstrates the ability to attack such vulnerable graphql endpoints by counting the execution time of each and every query.
+The Query Timer is enabled by default and especially useful in conjunction with the Cycles detector. A tester can switch between graphql-editor modes (Repeater and GraphIQL) to identify [DoS queries](https://www.diva-portal.org/smash/get/diva2:1302887/FULLTEXT01.pdf). Query Timer demonstrates the ability to attack such vulnerable graphql endpoints by counting the execution time of each and every query.
+
+![Timer](docs/timer.gif)
 
 ## InQL Stand-Alone UI
 
@@ -166,7 +168,7 @@ While this enables seamless "Send to Repeater" functionality from the Scanner to
 
 ### InQL Cycles Detector
 
-The new introspection intermediate representation (IIR) enables the tool to inspect for cycles in defined graphql schemas without requiring anything, if not the graphql endpoint exposing them.
+The new introspection intermediate representation (IIR) allows to inspect for cycles in defined graphql schemas by requiring access to graphql introspection-enabled endpoint only.
 
 This functionality is especially useful and automates bothersome testing practices employing graph solving algorithm. In our test, the tool was able to find millions of cycles a minute.
 

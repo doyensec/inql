@@ -47,7 +47,7 @@ class GeneratorPanel():
             ['Generate Schema DOC', False],
             ['Generate Stub Queries', True],
             ['Accept Invalid SSL Certificate', True],
-            ['Generate Cycles Report', True],
+            ['Generate Cycles Report', False],
             ['Cycles Report Timeout', 60]
         ]
         self._init_config = json.loads(json.dumps(self._run_config))
