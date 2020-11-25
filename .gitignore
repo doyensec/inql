@@ -392,3 +392,4 @@ $RECYCLE.BIN/
 
 BappModules
 ext/
+inql/__version__.py
