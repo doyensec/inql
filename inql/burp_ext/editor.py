@@ -47,21 +47,21 @@ class GraphQLEditorTab(IMessageEditorTab):
         :param isRequest: check if is request
         :return: True or False depending if the request is enabled to be edited with this tab.
         """
-        if isRequest:
-            rBody = self._helpers.analyzeRequest(content)
-
-        else:
-            rBody = self._helpers.analyzeResponse(content)
-
-        message = content[rBody.getBodyOffset():].tostring().strip()
         try:
+            if isRequest:
+                rBody = self._helpers.analyzeRequest(content)
+
+            else:
+                rBody = self._helpers.analyzeResponse(content)
+
+            message = content[rBody.getBodyOffset():].tostring().strip()
             content = json.loads(str(message))
             if isinstance(content, list):
                 content = content[0]
 
             return 'query' in content and \
                    any([content['query'].strip().startswith(qtype) for qtype in ['query', 'mutation', 'subscription', '{']])
-        except ValueError:
+        except Exception:
             return False
 
     def setMessage(self, content, isRequest):

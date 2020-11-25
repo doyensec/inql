@@ -1,8 +1,6 @@
 from __future__ import print_function
 import platform
 
-from inql.utils import watch
-
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)

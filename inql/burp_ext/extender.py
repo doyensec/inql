@@ -1,7 +1,5 @@
 import platform
 
-from inql.utils import watch, stop
-
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
@@ -14,9 +12,10 @@ from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionState
 
 from inql.burp_ext.editor import GraphQLEditorTab
 from inql.burp_ext.scanner import BurpScannerCheck
-from inql.burp_ext.tab import GraphQLTab
-from inql.constants import SCANNER_VERSION
-
+from inql.burp_ext.generator_tab import GeneratorTab
+from inql import __version__
+from inql.burp_ext.timer_tab import TimerTab
+from inql.utils import stop
 
 class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
     """
@@ -33,16 +32,17 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()
-        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % SCANNER_VERSION)
+        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % __version__)
         callbacks.issueAlert("InQL Scanner Started")
         print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
         # Registering GraphQL Tab
         callbacks.registerMessageEditorTabFactory(lambda _, editable: GraphQLEditorTab(callbacks, editable))
         # Register ourselves as a custom scanner check
         callbacks.registerScannerCheck(BurpScannerCheck(callbacks))
-        # Register Suite Tab
-        self._tab = GraphQLTab(callbacks, helpers)
+        # Register Suite Tab(s)
+        self._tab = GeneratorTab(callbacks, helpers)
         callbacks.addSuiteTab(self._tab)
+        callbacks.addSuiteTab(TimerTab(callbacks, helpers))
         # Register extension state listener
         callbacks.registerExtensionStateListener(self)
 

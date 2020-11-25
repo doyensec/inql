@@ -14,12 +14,12 @@ import time
 import os
 import json
 import sys
-import ssl
 import platform
 from datetime import date
 
-from .utils import string_join, mkdir_p, raw_request
-from .generators import html, query, schema
+
+from .utils import string_join, mkdir_p, raw_request, urlopen
+from .generators import html, schema, cycles, query
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -124,14 +124,7 @@ def query_result(target, key, headers=None, verify_certificate=True, requests=No
         requests[url.netloc]['POST'] = (None, reqbody)
         requests[url.netloc]['url'] = target
 
-        if verify_certificate:
-            contents = urllib_request.urlopen(request).read()
-        else:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-
-            contents = urllib_request.urlopen(request, context=ctx).read()
+        contents = urlopen(request, verify=verify_certificate).read()
 
         stub_responses[url.netloc] = contents
 
@@ -159,16 +152,22 @@ def main():
     parser.add_argument("-f", dest="schema_json_file", default=None, help="Schema file in JSON format")
     parser.add_argument("-k", dest="key", help="API Authentication Key")
     parser.add_argument('-p', dest="proxy", default=None,
-                        help='IP of web proxy to go through (http://127.0.0.1:8080)')
+                        help='IP of a web proxy to go through (http://127.0.0.1:8080)')
     parser.add_argument('--header', dest="headers", nargs=2, action='append')
     parser.add_argument("-d", dest="detect", action='store_true', default=False,
                         help="Replace known GraphQL arguments types with placeholder values (useful for Burp Suite)")
-    parser.add_argument("--generate-html", dest="generate_html", action='store_true', default=True,
+    parser.add_argument("--no-generate-html", dest="generate_html", action='store_false', default=True,
                         help="Generate HTML Documentation")
-    parser.add_argument("--generate-schema", dest="generate_schema", action='store_true', default=True,
+    parser.add_argument("--no-generate-schema", dest="generate_schema", action='store_false', default=True,
                         help="Generate JSON Schema Documentation")
-    parser.add_argument("--generate-queries", dest="generate_queries", action='store_true', default=True,
+    parser.add_argument("--no-generate-queries", dest="generate_queries", action='store_false', default=True,
                         help="Generate Queries")
+    parser.add_argument("--generate-cycles", dest="generate_cycles", action='store_true', default=False,
+                        help="Generate Cycles Report")
+    parser.add_argument("--cycles-timeout", dest="cycles_timeout", default=60, type=int,
+                        help="Cycles Report Timeout (in seconds)")
+    parser.add_argument("--cycles-streaming", dest="cycles_streaming", action='store_true', default=False,
+                        help="Some graph are too complex to generate cycles in reasonable time, stream to stdout")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -182,7 +181,7 @@ def main():
     os.chdir(args.output_directory)
 
     if platform.system() == "Java" and args.nogui is not True:
-        from inql.widgets.tab import GraphQLPanel
+        from inql.widgets.generator import GeneratorPanel
         from inql.actions.sendto import SimpleMenuItem, EnhancedHTTPMutator, GraphiQLSenderAction
         from inql.actions.setcustomheader import CustomHeaderSetterAction
         overrideheaders = {}
@@ -200,9 +199,11 @@ def main():
             ['Generate HTML DOC', args.generate_html],
             ['Generate Schema DOC', args.generate_schema],
             ['Generate Stub Queries', args.generate_queries],
-            ['Accept Invalid SSL Certificate', args.insecure_certificate]
+            ['Accept Invalid SSL Certificate', args.insecure_certificate],
+            ['Generate Cycles Report', args.generate_cycles],
+            ['Cycles Report Timeout', args.cycles_timeout]
         ]
-        return GraphQLPanel(
+        return GeneratorPanel(
             actions=[custom_header_setter, graphiql_sender],
             restore=json.dumps({'config': cfg}),
             http_mutator=None,
@@ -293,8 +294,13 @@ def init(args, print_help=None):
             query.generate(argument,
                            qpath=os.path.join(host, "%s", today, timestamp, "%s"),
                            detect=args.detect,
-                           custom=custom,
-                           green_print=lambda s: print(string_join(green, "Writing Queries Templates", reset)))
+                           green_print=lambda s: print(string_join(green, s, reset)))
+
+        if args.generate_cycles:
+            cycles.generate(argument,
+                            fpath=os.path.join(host, "cycles-%s-%s.txt" % (today, timestamp)),
+                            timeout=args.cycles_timeout,
+                            streaming=args.cycles_streaming)
 
     else:
         # Likely missing a required arguments

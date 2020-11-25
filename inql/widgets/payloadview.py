@@ -68,13 +68,13 @@ class PayloadView:
 
     def _get_textarea(self, element):
         """
-        Inherits popup menu on each and every child widgets.
+        Recursive search for a textarea in the components of a given supercomponent
 
         :param element: current widget.
         :return: None
         """
         try:
-            if 'getDocument' in dir(element) and 'append' in dir(element):
+            if 'getDocument' in dir(element) and 'append' in dir(element) and JTextArea in element.__class__.__mro__:
                 return element
 
             for e in element.getComponents():

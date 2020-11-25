@@ -14,6 +14,9 @@ from java.net import URI
 
 
 class URLOpener():
+    """
+    Open URLs on any major operative system (macOS, Linux XDG and Windows).
+    """
     def __init__(self):
         self.openers = [
             lambda url: Desktop.getDesktop().browse(URI(url)),

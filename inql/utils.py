@@ -1,5 +1,5 @@
 import re
-import os, sys
+import os
 import time
 import threading
 import ssl
@@ -118,6 +118,7 @@ def nop_evt(evt):
     """
     pass
 
+
 def nop():
     """
     Do nothing
@@ -126,11 +127,14 @@ def nop():
     """
     pass
 
+
 stop_watch = False
+
 
 def stop():
     global stop_watch
     stop_watch = True
+
 
 def watch(execute=nop, interval=60):
     global stop_watch
@@ -148,6 +152,7 @@ def watch(execute=nop, interval=60):
     t = threading.Thread(target=async_run)
     t.start()
 
+
 def run_async(execute=nop):
     def async_run():
         try:
@@ -156,6 +161,19 @@ def run_async(execute=nop):
             sys.stdout.flush()
             sys.stderr.flush()
     threading.Thread(target=async_run).start()
+
+
+def run_timeout(execute, timeout):
+    def async_run():
+        try:
+            execute()
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+    t = threading.Thread(target=async_run)
+    t.daemon = True
+    t.start()
+    t.join(timeout=timeout)
 
 
 def make_http_handler(http_mutator=None):
@@ -271,7 +289,7 @@ def make_http_handler(http_mutator=None):
             );
             while (document.querySelector('.title') == null) {
                 // wait for the title to be something
-            }            
+            }
             document.querySelector('.title').innerHTML = '<a href="https://github.com/doyensec/inql"><img src="https://github.com/doyensec/inql/blob/master/docs/inql.png?raw=true" style="display: block; height:6em; z-index: 10; position: relative"></img></a>';
             %s
           </script>
@@ -298,7 +316,11 @@ def make_http_handler(http_mutator=None):
                 xhr.open("PUT", address, true);
                 xhr.setRequestHeader('Content-Type', 'application/json');
                 var params = JSON.parse(JSON.stringify(parameters));
-                params['variables'] = JSON.parse(params['variables']);
+                try {
+                    params['variables'] = JSON.parse(params['variables']);
+                } catch (e) {
+                    console.log('Cannot parse parameters');
+                }
                 xhr.send(JSON.stringify(params));
               }
               toolbar.appendChild(sendToRepeater);
@@ -336,13 +358,7 @@ def make_http_handler(http_mutator=None):
                 else:
                     request = http_mutator.build_python_request(endpoint, host, body)
 
-                if 'http_proxy' in os.environ or 'https_proxy' in os.environ:
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    contents = urllib_request.urlopen(request, context=ctx).read()
-                else:
-                    contents = urllib_request.urlopen(request).read()
+                contents = urlopen(request, verify=not ('http_proxy' in os.environ or 'https_proxy' in os.environ)).read()
 
                 jres = json.loads(contents)
                 if 'errors' in jres and len(jres['errors']) > 0 and "IntrospectionQuery" in body:
@@ -406,6 +422,238 @@ class HTTPRequest(BaseHTTPRequestHandler):
     def send_error(self, code, message):
         self.error_code = code
         self.error_message = message
+
+try:
+    import sys
+    from javax.net.ssl import TrustManager, X509TrustManager
+    from jarray import array
+    from javax.net.ssl import SSLContext
+
+
+    class TrustAllX509TrustManager(X509TrustManager):
+
+        # Define a custom TrustManager which will blindly
+        # accept all certificates
+        def checkClientTrusted(self, chain, auth):
+            pass
+
+        def checkServerTrusted(self, chain, auth):
+            pass
+
+        def getAcceptedIssuers(self):
+            return None
+
+
+    # Create a static reference to an SSLContext which will use
+    # our custom TrustManager
+    trust_managers = array([TrustAllX509TrustManager()], TrustManager)
+    TRUST_ALL_CONTEXT = SSLContext.getInstance("SSL")
+    TRUST_ALL_CONTEXT.init(None, trust_managers, None)
+
+    # Keep a static reference to the JVM's default SSLContext for restoring
+    # at a later time
+    DEFAULT_CONTEXT = SSLContext.getDefault()
+    if 'create_default_context' not in dir(ssl):
+        SSLContext.setDefault(TRUST_ALL_CONTEXT)
+except:
+    pass
+
+def urlopen(request, verify):
+    ctx = None
+    if 'create_default_context' in dir(ssl):
+        ctx = ssl.create_default_context()
+    elif 'SSLContext' in dir(ssl) and 'PROTOCOL_TLSv1' in dir(ssl):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+
+    if not verify and ctx:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return urllib_request.urlopen(request, context=ctx)
+    else:
+        return urllib_request.urlopen(request)
+
+
+def _recursive_name_get(obj):
+    try:
+        return obj['name'] or _recursive_name_get(obj['ofType'])
+    except KeyError:
+        return False
+
+
+def _recursive_kind_of(obj, target):
+    try:
+        return obj['kind'] == target or _recursive_kind_of(obj['ofType'], target)
+    except KeyError:
+        return False
+    except TypeError:
+        return False
+
+def is_query(body):
+    # FIXME: handle urlencoded requests too in the future
+    try:
+        content = json.loads(body)
+        if not isinstance(content, list):
+            content = [content]
+
+        ret = all(['query' in c or 'operationName' in c
+                    for c in content])
+        return ret
+    except:
+        return False
+
+def simplify_introspection(data):
+    """
+    Generates a simplified introspection object based on an introspection query.
+    This utility function is after used by many of the generators.
+
+    # Parsing JSON response/file structure as follows
+    # data
+    #   __schema
+    #       directives
+    #       mutationType
+    #       queryType
+    #       subscriptionType
+    #       types (kind, name, description)
+    #              name (RootQuery, RootMutation, Subscriptions, [custom] OBJECT)
+    #              fields
+    #                     name (query names)
+    #                     args
+    #                            name (args names)
+    #                            type
+    #                                   name (args types)
+
+    :type data: an introspection query dict
+    """
+
+    output = {}
+    output['schema'] = {}
+    schema = data['data']['__schema']
+
+    # Get the Root query type
+    if schema['queryType'] and 'name' in schema['queryType']:
+        output['schema']['query'] = {
+            "type": schema['queryType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Get the Root subscription type
+    if schema['subscriptionType'] and 'name' in schema['subscriptionType']:
+        output['schema']['subscription'] = {
+            "type": schema['subscriptionType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Get the Root mutation type
+    if schema['mutationType'] and 'name' in schema['mutationType']:
+        output['schema']['mutation'] = {
+            "type": schema['mutationType']['name'],
+            "array": False,
+            "required": False
+        }
+
+    # Go over all the fields and simplify the JSON
+    output['type'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'OBJECT':
+            output['type'][type['name']] = {}
+            if type['fields']:
+                for field in type['fields']:
+                    output['type'][type['name']][field['name']] = {
+                        "type": _recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
+                    }
+                    if field['args']:
+                        output['type'][type['name']][field['name']]["args"] = {}
+                        for arg in field['args']:
+                            output['type'][type['name']][field['name']]['args'][arg['name']] = {
+                                "type": _recursive_name_get(arg['type']),
+                                "required": arg['type']['kind'] == 'NON_NULL',
+                                "array": _recursive_kind_of(arg['type'], 'LIST'),
+                            }
+                            if arg['defaultValue'] != None:
+                                output['type'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
+                                    'defaultValue']
+            if type['interfaces']:
+                output['type'][type['name']]['__implements'] = {}
+                for iface in type['interfaces']:
+                    output['type'][type['name']]['__implements'][iface['name']] = {}
+
+            if 'type' not in output['type'][type['name']] and 'args' in output['type'][type['name']]:
+                output['type'][type['name']]["type"] = output['type'][type['name']]["args"]["type"]
+
+
+    # Get all the Enums
+    output['enum'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'ENUM':
+            output['enum'][type['name']] = {}
+            for v in type['enumValues']:
+                output['enum'][type['name']][v['name']] = {}
+
+    # Get all the Scalars
+    output['scalar'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'SCALAR' and type['name'] not in ['String', 'Int', 'Float', 'Boolean', 'ID']:
+            output['scalar'][type['name']] = {}
+
+    # Get all the inputs
+    output['input'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'INPUT_OBJECT':
+            output['input'][type['name']] = {}
+            if type['inputFields']:
+                for field in type['inputFields']:
+                    output['input'][type['name']][field['name']] = {
+                        "type": _recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
+                    }
+
+    # Get all the unions
+    output['union'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'UNION':
+            output['union'][type['name']] = {}
+            for v in type['possibleTypes']:
+                output['union'][type['name']][v['name']] = {}
+
+    # Get all the interfaces
+    output['interface'] = {}
+    for type in schema['types']:
+        if type['name'][0:2] == '__': continue
+        if type['kind'] == 'INTERFACE':
+            output['interface'][type['name']] = {}
+            if type['fields']:
+                for field in type['fields']:
+                    output['interface'][type['name']][field['name']] = {
+                        "type": _recursive_name_get(field['type']),
+                        "required": field['type']['kind'] == 'NON_NULL',
+                        "array": _recursive_kind_of(field['type'], 'LIST'),
+                    }
+                    if field['args']:
+                        output['interface'][type['name']][field['name']]["args"] = {}
+                        for arg in field['args']:
+                            output['interface'][type['name']][field['name']]['args'][arg['name']] = {
+                                "type": _recursive_name_get(arg['type']),
+                                "required": arg['type']['kind'] == 'NON_NULL',
+                                "array": _recursive_kind_of(arg['type'], 'LIST'),
+                            }
+                            if arg['defaultValue'] != None:
+                                output['interface'][type['name']][field['name']]['args'][arg['name']]['default'] = arg[
+                                    'defaultValue']
+            if 'type' not in output['interface'][type['name']] and 'args' in output['interface'][type['name']]:
+                output['interface'][type['name']]["type"] = output['interface'][type['name']]["args"]["type"]
+
+    return output
+
 
 def raw_request(request):
     """
