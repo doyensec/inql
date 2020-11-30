@@ -2,7 +2,7 @@ requirements:
 	pip install -r requirements.txt
 
 version:
-	python setup.py generate_version
+	python3 setup.py generate_version
 
 ext:
 	mkdir -p $@
