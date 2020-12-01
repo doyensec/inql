@@ -19,7 +19,7 @@ from datetime import date
 
 
 from .utils import string_join, mkdir_p, raw_request, urlopen
-from .generators import html, schema, cycles, query
+from .generators import html, schema, cycles, query, tsv
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -168,6 +168,8 @@ def main():
                         help="Cycles Report Timeout (in seconds)")
     parser.add_argument("--cycles-streaming", dest="cycles_streaming", action='store_true', default=False,
                         help="Some graph are too complex to generate cycles in reasonable time, stream to stdout")
+    parser.add_argument("--generate-tsv", dest="generate_tsv", action='store_true', default=False,
+                        help="Generate TSV representation of query templates. It may be useful to quickly search for vulnerable I/O.")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -201,7 +203,8 @@ def main():
             ['Generate Stub Queries', args.generate_queries],
             ['Accept Invalid SSL Certificate', args.insecure_certificate],
             ['Generate Cycles Report', args.generate_cycles],
-            ['Cycles Report Timeout', args.cycles_timeout]
+            ['Cycles Report Timeout', args.cycles_timeout],
+            ['Generate TSV', args.generate_tsv]
         ]
         return GeneratorPanel(
             actions=[custom_header_setter, graphiql_sender],
@@ -301,6 +304,10 @@ def init(args, print_help=None):
                             fpath=os.path.join(host, "cycles-%s-%s.txt" % (today, timestamp)),
                             timeout=args.cycles_timeout,
                             streaming=args.cycles_streaming)
+
+        if args.generate_tsv:
+            tsv.generate(argument,
+                         fpath=os.path.join(host, "endpoint_%s.tsv"))
 
     else:
         # Likely missing a required arguments

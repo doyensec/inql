@@ -48,7 +48,8 @@ class GeneratorPanel():
             ['Generate Stub Queries', True],
             ['Accept Invalid SSL Certificate', True],
             ['Generate Cycles Report', False],
-            ['Cycles Report Timeout', 60]
+            ['Cycles Report Timeout', 60],
+            ['Generate TSV', False]
         ]
         self._init_config = json.loads(json.dumps(self._run_config))
         self._default_config = {}
@@ -248,6 +249,7 @@ class GeneratorPanel():
                       generate_queries=self._cfg('Generate Stub Queries'),
                       generate_cycles=self._cfg('Generate Cycles Report'),
                       cycles_timeout=self._cfg('Cycles Report Timeout'),
+                      generate_tsv=self._cfg('Generate TSV'),
                       accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
                       flag="URL")
         elif not os.path.isfile(target):
@@ -265,12 +267,13 @@ class GeneratorPanel():
                       generate_queries=self._cfg('Generate Stub Queries'),
                       generate_cycles=self._cfg('Generate Cycles Report'),
                       cycles_timeout=self._cfg('Cycles Report Timeout'),
+                      generate_tsv=self._cfg('Generate TSV'),
                       accept_invalid_certificate=self._cfg('Accept Invalid SSL Certificate'),
                       flag="JSON")
 
 
     def _run(self, target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
-             generate_cycles, cycles_timeout, accept_invalid_certificate, flag):
+             generate_cycles, cycles_timeout, generate_tsv, accept_invalid_certificate, flag):
         """
         Run the actual analysis, this method is a wrapper for the non-UI version of the tool and basically calls the
         main/init method by itself.
@@ -291,6 +294,7 @@ class GeneratorPanel():
                 "generate_cycles": generate_cycles,
                 "cycles_timeout": cycles_timeout,
                 "cycles_streaming": False, # there is no UI to show streaming cycles.
+                "generate_tsv": generate_tsv,
                 "target": target if flag != "JSON" else None,
                 "schema_json_file": target if flag == "JSON" else None,
                 "insecure_certificate": accept_invalid_certificate,
@@ -307,7 +311,7 @@ class GeneratorPanel():
             init(AttrDict(args.copy()))
             self._state['runs'].append((
                 target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries,
-                generate_cycles, cycles_timeout, accept_invalid_certificate, flag))
+                generate_cycles, cycles_timeout, generate_tsv, accept_invalid_certificate, flag))
             self._fileview.refresh()
 
         run_async(async_run)
