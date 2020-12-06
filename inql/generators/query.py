@@ -4,6 +4,20 @@ import json
 
 from inql.utils import open, simplify_introspection
 
+ORDER = {
+    "scalar": 0,
+    "enum": 1,
+    "type": 2,
+    "input": 3,
+    "interface": 4,
+    "union": 5
+}
+
+def reverse_lookup_order(field, reverse_lookup):
+    try:
+        return ORDER[reverse_lookup[field]]
+    except KeyError:
+        return 1000
 
 def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1, dinput=None,
                    params_replace=lambda schema, reverse_lookup, elem: elem):
@@ -44,7 +58,7 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
         dinput = {}
 
     if reverse_lookup[t] in ['type', 'interface', 'input']:
-        for inner_t, v in schema[reverse_lookup[t]][t].items():
+        for inner_t, v in sorted(schema[reverse_lookup[t]][t].items(), key=lambda kv: reverse_lookup_order(kv[0], reverse_lookup)):
             if inner_t == '__implements':
                 for iface in v.keys():
                     interface_recurse_fields = recurse_fields(schema, reverse_lookup, iface, max_nest=max_nest,
@@ -61,9 +75,9 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                 if inner_t not in dinput or type(dinput[inner_t]) is not dict:
                     dinput[inner_t] = {}
                 dinput[inner_t]["args"] = {}
-                for inner_a, inner_v in v['args'].items():
+                for inner_a, inner_v in sorted(v['args'].items(), key=lambda kv: reverse_lookup_order(kv[0], reverse_lookup)):
                     recurse_inner = non_required_levels > 0 or inner_v['required']  # required_only => v['required']
-                    if recurse:
+                    if recurse_inner:
                         arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest - 1,
                                              non_required_levels=non_required_levels - 1, params_replace=params_replace)
                         if 'array' in inner_v and inner_v['array']:
