@@ -58,6 +58,7 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
         dinput = {}
 
     if reverse_lookup[t] in ['type', 'interface', 'input']:
+        recursed = 0
         for inner_t, v in sorted(schema[reverse_lookup[t]][t].items(), key=lambda kv: reverse_lookup_order(kv[0], reverse_lookup)):
             if inner_t == '__implements':
                 for iface in v.keys():
@@ -71,6 +72,9 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                 dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
                                                  non_required_levels=non_required_levels - 1,
                                                  params_replace=params_replace)
+                recursed += 1
+            elif recursed > 0:
+                break
             if 'args' in v:
                 if inner_t not in dinput or type(dinput[inner_t]) is not dict:
                     dinput[inner_t] = {}
