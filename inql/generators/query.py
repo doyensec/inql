@@ -3,7 +3,6 @@ from __future__ import print_function
 import json
 
 from inql.utils import open, simplify_introspection
-from decimal import Decimal
 
 ORDER = {
     "scalar": 0,
@@ -13,7 +12,7 @@ ORDER = {
     "interface": 4,
     "union": 5
 }
-MINUS_INFINITE = Decimal('-Infinite')
+MINUS_INFINITE = -10000
 
 
 def reverse_lookup_order(field, reverse_lookup):
