@@ -3,6 +3,7 @@ from __future__ import print_function
 import json
 
 from inql.utils import open, simplify_introspection
+from decimal import Decimal
 
 ORDER = {
     "scalar": 0,
@@ -12,15 +13,26 @@ ORDER = {
     "interface": 4,
     "union": 5
 }
+MINUS_INFINITE = Decimal('-Infinite')
+
 
 def reverse_lookup_order(field, reverse_lookup):
     try:
-        return ORDER[reverse_lookup[field]]
+        if field['required']:
+            ret = 0
+        else:
+            ret = 10
+        if field['array']:
+            ret += 100
+        if 'args' in field:
+            ret += 1000
+        ret += ORDER[reverse_lookup[field['type']]]
+        return ret
     except KeyError:
-        return 1000
+        return 10000
 
 def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1, dinput=None,
-                   params_replace=lambda schema, reverse_lookup, elem: elem):
+                   params_replace=lambda schema, reverse_lookup, elem: elem, recursed=0):
     """
     Generates a JSON representation of the AST object representing a query
 
@@ -54,12 +66,11 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
     if t not in reverse_lookup:
         return params_replace(schema, reverse_lookup, t)
 
-    if dinput == None:
+    if dinput is None:
         dinput = {}
 
     if reverse_lookup[t] in ['type', 'interface', 'input']:
-        recursed = 0
-        for inner_t, v in sorted(schema[reverse_lookup[t]][t].items(), key=lambda kv: reverse_lookup_order(kv[0], reverse_lookup)):
+        for inner_t, v in sorted(schema[reverse_lookup[t]][t].items(), key=lambda kv: reverse_lookup_order(kv[1], reverse_lookup)):
             if inner_t == '__implements':
                 for iface in v.keys():
                     interface_recurse_fields = recurse_fields(schema, reverse_lookup, iface, max_nest=max_nest,
@@ -67,22 +78,20 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                                                               params_replace=params_replace)
                     dinput.update(interface_recurse_fields)
                 continue
-            recurse = non_required_levels > 0 or v['required']  # required_only => v['required']
+            recurse = non_required_levels > 0 or (v['required'] and recursed <= 0) # required_only => v['required']
             if recurse:
                 dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
                                                  non_required_levels=non_required_levels - 1,
                                                  params_replace=params_replace)
                 recursed += 1
-            elif recursed > 0:
-                break
-            if 'args' in v:
+            if recurse and 'args' in v:
                 if inner_t not in dinput or type(dinput[inner_t]) is not dict:
                     dinput[inner_t] = {}
                 dinput[inner_t]["args"] = {}
-                for inner_a, inner_v in sorted(v['args'].items(), key=lambda kv: reverse_lookup_order(kv[0], reverse_lookup)):
-                    recurse_inner = non_required_levels > 0 or inner_v['required']  # required_only => v['required']
+                for inner_a, inner_v in sorted(v['args'].items(), key=lambda kv: reverse_lookup_order(kv[1], reverse_lookup)):
+                    recurse_inner = inner_v['required']  # required_only => v['required']
                     if recurse_inner:
-                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest - 1,
+                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest - 1, recursed=MINUS_INFINITE,
                                              non_required_levels=non_required_levels - 1, params_replace=params_replace)
                         if 'array' in inner_v and inner_v['array']:
                             if type(arg) is dict:
@@ -208,7 +217,13 @@ def generate(argument, qpath="%s/%s", detect=True, green_print=lambda s: print(s
     """
     s = simplify_introspection(argument)
 
-    rev = {}
+    rev = {
+        "String": 'scalar',
+        "Int": 'scalar',
+        "Float": 'scalar',
+        "Boolean": 'scalar',
+        "ID": 'scalar',
+    }
     for t, v in s.items():
         for k in v.keys():
             rev[k] = t
