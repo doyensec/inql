@@ -89,7 +89,7 @@ class GeneratorPanel():
             if restore:
                 cfg = json.loads(restore)
                 if 'runs' in cfg:
-                    for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, generate_cycles, cycles_timeout, accept_invalid_certificate, flag in cfg['runs']:
+                    for target, key, proxy, headers, load_placeholer, generate_html, generate_schema, generate_queries, generate_cycles, cycles_timeout, generate_tsv, accept_invalid_certificate, flag in cfg['runs']:
                         self._run(target=target,
                                   key=key,
                                   proxy=proxy,
@@ -100,6 +100,7 @@ class GeneratorPanel():
                                   generate_queries=generate_queries,
                                   generate_cycles=generate_cycles,
                                   cycles_timeout=cycles_timeout,
+                                  generate_tsv=generate_tsv,
                                   accept_invalid_certificate=accept_invalid_certificate,
                                   flag=flag)
                 self._run_config = cfg['config']
