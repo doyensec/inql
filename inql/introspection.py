@@ -287,12 +287,14 @@ def init(args, print_help=None):
 
         if args.generate_schema:
             schema.generate(argument,
-                            fpath=os.path.join(host, "schema-%s-%s.json" % (today, timestamp)))
+                            fpath=os.path.join(host, "schema-%s-%s.json" % (today, timestamp)),
+                            green_print=lambda s: print(string_join(green, s, reset)))
         if args.generate_html:
             html.generate(argument,
                           fpath=os.path.join(host, "doc-%s-%s.html" % (today, timestamp)),
                           custom=custom,
-                          target=args.target)
+                          target=args.target,
+                          green_print=lambda s: print(string_join(green, s, reset)))
         if args.generate_queries:
             query.generate(argument,
                            qpath=os.path.join(host, "%s", today, timestamp, "%s"),
@@ -303,11 +305,13 @@ def init(args, print_help=None):
             cycles.generate(argument,
                             fpath=os.path.join(host, "cycles-%s-%s.txt" % (today, timestamp)),
                             timeout=args.cycles_timeout,
-                            streaming=args.cycles_streaming)
+                            streaming=args.cycles_streaming,
+                            green_print=lambda s: print(string_join(green, s, reset)))
 
         if args.generate_tsv:
             tsv.generate(argument,
-                         fpath=os.path.join(host, "endpoint_%s.tsv"))
+                         fpath=os.path.join(host, "endpoint_%s.tsv"),
+                         green_print=lambda s: print(string_join(green, s, reset)))
 
     else:
         # Likely missing a required arguments

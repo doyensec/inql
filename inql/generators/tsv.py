@@ -1,5 +1,4 @@
 from __future__ import print_function
-
 from inql.generators.query import recurse_fields
 from inql.utils import simplify_introspection, open
 
@@ -58,7 +57,7 @@ def extract_returns(val, returns):
             continue
         if type(v) is dict:
             extract_returns(v, returns)
-        else:
+        elif type:
             returns.add(k)
 
     return returns
@@ -80,6 +79,9 @@ def extract_returns_types(val, returns):
             continue
         if type(v) is dict:
             extract_returns_types(v, returns)
+        elif type(v) is list:
+            for v_inner in v:
+                extract_returns(v_inner, returns)
         else:
             returns.add(v)
 
@@ -87,10 +89,10 @@ def extract_returns_types(val, returns):
 
 
 def joinset(input_set):
-    return ', '.join(input_set)
+    return ', '.join(sorted(list(input_set)))
 
 
-def generate(argument, fpath="endpoints_%.tsv"):
+def generate(argument, fpath="endpoints_%.tsv", green_print=lambda s: print(s)):
     """
     Generate Cycles Founds file, or stream to stdout
 
@@ -108,11 +110,14 @@ def generate(argument, fpath="endpoints_%.tsv"):
     for qtype, qvalues in s['schema'].items():
         rec = recurse_fields(s, rev, qvalues['type'], non_required_levels=2)
         path = fpath % qtype
+        green_print("Writing %s TSV" % qtype)
         with open(path, "w") as tsv_file:
             tsv_file.write("Operation Name\tArgs Name\tArgs Types\tReturns Name\tReturns Types\n")
             for qname, qval in rec.items():
+                print("Writing %s %s in TSV" % (qname, qtype))
                 tsv_file.write("%s\t%s\t%s\t%s\t%s\n" % (qname,
                                        joinset(extract_args(qval, set())),
                                        joinset(extract_args_types(qval, set())),
                                        joinset(extract_returns(qval, set())),
                                        joinset(extract_returns_types(qval, set()))))
+        green_print("DONE")
