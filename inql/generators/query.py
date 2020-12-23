@@ -77,6 +77,7 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                                                               params_replace=params_replace)
                     dinput.update(interface_recurse_fields)
                 continue
+            # try to add at least one required inner, if you should not recurse anymore
             recurse = non_required_levels > 0 or (v['required'] and recursed <= 0) # required_only => v['required']
             if recurse:
                 dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
@@ -88,10 +89,11 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                     dinput[inner_t] = {}
                 dinput[inner_t]["args"] = {}
                 for inner_a, inner_v in sorted(v['args'].items(), key=lambda kv: reverse_lookup_order(kv[1], reverse_lookup)):
-                    recurse_inner = inner_v['required']  # required_only => v['required']
+                    # try to add at least a parameter, even if there are no required parameters
+                    recurse_inner = non_required_levels > 0 or inner_v['required'] # required_only => v['required']
                     if recurse_inner:
-                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest - 1, recursed=MINUS_INFINITE,
-                                             non_required_levels=non_required_levels - 1, params_replace=params_replace)
+                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest-1, recursed=MINUS_INFINITE,
+                                             non_required_levels=non_required_levels-1, params_replace=params_replace)
                         if 'array' in inner_v and inner_v['array']:
                             if type(arg) is dict:
                                 arg = [arg]
@@ -114,9 +116,10 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                                              non_required_levels=non_required_levels - 1, params_replace=params_replace)
     elif reverse_lookup[t] == 'union':
         # select the first type of the union
-        first_union_type = list(schema['union'][t].keys())[0]
-        return recurse_fields(schema, reverse_lookup, first_union_type, max_nest=max_nest,
-                              non_required_levels=non_required_levels, params_replace=params_replace)
+        for union in schema['union'][t].keys():
+            dinput["... on %s" % union] = recurse_fields(schema, reverse_lookup, union, max_nest=max_nest,
+                                                         non_required_levels=non_required_levels,
+                                                         params_replace=params_replace)
     elif reverse_lookup[t] in ['enum', 'scalar']:
         # return the type since it is an enum
         return params_replace(schema, reverse_lookup, t)
