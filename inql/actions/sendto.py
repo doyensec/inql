@@ -11,8 +11,10 @@ except ImportError:
 
 try:
     import urllib.request as urllib_request # for Python 3
+    from urllib.parse import urlencode
 except ImportError:
     import urllib2 as urllib_request # for Python 2 and Jython
+    from urllib import urlencode
 
 import threading
 import json
@@ -28,7 +30,7 @@ except ImportError:
     IContextMenuFactory = object
 
 from inql.constants import *
-from inql.utils import string_join, override_headers, make_http_handler, HTTPRequest, is_query
+from inql.utils import string_join, override_headers, override_uri, make_http_handler, HTTPRequest, is_query, clean_dict
 from inql.actions.browser import URLOpener
 
 
@@ -210,6 +212,63 @@ class EnhancedHTTPMutator(IProxyListener):
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
                                           'GraphQL #%s' % self._index)
+            self._index += 1
+
+
+class GetQueryHTTPMutator(EnhancedHTTPMutator):
+    def send_to_repeater(self, host, payload):
+        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        if req and self._callbacks and self._helpers:
+            info = req[0]
+            body = req[1]
+            nobody = body[:info.getBodyOffset()].tostring()
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            metadata = body[:info.getBodyOffset()-rstripoffset].tostring()
+
+            try:
+                self._overrideheaders[host]
+            except KeyError:
+                self._overrideheaders[host] = []
+
+            metadata = override_headers(metadata, self._overrideheaders[host])
+            metadata = override_uri(metadata, method="GET", query=urlencode(clean_dict(json.loads(payload))))
+
+            repeater_body = StringUtil.toBytes(string_join(
+                metadata,
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring()))
+
+            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
+                                           info.getUrl().getProtocol() == 'https', repeater_body,
+                                          'GraphQL (GET query) #%s' % self._index)
+            self._index += 1
+
+
+class PostBodyURLEncodedHTTPMutator(EnhancedHTTPMutator):
+    def send_to_repeater(self, host, payload):
+        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        if req and self._callbacks and self._helpers:
+            info = req[0]
+            body = req[1]
+            nobody = body[:info.getBodyOffset()].tostring()
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+
+            try:
+                self._overrideheaders[host]
+            except KeyError:
+                self._overrideheaders[host] = []
+
+            headers = override_headers(headers, self._overrideheaders[host])
+            headers = override_headers(headers, [("Content-Type", "application/x-www-form-urlencoded")])
+            headers = override_uri(headers, method="POST")
+            repeater_body = StringUtil.toBytes(string_join(
+                headers,
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                urlencode(clean_dict(json.loads(payload)))))
+
+            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
+                                           info.getUrl().getProtocol() == 'https', repeater_body,
+                                          'GraphQL (POST urlencoded) #%s' % self._index)
             self._index += 1
 
 

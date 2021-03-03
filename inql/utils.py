@@ -86,11 +86,37 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-def override_headers(http_header, overrideheaders):
+URI_REGEX = re.compile("^(OPTIONS|GET|HEAD|POST|PUT|DELETE|TRACE|CONNECT)\s+([^\s]+)", re.MULTILINE)
+
+
+def override_uri(http_metadata, path=None, query=None, method=None):
+    """
+    Overrides uri with the defined overrides.
+
+    :param http_metadata: an HTTP metadata content
+    :return: a new overridden headers string
+    """
+    m = URI_REGEX.match(http_metadata)
+    method_match = m.group(1)
+    uri = m.group(2)
+    parsed_uri = urlparse(uri)
+    if path:
+        parsed_uri = parsed_uri._replace(path=path)
+    if query:
+        parsed_uri = parsed_uri._replace(query=query)
+    if method:
+        method_match = method
+
+    return re.sub(URI_REGEX,
+                  "%s %s" % (method_match, parsed_uri.geturl()),
+                  http_metadata)
+
+
+def override_headers(http_metadata, overrideheaders):
     """
     Overrides headers with the defined overrides.
 
-    :param http_header: an HTTP header content
+    :param http_metadata: an HTTP metadata content
     :param overrideheaders: an overrideheaders object.
     :return: a new overridden headers string
     """
@@ -98,7 +124,7 @@ def override_headers(http_header, overrideheaders):
         re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE),
         "%s: %s" % (header, val))
         for (header, val) in overrideheaders]
-    h = http_header
+    h = http_metadata
     for find, replace in ree:
         hn = re.sub(find, replace, h)
         if hn == h:
@@ -107,6 +133,10 @@ def override_headers(http_header, overrideheaders):
             h = hn
 
     return h
+
+
+def clean_dict(metadata):
+    return {k: v for k, v in metadata.items() if v is not None}
 
 
 def nop_evt(evt):
