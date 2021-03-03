@@ -10,8 +10,8 @@ import json
 
 from burp import ITab
 
-from inql.actions.sendto import RepeaterSenderAction, OmniMenuItem, GraphiQLSenderAction
-from inql.actions.sendto import EnhancedHTTPMutator, GetQueryHTTPMutator, PostBodyURLEncodedHTTPMutator
+from inql.actions.sendto import GenericSendToAction, OmniMenuItem, GraphiQLSenderAction
+from inql.actions.sendto import EnhancedHTTPMutator
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.generator import GeneratorPanel
 
@@ -37,22 +37,20 @@ class GeneratorTab(ITab):
         :return: Tab UI Component
         """
         overrideheaders = {}
-        requests = {}
+
         repeater_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater")
         repeater_get_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
                                              text="Send to Repeater (GET - Query Params)")
         repeater_post_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
                                               text="Send to Repeater (POST - Body URLEncoded)")
         graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphiQL")
+
         http_mutator = EnhancedHTTPMutator(
-            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders, requests=requests)
-        get_http_mutator = GetQueryHTTPMutator(
-            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders, requests=requests)
-        post_http_mutator = PostBodyURLEncodedHTTPMutator(
-            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders, requests=requests)
-        repeater_sender = RepeaterSenderAction(omnimenu=repeater_omnimenu, http_mutator=http_mutator)
-        repeater_get_sender = RepeaterSenderAction(omnimenu=repeater_get_omnimenu, http_mutator=get_http_mutator)
-        repeater_post_sender = RepeaterSenderAction(omnimenu=repeater_post_omnimenu, http_mutator=post_http_mutator)
+            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders)
+
+        repeater_sender = GenericSendToAction(omnimenu=repeater_omnimenu, has_host=http_mutator.has_host, send_to=http_mutator.send_to_repeater)
+        repeater_get_sender = GenericSendToAction(omnimenu=repeater_get_omnimenu, has_host=http_mutator.has_host, send_to=http_mutator.send_to_repeater_get_query)
+        repeater_post_sender = GenericSendToAction(omnimenu=repeater_post_omnimenu, has_host=http_mutator.has_host, send_to=http_mutator.send_to_repeater_post_urlencoded_body)
         graphiql_sender = GraphiQLSenderAction(omnimenu=graphiql_omnimenu, http_mutator=http_mutator)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:

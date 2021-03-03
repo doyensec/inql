@@ -214,9 +214,7 @@ class EnhancedHTTPMutator(IProxyListener):
                                           'GraphQL #%s' % self._index)
             self._index += 1
 
-
-class GetQueryHTTPMutator(EnhancedHTTPMutator):
-    def send_to_repeater(self, host, payload):
+    def send_to_repeater_get_query(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
         if req and self._callbacks and self._helpers:
             info = req[0]
@@ -242,9 +240,7 @@ class GetQueryHTTPMutator(EnhancedHTTPMutator):
                                           'GraphQL (GET query) #%s' % self._index)
             self._index += 1
 
-
-class PostBodyURLEncodedHTTPMutator(EnhancedHTTPMutator):
-    def send_to_repeater(self, host, payload):
+    def send_to_repeater_post_urlencoded_body(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
         if req and self._callbacks and self._helpers:
             info = req[0]
@@ -272,12 +268,13 @@ class PostBodyURLEncodedHTTPMutator(EnhancedHTTPMutator):
             self._index += 1
 
 
-class RepeaterSenderAction(ActionListener):
+class GenericSendToAction(ActionListener):
     """
     Class represeintg the action of sending something to BURP Repeater
     """
-    def __init__(self, omnimenu, http_mutator):
-        self._http_mutator = http_mutator
+    def __init__(self, omnimenu, has_host, send_to):
+        self._has_host = has_host
+        self._send_to_repeater = send_to
         self._omnimenu = omnimenu
         self._omnimenu.add_action_listener(self)
         self.menuitem = self._omnimenu.menuitem
@@ -292,7 +289,7 @@ class RepeaterSenderAction(ActionListener):
         :param e: unused
         :return: None
         """
-        self._http_mutator.send_to_repeater(self._host, self._payload)
+        self._send_to_repeater(self._host, self._payload)
 
     def ctx(self, host=None, payload=None, fname=None):
         """
@@ -312,7 +309,7 @@ class RepeaterSenderAction(ActionListener):
             self._omnimenu.set_enabled(False)
             return
 
-        if self._http_mutator.has_host(host):
+        if self._has_host(host):
             self._omnimenu.set_enabled(True)
         else:
             self._omnimenu.set_enabled(False)
