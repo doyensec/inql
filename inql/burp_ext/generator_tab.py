@@ -10,8 +10,8 @@ import json
 
 from burp import ITab
 
-from inql.actions.sendto import SendToAction, OmniMenuItem
-from inql.http_mutator import HTTPMutator
+from inql.actions.sendto import SendToAction
+from inql.burp_ext.contextual import BurpHTTPMutator as HTTPMutator, OmniMenuItem
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.generator import GeneratorPanel
 

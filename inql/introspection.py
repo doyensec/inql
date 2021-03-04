@@ -184,8 +184,7 @@ def main():
 
     if platform.system() == "Java" and args.nogui is not True:
         from inql.widgets.generator import GeneratorPanel
-        from inql.actions.sendto import SimpleMenuItem, GraphiQLSenderAction
-        from inql.http_mutator import HTTPMutator
+        from inql.actions.sendto import SimpleMenuItem, SendToAction, HTTPMutator
         from inql.actions.setcustomheader import CustomHeaderSetterAction
         overrideheaders = {}
         graphiql_omnimenu = SimpleMenuItem(text="Send to GraphiQL")
@@ -193,8 +192,8 @@ def main():
             requests=args.requests,
             stub_responses=args.stub_responses,
             overrideheaders=overrideheaders)
-        graphiql_sender = GraphiQLSenderAction(omnimenu=graphiql_omnimenu,
-                                               sendto=http_mutator.send_to_graphiql, has_host=http_mutator.has_host)
+        graphiql_sender = SendToAction(omnimenu=graphiql_omnimenu,
+                                       send_to=http_mutator.send_to_graphiql, has_host=http_mutator.has_host)
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         cfg = [
             ['Proxy', args.proxy],

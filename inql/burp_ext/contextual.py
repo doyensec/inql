@@ -1,30 +1,75 @@
 import json
-import threading
-from http.server import HTTPServer
-from urllib import request as urllib_request
-from urllib.parse import urlencode
 
-from inql.actions.browser import URLOpener
-from inql.actions.sendto import IProxyListener
-from inql.utils import make_http_handler, is_query, HTTPRequest, override_headers, string_join, override_uri, clean_dict
+try:
+    import urllib.request as urllib_request # for Python 3
+    from urllib.parse import urlencode
+except ImportError:
+    import urllib2 as urllib_request # for Python 2 and Jython
+    from urllib import urlencode
+
+from java.awt.event import ActionListener
+from javax.swing import JMenuItem
+
+from burp import IProxyListener, IContextMenuFactory
+
+from inql.actions.sendto import HTTPMutator
+from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict
 
 
-class HTTPMutator(IProxyListener):
-    """
-    An implementation of an HTTPMutater which employs the Burp Utilities to enhance the requests
-    """
+class OmniMenuItem(IContextMenuFactory):
+    """Menu item for burp and inql interface. IT contains same action but it is shown in multiple places"""
+    def __init__(self, helpers=None, callbacks=None, text=''):
+        self._helpers = helpers
+        self._callbacks = callbacks
+        self.menuitem = JMenuItem(text)
+        self._burp_menuitem = JMenuItem("inql: %s" % text)
+        self.set_enabled(False)
+        self._callbacks.registerContextMenuFactory(self)
+
+    def add_action_listener(self, action_listener):
+        """
+        add a new action listener to the given UI items.
+        """
+        self._action_listener = action_listener
+        self.menuitem.addActionListener(action_listener)
+        self._burp_menuitem.addActionListener(action_listener)
+
+    def set_enabled(self, enabled):
+        """
+        Enables or disables the menuitme
+        """
+        self.menuitem.setEnabled(enabled)
+        self._burp_menuitem.setEnabled(enabled)
+
+    def createMenuItems(self, invocation):
+        """
+        Overrides IContextMenuFactory callback
+
+        :param invocation: handles menu selected invocation
+        :return:
+        """
+        try:
+            r = invocation.getSelectedMessages()[0]
+            info = self._helpers.analyzeRequest(r)
+            url = str(info.getUrl())
+            body = r.getRequest()[info.getBodyOffset():].tostring()
+            if not is_query(body):
+                return None
+            for h in info.getHeaders():
+                if h.lower().startswith("host:"):
+                    domain = h[5:].strip()
+
+            self._action_listener.ctx(fname='dummy.query', host=domain, payload=body)
+            mymenu = []
+            mymenu.append(self._burp_menuitem)
+        except Exception as ex:
+            return None
+        return mymenu
+
+
+class BurpHTTPMutator(HTTPMutator, IProxyListener):
     def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None):
-        self._requests = requests if requests is not None else {}
-        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
-        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
-        self._index = 0
-        self._stub_responses = stub_responses if stub_responses is not None else {}
-
-        # Register GraphIQL Server
-        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(self))
-        t = threading.Thread(target=self._server.serve_forever)
-        #t.daemon = True
-        t.start()
+        super(BurpHTTPMutator, self).__init__(overrideheaders=overrideheaders, requests=requests, stub_responses=stub_responses)
 
         if helpers and callbacks:
             self._helpers = helpers
@@ -32,7 +77,6 @@ class HTTPMutator(IProxyListener):
             self._callbacks.registerProxyListener(self)
             for r in self._callbacks.getProxyHistory():
                 self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
-
 
     def _process_request(self, reqinfo, reqbody):
         """
@@ -67,42 +111,6 @@ class HTTPMutator(IProxyListener):
         if self._helpers and self._callbacks and messageIsRequest:
             self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
                                   message.getMessageInfo().getRequest())
-
-    def get_graphiql_target(self, server_port, host=None, query=None, variables=None):
-        base_url = "http://localhost:%s/%s" % (server_port, self._requests[host]['url'])
-        arguments = ""
-        if query or variables:
-            arguments += '?'
-            args = []
-            if host:
-                args.append("query=%s" % urllib_request.quote(query))
-            if variables:
-                args.append("variables=%s" % urllib_request.quote(json.dumps(variables)))
-            arguments += "&".join(args)
-
-        return base_url + arguments
-
-    def has_host(self, host):
-        try:
-            self._requests[host]
-            return True
-        except KeyError:
-            return False
-
-    def build_python_request(self, endpoint, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req:
-            original_request = HTTPRequest(req[1])
-            del original_request.headers['Content-Length']
-
-            # TODO: Implement custom headers in threads. It is not easy to share them with the current architecture.
-            return urllib_request.Request(endpoint, payload, headers=original_request.headers)
-
-    def get_stub_response(self, host):
-        return self._stub_responses[host] if host in self._stub_responses else None
-
-    def set_stub_response(self, host, payload):
-        self._stub_responses[host] = payload
 
     def send_to_repeater(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
@@ -181,13 +189,3 @@ class HTTPMutator(IProxyListener):
                                            info.getUrl().getProtocol() == 'https', repeater_body,
                                           'GraphQL (POST urlencoded) #%s' % self._index)
             self._index += 1
-
-    def send_to_graphiql(self, host, payload):
-        content = json.loads(payload)
-        if isinstance(content, list):
-            content = content[0]
-
-        URLOpener().open(self.get_graphiql_target(
-            self._server.server_port, host,
-            content['query'] if 'query' in content else None,
-            content['variables'] if 'variables' in content else None))
