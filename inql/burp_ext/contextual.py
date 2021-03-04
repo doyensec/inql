@@ -160,7 +160,7 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL (GET query) #%s' % self._index)
+                                          'GraphQL - GET query #%s' % self._index)
             self._index += 1
 
     def send_to_repeater_post_urlencoded_body(self, host, payload):
@@ -187,5 +187,5 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL (POST urlencoded) #%s' % self._index)
+                                          'GraphQL - POST urlencoded #%s' % self._index)
             self._index += 1
