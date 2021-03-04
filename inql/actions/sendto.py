@@ -16,12 +16,8 @@ except ImportError:
     import urllib2 as urllib_request # for Python 2 and Jython
     from urllib import urlencode
 
-import threading
-import json
-
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
-from org.python.core.util import StringUtil
 
 try:
     from burp import IProxyListener, IContextMenuFactory
@@ -29,9 +25,7 @@ except ImportError:
     IProxyListener = object
     IContextMenuFactory = object
 
-from inql.constants import *
-from inql.utils import string_join, override_headers, override_uri, make_http_handler, HTTPRequest, is_query, clean_dict
-from inql.actions.browser import URLOpener
+from inql.utils import is_query
 
 
 class OmniMenuItem(IContextMenuFactory):
@@ -100,181 +94,13 @@ class SimpleMenuItem:
         self.menuitem.setEnabled(enabled)
 
 
-class EnhancedHTTPMutator(IProxyListener):
-    """
-    An implementation of an HTTPMutater which employs the Burp Utilities to enhance the requests
-    """
-    def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None):
-        self._requests = requests if requests is not None else {}
-        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
-        self._overrideheaders = overrideheaders if overrideheaders is not None else {}
-        self._index = 0
-        self._stub_responses = stub_responses if stub_responses is not None else {}
-
-        if helpers and callbacks:
-            self._helpers = helpers
-            self._callbacks = callbacks
-            self._callbacks.registerProxyListener(self)
-            for r in self._callbacks.getProxyHistory():
-                self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
-
-
-    def _process_request(self, reqinfo, reqbody):
-        """
-        Process request and extract key values
-
-        :param reqinfo:
-        :param reqbody:
-        :return:
-        """
-        url = str(reqinfo.getUrl())
-        if is_query(reqbody[reqinfo.getBodyOffset():].tostring()):
-            for h in reqinfo.getHeaders():
-                if h.lower().startswith("host:"):
-                    domain = h[5:].strip()
-
-            method = reqinfo.getMethod()
-            try:
-                self._requests[domain]
-            except KeyError:
-                self._requests[domain] = {'POST': None, 'PUT': None, 'GET': None, 'url': None}
-            self._requests[domain][method] = (reqinfo, reqbody)
-            self._requests[domain]['url'] = url
-
-    def processProxyMessage(self, messageIsRequest, message):
-        """
-        Implements IProxyListener method
-
-        :param messageIsRequest: True if BURP Message is a request
-        :param message: message content
-        :return: None
-        """
-        if self._helpers and self._callbacks and messageIsRequest:
-            self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
-                                  message.getMessageInfo().getRequest())
-
-    def get_graphiql_target(self, server_port, host=None, query=None, variables=None):
-        base_url = "http://localhost:%s/%s" % (server_port, self._requests[host]['url'])
-        arguments = ""
-        if query or variables:
-            arguments += '?'
-            args = []
-            if host:
-                args.append("query=%s" % urllib_request.quote(query))
-            if variables:
-                args.append("variables=%s" % urllib_request.quote(json.dumps(variables)))
-            arguments += "&".join(args)
-
-        return base_url + arguments
-
-    def has_host(self, host):
-        try:
-            self._requests[host]
-            return True
-        except KeyError:
-            return False
-
-    def build_python_request(self, endpoint, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req:
-            original_request = HTTPRequest(req[1])
-            del original_request.headers['Content-Length']
-
-            # TODO: Implement custom headers in threads. It is not easy to share them with the current architecture.
-            return urllib_request.Request(endpoint, payload, headers=original_request.headers)
-
-    def get_stub_response(self, host):
-        return self._stub_responses[host] if host in self._stub_responses else None
-
-    def set_stub_response(self, host, payload):
-        self._stub_responses[host] = payload
-
-    def send_to_repeater(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                payload))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL #%s' % self._index)
-            self._index += 1
-
-    def send_to_repeater_get_query(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            metadata = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            metadata = override_headers(metadata, self._overrideheaders[host])
-            metadata = override_uri(metadata, method="GET", query=urlencode(clean_dict(json.loads(payload))))
-
-            repeater_body = StringUtil.toBytes(string_join(
-                metadata,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring()))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL (GET query) #%s' % self._index)
-            self._index += 1
-
-    def send_to_repeater_post_urlencoded_body(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            headers = override_headers(headers, [("Content-Type", "application/x-www-form-urlencoded")])
-            headers = override_uri(headers, method="POST")
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                urlencode(clean_dict(json.loads(payload)))))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL (POST urlencoded) #%s' % self._index)
-            self._index += 1
-
-
-class GenericSendToAction(ActionListener):
+class SendToAction(ActionListener):
     """
     Class represeintg the action of sending something to BURP Repeater
     """
     def __init__(self, omnimenu, has_host, send_to):
         self._has_host = has_host
-        self._send_to_repeater = send_to
+        self._send_to = send_to
         self._omnimenu = omnimenu
         self._omnimenu.add_action_listener(self)
         self.menuitem = self._omnimenu.menuitem
@@ -289,7 +115,7 @@ class GenericSendToAction(ActionListener):
         :param e: unused
         :return: None
         """
-        self._send_to_repeater(self._host, self._payload)
+        self._send_to(self._host, self._payload)
 
     def ctx(self, host=None, payload=None, fname=None):
         """
@@ -310,59 +136,6 @@ class GenericSendToAction(ActionListener):
             return
 
         if self._has_host(host):
-            self._omnimenu.set_enabled(True)
-        else:
-            self._omnimenu.set_enabled(False)
-
-
-class GraphiQLSenderAction(ActionListener):
-    """
-    Class representing the action of sending something to the provided graphiql server
-    """
-    def __init__(self, omnimenu, http_mutator):
-        self._http_mutator = http_mutator
-        self._omnimenu = omnimenu
-        self._omnimenu.add_action_listener(self)
-        self.menuitem = self._omnimenu.menuitem
-        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(http_mutator))
-        t = threading.Thread(target=self._server.serve_forever)
-        #t.daemon = True
-        t.start()
-
-    def actionPerformed(self, e):
-        """
-        Override the ActionListener method. Usually setup in combination with a menuitem click.
-        :param e: unused
-        :return:
-        """
-        content = json.loads(self._payload)
-        if isinstance(content, list):
-            content = content[0]
-
-        URLOpener().open(self._http_mutator.get_graphiql_target(
-            self._server.server_port, self._host,
-            content['query'] if 'query' in content else None,
-            content['variables'] if 'variables' in content else None))
-
-    def ctx(self, host=None, payload=None, fname=None):
-        """
-        When a fname is specified and is a query file or a request is selected in the other tabs,
-        enables the context menu to send to repeater tab
-
-        :param host: should be not null
-        :param payload: should be not null
-        :param fname: should be not null
-        :return: None
-        """
-        self._host = host
-        self._payload = payload
-        self._fname = fname
-
-        if not self._fname.endswith('.query'):
-            self._omnimenu.set_enabled(False)
-            return
-
-        if self._http_mutator.has_host(host):
             self._omnimenu.set_enabled(True)
         else:
             self._omnimenu.set_enabled(False)
