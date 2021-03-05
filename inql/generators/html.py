@@ -1,3 +1,4 @@
+from __future__ import print_function
 from inql.utils import open
 
 
@@ -85,7 +86,7 @@ div.box {
 """
 
 
-def generate(argument, fpath, custom=False, target="empty"):
+def generate(argument, fpath, custom=False, target="empty", green_print=lambda s: print(s)):
     """
     Generate HTML Documentation
 
@@ -95,6 +96,7 @@ def generate(argument, fpath, custom=False, target="empty"):
     :param target: who is the owner of that graphql endpoint
     :return: None
     """
+    green_print("Writing HTML Documentation")
     with open(fpath, 'w') as output_file:
         result = argument.copy()
         # Write HTML header for the documentation
@@ -391,3 +393,4 @@ def generate(argument, fpath, custom=False, target="empty"):
         # Close documentation
         output_file.write("</body></html>")
         output_file.close()
+    green_print("DONE")

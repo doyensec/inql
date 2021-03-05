@@ -21,21 +21,21 @@ HTML and JSON schema. InQL is also able to generate templates (with optional pla
 For all supported options, check the command line help:
 
 ```
-usage: inql [-h] [--nogui] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY]
-            [-p PROXY] [--header HEADERS HEADERS] [-d] [--no-generate-html]
+usage: inql [-h] [-t TARGET] [-f SCHEMA_JSON_FILE] [-k KEY] [-p PROXY]
+            [--header HEADERS HEADERS] [-d] [--no-generate-html]
             [--no-generate-schema] [--no-generate-queries] [--generate-cycles]
             [--cycles-timeout CYCLES_TIMEOUT] [--cycles-streaming]
-            [--insecure] [-o OUTPUT_DIRECTORY]
+            [--generate-tsv] [--insecure] [-o OUTPUT_DIRECTORY]
 
 InQL Scanner
 
 optional arguments:
   -h, --help            show this help message and exit
-  --nogui               Start InQL Without Standalone GUI [Jython-only]
   -t TARGET             Remote GraphQL Endpoint (https://<Target_IP>/graphql)
   -f SCHEMA_JSON_FILE   Schema file in JSON format
   -k KEY                API Authentication Key
-  -p PROXY              IP of a web proxy to go through (http://127.0.0.1:8080)
+  -p PROXY              IP of a web proxy to go through
+                        (http://127.0.0.1:8080)
   --header HEADERS HEADERS
   -d                    Replace known GraphQL arguments types with placeholder
                         values (useful for Burp Suite)
@@ -48,6 +48,8 @@ optional arguments:
                         Cycles Report Timeout (in seconds)
   --cycles-streaming    Some graph are too complex to generate cycles in
                         reasonable time, stream to stdout
+  --generate-tsv        Generate TSV representation of query templates. It may
+                        be useful to quickly search for vulnerable I/O.
   --insecure            Accept any SSL/TLS certificate
   -o OUTPUT_DIRECTORY   Output Directory
 ```

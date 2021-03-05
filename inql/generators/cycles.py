@@ -3,7 +3,7 @@ from inql.cycles import Graph, CyclesDetector
 from inql.utils import simplify_introspection
 
 
-def generate(argument, fpath="cycles.txt", timeout=60, streaming=False):
+def generate(argument, fpath="cycles.txt", timeout=60, streaming=False, green_print=lambda s: print(s)):
     """
     Generate Cycles Founds file, or stream to stdout
 
@@ -21,6 +21,7 @@ def generate(argument, fpath="cycles.txt", timeout=60, streaming=False):
     if streaming:
         global i
         i = 0
+        green_print("Streaming Query Cycles")
 
         def print_cycle(cycle):
             global i
@@ -29,6 +30,8 @@ def generate(argument, fpath="cycles.txt", timeout=60, streaming=False):
 
         cycles.detect(on_cycle=print_cycle)
     else:
+        green_print("Writing Query Cycles to %s" % fpath)
         cycles.detect()
         with open(fpath, 'w') as f:
             f.write(str(cycles))
+        green_print("DONE")

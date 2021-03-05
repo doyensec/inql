@@ -4,9 +4,34 @@ import json
 
 from inql.utils import open, simplify_introspection
 
+ORDER = {
+    "scalar": 0,
+    "enum": 1,
+    "type": 2,
+    "input": 3,
+    "interface": 4,
+    "union": 5
+}
+MINUS_INFINITE = -10000
+
+
+def reverse_lookup_order(field, reverse_lookup):
+    try:
+        if field['required']:
+            ret = 0
+        else:
+            ret = 10
+        if field['array']:
+            ret += 100
+        if 'args' in field:
+            ret += 1000
+        ret += ORDER[reverse_lookup[field['type']]]
+        return ret
+    except KeyError:
+        return 10000
 
 def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1, dinput=None,
-                   params_replace=lambda schema, reverse_lookup, elem: elem):
+                   params_replace=lambda schema, reverse_lookup, elem: elem, recursed=0):
     """
     Generates a JSON representation of the AST object representing a query
 
@@ -40,11 +65,11 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
     if t not in reverse_lookup:
         return params_replace(schema, reverse_lookup, t)
 
-    if dinput == None:
+    if dinput is None:
         dinput = {}
 
     if reverse_lookup[t] in ['type', 'interface', 'input']:
-        for inner_t, v in schema[reverse_lookup[t]][t].items():
+        for inner_t, v in sorted(schema[reverse_lookup[t]][t].items(), key=lambda kv: reverse_lookup_order(kv[1], reverse_lookup)):
             if inner_t == '__implements':
                 for iface in v.keys():
                     interface_recurse_fields = recurse_fields(schema, reverse_lookup, iface, max_nest=max_nest,
@@ -52,20 +77,23 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                                                               params_replace=params_replace)
                     dinput.update(interface_recurse_fields)
                 continue
-            recurse = non_required_levels > 0 or v['required']  # required_only => v['required']
+            # try to add at least one required inner, if you should not recurse anymore
+            recurse = non_required_levels > 0 or (v['required'] and recursed <= 0) # required_only => v['required']
             if recurse:
                 dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
                                                  non_required_levels=non_required_levels - 1,
                                                  params_replace=params_replace)
-            if 'args' in v:
+                recursed += 1
+            if recurse and 'args' in v:
                 if inner_t not in dinput or type(dinput[inner_t]) is not dict:
                     dinput[inner_t] = {}
                 dinput[inner_t]["args"] = {}
-                for inner_a, inner_v in v['args'].items():
-                    recurse_inner = non_required_levels > 0 or inner_v['required']  # required_only => v['required']
-                    if recurse:
-                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest - 1,
-                                             non_required_levels=non_required_levels - 1, params_replace=params_replace)
+                for inner_a, inner_v in sorted(v['args'].items(), key=lambda kv: reverse_lookup_order(kv[1], reverse_lookup)):
+                    # try to add at least a parameter, even if there are no required parameters
+                    recurse_inner = non_required_levels > 0 or inner_v['required'] # required_only => v['required']
+                    if recurse_inner:
+                        arg = recurse_fields(schema, reverse_lookup, inner_v['type'], max_nest=max_nest-1, recursed=MINUS_INFINITE,
+                                             non_required_levels=non_required_levels-1, params_replace=params_replace)
                         if 'array' in inner_v and inner_v['array']:
                             if type(arg) is dict:
                                 arg = [arg]
@@ -88,9 +116,10 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                                              non_required_levels=non_required_levels - 1, params_replace=params_replace)
     elif reverse_lookup[t] == 'union':
         # select the first type of the union
-        first_union_type = list(schema['union'][t].keys())[0]
-        return recurse_fields(schema, reverse_lookup, first_union_type, max_nest=max_nest,
-                              non_required_levels=non_required_levels, params_replace=params_replace)
+        for union in schema['union'][t].keys():
+            dinput["... on %s" % union] = recurse_fields(schema, reverse_lookup, union, max_nest=max_nest,
+                                                         non_required_levels=non_required_levels,
+                                                         params_replace=params_replace)
     elif reverse_lookup[t] in ['enum', 'scalar']:
         # return the type since it is an enum
         return params_replace(schema, reverse_lookup, t)
@@ -190,7 +219,13 @@ def generate(argument, qpath="%s/%s", detect=True, green_print=lambda s: print(s
     """
     s = simplify_introspection(argument)
 
-    rev = {}
+    rev = {
+        "String": 'scalar',
+        "Int": 'scalar',
+        "Float": 'scalar',
+        "Boolean": 'scalar',
+        "ID": 'scalar',
+    }
     for t, v in s.items():
         for k in v.keys():
             rev[k] = t
