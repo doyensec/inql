@@ -41,8 +41,10 @@ class GeneratorTab(ITab):
         repeater_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater")
         repeater_get_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
                                              text="Send to Repeater (GET - Query Params)")
-        repeater_post_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
+        repeater_post_urlencoded_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
                                               text="Send to Repeater (POST - Body URLEncoded)")
+        repeater_post_formdata_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
+                                              text="Send to Repeater (POST - Body form-data)")
         graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphiQL")
 
         http_mutator = HTTPMutator(
@@ -52,8 +54,10 @@ class GeneratorTab(ITab):
                                        send_to=http_mutator.send_to_repeater)
         repeater_get_sender = SendToAction(omnimenu=repeater_get_omnimenu, has_host=http_mutator.has_host,
                                            send_to=http_mutator.send_to_repeater_get_query)
-        repeater_post_sender = SendToAction(omnimenu=repeater_post_omnimenu, has_host=http_mutator.has_host,
+        repeater_post_urlencoded_sender = SendToAction(omnimenu=repeater_post_urlencoded_omnimenu, has_host=http_mutator.has_host,
                                             send_to=http_mutator.send_to_repeater_post_urlencoded_body)
+        repeater_post_form_data_sender = SendToAction(omnimenu=repeater_post_formdata_omnimenu, has_host=http_mutator.has_host,
+                                            send_to=http_mutator.send_to_repeater_post_form_data_body)
         graphiql_sender = SendToAction(omnimenu=graphiql_omnimenu, has_host=http_mutator.has_host,
                                        send_to=http_mutator.send_to_graphiql)
 
@@ -75,7 +79,8 @@ class GeneratorTab(ITab):
             actions=[
                 repeater_sender,
                 repeater_get_sender,
-                repeater_post_sender,
+                repeater_post_urlencoded_sender,
+                repeater_post_form_data_sender,
                 graphiql_sender,
                 custom_header_setter],
             restore=restore,

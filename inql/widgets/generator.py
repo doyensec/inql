@@ -56,10 +56,9 @@ class GeneratorPanel():
         for k, v in self._run_config:
             self._default_config[k] = v
         self._old_config_hash = None
-        self._actions.append(BrowserAction())
-        self._actions.append(ExecutorAction("Configure", lambda _: self._setup()))
-        self._actions.append(ExecutorAction("Load", self._loadurl))
-        self._actions = [a for a in reversed(self._actions)]
+        self._actions.insert(0, BrowserAction())
+        self._actions.insert(0, ExecutorAction("Configure", lambda _: self._setup()))
+        self._actions.insert(0, ExecutorAction("Load", self._loadurl))
         self._http_mutator = http_mutator
 
         self.this = JPanel()

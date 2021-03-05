@@ -10,10 +10,12 @@ except ImportError:
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 
+from org.python.core.util import StringUtil
+
 from burp import IProxyListener, IContextMenuFactory
 
 from inql.actions.sendto import HTTPMutator
-from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict
+from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string
 
 
 class OmniMenuItem(IContextMenuFactory):
@@ -188,4 +190,32 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
                                           'GraphQL - POST urlencoded #%s' % self._index)
+            self._index += 1
+
+    def send_to_repeater_post_form_data_body(self, host, payload):
+        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        if req and self._callbacks and self._helpers:
+            info = req[0]
+            body = req[1]
+            nobody = body[:info.getBodyOffset()].tostring()
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+
+            try:
+                self._overrideheaders[host]
+            except KeyError:
+                self._overrideheaders[host] = []
+
+            headers = override_headers(headers, self._overrideheaders[host])
+            boundary = "---------------------------%s" % random_string()
+            headers = override_headers(headers, [("Content-Type", "multipart/form-data, boundary=%s" % boundary)])
+            headers = override_uri(headers, method="POST")
+            repeater_body = StringUtil.toBytes(string_join(
+                headers,
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                multipart(data=clean_dict(json.loads(payload)), boundary=boundary)))
+
+            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
+                                           info.getUrl().getProtocol() == 'https', repeater_body,
+                                          'GraphQL - POST form-data #%s' % self._index)
             self._index += 1
