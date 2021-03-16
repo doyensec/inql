@@ -147,9 +147,8 @@ def random_string():
     return ''.join(random.choice(letters) for i in range(10))
 
 def multipart(data, boundary):
-    multiparted_dict = multipartify(data, formatter=lambda v: v)
     ss = []
-    for key, value in multiparted_dict.items():
+    for key, value in data.items():
         ss.append("\n".join([
                     "--%s" % boundary,
                     "Content-Disposition: form-data; name=\"%s\"" % key,
@@ -158,9 +157,9 @@ def multipart(data, boundary):
     return "\n".join(ss)
 
 
-def multipartify(data, parent_key=None, formatter=None):
+def querify(data, parent_key=None, formatter=None):
     if formatter is  None:
-        formatter = lambda v: (None, v)  # Multipart representation of value
+        formatter = lambda v: v  # Multipart representation of value
 
     if type(data) is not dict:
         return {parent_key: formatter(data)}
@@ -170,11 +169,11 @@ def multipartify(data, parent_key=None, formatter=None):
     for key, value in data.items():
         current_key = key if parent_key is None else "%s[%s]" % (parent_key, key)
         if type(value) is dict:
-            converted.extend(multipartify(value, current_key, formatter).items())
+            converted.extend(querify(value, current_key, formatter).items())
         elif type(value) is list:
             for ind, list_value in enumerate(value):
                 iter_key = "%s[%s]" % (current_key, ind)
-                converted.extend(multipartify(list_value, iter_key, formatter).items())
+                converted.extend(querify(list_value, iter_key, formatter).items())
         else:
             converted.append((current_key, formatter(value)))
 

@@ -15,7 +15,7 @@ from org.python.core.util import StringUtil
 from burp import IProxyListener, IContextMenuFactory
 
 from inql.actions.sendto import HTTPMutator
-from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string
+from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string, querify
 
 
 class OmniMenuItem(IContextMenuFactory):
@@ -154,7 +154,10 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
                 self._overrideheaders[host] = []
 
             metadata = override_headers(metadata, self._overrideheaders[host])
-            metadata = override_uri(metadata, method="GET", query=urlencode(clean_dict(json.loads(payload))))
+            content = json.loads(payload)
+            if isinstance(content, list):
+                content = content[0]
+            metadata = override_uri(metadata, method="GET", query=urlencode(clean_dict(content)))
 
             repeater_body = StringUtil.toBytes(string_join(
                 metadata,
@@ -182,10 +185,13 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             headers = override_headers(headers, self._overrideheaders[host])
             headers = override_headers(headers, [("Content-Type", "application/x-www-form-urlencoded")])
             headers = override_uri(headers, method="POST")
+            content = json.loads(payload)
+            if isinstance(content, list):
+                content = content[0]
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
                 body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                urlencode(clean_dict(json.loads(payload)))))
+                urlencode(querify(clean_dict(content)))))
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
@@ -210,10 +216,13 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             boundary = "---------------------------%s" % random_string()
             headers = override_headers(headers, [("Content-Type", "multipart/form-data, boundary=%s" % boundary)])
             headers = override_uri(headers, method="POST")
+            content = json.loads(payload)
+            if isinstance(content, list):
+                content = content[0]
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
                 body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                multipart(data=clean_dict(json.loads(payload)), boundary=boundary)))
+                multipart(data=querify(clean_dict(content)), boundary=boundary)))
 
             self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
                                            info.getUrl().getProtocol() == 'https', repeater_body,
