@@ -15,7 +15,8 @@ from org.python.core.util import StringUtil
 from burp import IProxyListener, IContextMenuFactory
 
 from inql.actions.sendto import HTTPMutator
-from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string, querify
+from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string, \
+    querify, json_encode
 
 
 class OmniMenuItem(IContextMenuFactory):
@@ -157,7 +158,7 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             content = json.loads(payload)
             if isinstance(content, list):
                 content = content[0]
-            metadata = override_uri(metadata, method="GET", query=urlencode(clean_dict(content)))
+            metadata = override_uri(metadata, method="GET", query=urlencode(json_encode(clean_dict(content))))
 
             repeater_body = StringUtil.toBytes(string_join(
                 metadata,
