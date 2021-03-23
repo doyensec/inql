@@ -1,8 +1,8 @@
 requirements:
-	pip install -r requirements.txt
+	python -m pip install --user stickytape==0.1.14
 
 version:
-	python3 setup.py generate_version
+	python setup.py generate_version
 
 ext:
 	mkdir -p $@
