@@ -3,7 +3,7 @@ ExtensionType: 2
 Name: InQL - Introspection GraphQL Scanner
 RepoName: inql
 ScreenVersion: 3.1.0
-SerialVersion: 7
+SerialVersion: 9
 MinPlatformVersion: 2
 ProOnly: False
 Author: Andrea Brancaleoni @ Doyensec
