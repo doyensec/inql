@@ -138,7 +138,7 @@ def override_headers(http_metadata, overrideheaders):
 
 
 def json_encode(metadata):
-    return {k: json.dumps(v) for k, v in metadata.items()}
+    return {k: json.dumps(v) if not isinstance(v, str) else v for k, v in metadata.items()}
 
 
 def clean_dict(metadata):
