@@ -183,7 +183,7 @@ def preplace(schema, reverse_lookup, t):
 
     """
     if t == 'String':
-        return '@code@'
+        return '@code*@'
     elif t == 'Int':
         return 1334
     elif t == 'Boolean':
