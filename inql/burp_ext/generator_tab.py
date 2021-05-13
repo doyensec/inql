@@ -93,10 +93,13 @@ class GeneratorTab(ITab):
         return self.panel.this
 
     def disable_http2(self):
-        print("Jython does not support HTTP/2 at the current stage: disabling it!")
-        j = json.loads(self._callbacks.saveConfigAsJson())
-        j['project_options']['http']['http2']['enable_http2'] = False
-        self._callbacks.loadConfigFromJson(json.dumps(j))
+        try:
+            print("Jython does not support HTTP/2 at the current stage: disabling it!")
+            j = json.loads(self._callbacks.saveConfigAsJson())
+            j['project_options']['http']['http2']['enable_http2'] = False
+            self._callbacks.loadConfigFromJson(json.dumps(j))
+        except Exception as ex:
+            print("Cannot disable HTTP/2! %s" % ex)
 
     def bring_in_front(self):
         self.panel.this.setAlwaysOnTop(True)
