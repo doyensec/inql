@@ -156,3 +156,7 @@ class HTTPMutator(object):
             self._server.server_port, host,
             content['query'] if 'query' in content else None,
             content['variables'] if 'variables' in content else None))
+
+    def stop(self):
+        self._server.shutdown()
+        self._server.socket.close()

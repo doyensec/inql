@@ -50,6 +50,7 @@ class GeneratorTab(ITab):
 
         http_mutator = HTTPMutator(
             callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders)
+        self.http_mutator = http_mutator
 
         repeater_sender = SendToAction(omnimenu=repeater_omnimenu, has_host=http_mutator.has_host,
                                        send_to=http_mutator.send_to_repeater)
@@ -114,3 +115,6 @@ class GeneratorTab(ITab):
             self._callbacks.saveExtensionSetting(self.panel.__class__.__name__, self.panel.state())
         except:
             print("Cannot save state!")
+
+    def stop(self):
+        self.http_mutator.stop()

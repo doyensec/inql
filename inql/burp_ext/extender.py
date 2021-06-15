@@ -57,3 +57,4 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         shutil.rmtree(self._tmpdir, ignore_errors=False, onerror=None)
         stop()
         self._tab.save()
+        self._tab.stop()
