@@ -4,6 +4,8 @@ import time
 import threading
 import ssl
 import json
+import random
+import string
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -86,19 +88,45 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-def override_headers(http_header, overrideheaders):
+URI_REGEX = re.compile("^(OPTIONS|GET|HEAD|POST|PUT|DELETE|TRACE|CONNECT)\s+([^\s]+)", re.MULTILINE | re.IGNORECASE)
+
+
+def override_uri(http_metadata, path=None, query=None, method=None):
+    """
+    Overrides uri with the defined overrides.
+
+    :param http_metadata: an HTTP metadata content
+    :return: a new overridden headers string
+    """
+    m = URI_REGEX.match(http_metadata)
+    method_match = m.group(1)
+    uri = m.group(2)
+    parsed_uri = urlparse(uri)
+    if path:
+        parsed_uri = parsed_uri._replace(path=path)
+    if query:
+        parsed_uri = parsed_uri._replace(query=query)
+    if method:
+        method_match = method
+
+    return re.sub(URI_REGEX,
+                  "%s %s" % (method_match, parsed_uri.geturl()),
+                  http_metadata)
+
+
+def override_headers(http_metadata, overrideheaders):
     """
     Overrides headers with the defined overrides.
 
-    :param http_header: an HTTP header content
+    :param http_metadata: an HTTP metadata content
     :param overrideheaders: an overrideheaders object.
     :return: a new overridden headers string
     """
     ree = [(
-        re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE),
+        re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE | re.IGNORECASE),
         "%s: %s" % (header, val))
         for (header, val) in overrideheaders]
-    h = http_header
+    h = http_metadata
     for find, replace in ree:
         hn = re.sub(find, replace, h)
         if hn == h:
@@ -107,6 +135,53 @@ def override_headers(http_header, overrideheaders):
             h = hn
 
     return h
+
+
+def json_encode(metadata):
+    return {k: json.dumps(v) if not isinstance(v, str) else v for k, v in metadata.items()}
+
+
+def clean_dict(metadata):
+    return {k: v for k, v in metadata.items() if v is not None}
+
+
+def random_string():
+    # printing lowercase
+    letters = string.ascii_lowercase
+    return ''.join(random.choice(letters) for i in range(10))
+
+def multipart(data, boundary):
+    ss = []
+    for key, value in data.items():
+        ss.append("\n".join([
+                    "--%s" % boundary,
+                    "Content-Disposition: form-data; name=\"%s\"" % key,
+                    "\n%s" % value]))
+    ss.append("--%s--" % boundary)
+    return "\n".join(ss)
+
+
+def querify(data, parent_key=None, formatter=None):
+    if formatter is  None:
+        formatter = lambda v: v  # Multipart representation of value
+
+    if type(data) is not dict:
+        return {parent_key: formatter(data)}
+
+    converted = []
+
+    for key, value in data.items():
+        current_key = key if parent_key is None else "%s[%s]" % (parent_key, key)
+        if type(value) is dict:
+            converted.extend(querify(value, current_key, formatter).items())
+        elif type(value) is list:
+            for ind, list_value in enumerate(value):
+                iter_key = "%s[%s]" % (current_key, ind)
+                converted.extend(querify(list_value, iter_key, formatter).items())
+        else:
+            converted.append((current_key, formatter(value)))
+
+    return dict(converted)
 
 
 def nop_evt(evt):

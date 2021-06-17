@@ -109,8 +109,12 @@ interactions such as "Send To Repeater" and automatic authorization header gener
 To use `inql` stand-alone UI:
 
 + Download and Install [Jython](https://www.jython.org/download). Jython can be obtained on macOS through brew `brew install jython` or on Ubuntu derivates through `apt-get install -y jython`
-+ Install inql through pip with `jython -m pip install inql`
++ Download inql `git clone https://github.com/doyensec/inql`
++ Change directory to inql with `cd inql`  
 + Start the UI through jython with `jython -m inql`
+
+NDR: At the current stage Jython does not support HTTP/2. Any request to an HTTP/2 server will fail silently.
+We advise to use the Burp to bypass this limitation temporarily. 
 
 ### Burp GraphQL Query Timer
 

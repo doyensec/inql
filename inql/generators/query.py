@@ -111,9 +111,11 @@ def recurse_fields(schema, reverse_lookup, t, max_nest=7, non_required_levels=1,
                     del dinput[inner_t]
 
         if len(dinput) == 0 and (t not in reverse_lookup or reverse_lookup[t] not in ['enum', 'scalar']):
-            inner_t, v = list(schema[reverse_lookup[t]][t].items())[0]
-            dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
-                                             non_required_levels=non_required_levels - 1, params_replace=params_replace)
+            items = list(schema[reverse_lookup[t]][t].items())
+            if len(items) > 0:
+                inner_t, v = items[0]
+                dinput[inner_t] = recurse_fields(schema, reverse_lookup, v['type'], max_nest=max_nest - 1,
+                                                non_required_levels=non_required_levels - 1, params_replace=params_replace)
     elif reverse_lookup[t] == 'union':
         # select the first type of the union
         for union in schema['union'][t].keys():
@@ -181,7 +183,7 @@ def preplace(schema, reverse_lookup, t):
 
     """
     if t == 'String':
-        return '@code@'
+        return '@code*@'
     elif t == 'Int':
         return 1334
     elif t == 'Boolean':
