@@ -7,6 +7,7 @@ if platform.system() != "Java":
     exit(-1)
 
 import json
+import sys
 
 from burp import ITab
 
@@ -101,6 +102,9 @@ class GeneratorTab(ITab):
             self._callbacks.loadConfigFromJson(json.dumps(j))
         except Exception as ex:
             print("Cannot disable HTTP/2! %s" % ex)
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
 
     def bring_in_front(self):
         self.panel.this.setAlwaysOnTop(True)
