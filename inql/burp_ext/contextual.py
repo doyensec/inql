@@ -1,4 +1,5 @@
 import json
+import re
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -155,10 +156,12 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
                 self._overrideheaders[host] = []
 
             metadata = override_headers(metadata, self._overrideheaders[host])
+            # remove Content-Type on GET requests
+            metadata = re.sub(r'(?m)^Content-Type:.*\n?', '', metadata)
             content = json.loads(payload)
             if isinstance(content, list):
                 content = content[0]
-            metadata = override_uri(metadata, method="GET", query=urlencode(json_encode(clean_dict(content))))
+            metadata = override_uri(metadata, method="GET", query=urlencode(querify(clean_dict(content))))
 
             repeater_body = StringUtil.toBytes(string_join(
                 metadata,
