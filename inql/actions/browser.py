@@ -11,7 +11,7 @@ from java.awt.event import ActionListener
 from java.awt import Desktop
 from javax.swing import JMenuItem
 from java.net import URI
-
+from java.io import File as JavaFile
 
 class URLOpener():
     """
@@ -58,7 +58,7 @@ class BrowserAction(ActionListener):
         :param e: unused
         :return:
         """
-        URLOpener().open("file://%s" % self.target)
+        URLOpener().open(JavaFile(self.target).toURI().toString())
 
     def ctx(self, host=None, payload=None, fname=None):
         """
