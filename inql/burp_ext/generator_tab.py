@@ -24,7 +24,7 @@ class GeneratorTab(ITab):
     def __init__(self, callbacks, helpers):
         self._callbacks = callbacks
         self._helpers = helpers
-        self.disable_http2()
+        self.disable_http2_ifbogus()
 
     def getTabCaption(self):
         """
@@ -94,12 +94,14 @@ class GeneratorTab(ITab):
         self._callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this
 
-    def disable_http2(self):
+    def disable_http2_ifbogus(self):
         try:
-            print("Jython does not support HTTP/2 at the current stage: disabling it!")
-            j = json.loads(self._callbacks.saveConfigAsJson())
-            j['project_options']['http']['http2']['enable_http2'] = False
-            self._callbacks.loadConfigFromJson(json.dumps(j))
+            _, major, minor = self._callbacks.getBurpVersion()
+            if not (int(major) >= 2021 and int(minor) >= 8):
+                print("Jython does not support HTTP/2 on Burp <= 2021.8: disabling it!")
+                j = json.loads(self._callbacks.saveConfigAsJson())
+                j['project_options']['http']['http2']['enable_http2'] = False
+                self._callbacks.loadConfigFromJson(json.dumps(j))
         except Exception as ex:
             print("Cannot disable HTTP/2! %s" % ex)
         finally:
