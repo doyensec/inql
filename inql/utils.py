@@ -605,7 +605,7 @@ def simplify_introspection(data):
     schema = data['data']['__schema']
 
     # Get the Root query type
-    if schema['queryType'] and 'name' in schema['queryType']:
+    if 'queryType' in schema and schema['queryType'] and 'name' in schema['queryType']:
         output['schema']['query'] = {
             "type": schema['queryType']['name'],
             "array": False,
@@ -613,7 +613,7 @@ def simplify_introspection(data):
         }
 
     # Get the Root subscription type
-    if schema['subscriptionType'] and 'name' in schema['subscriptionType']:
+    if 'subscriptionType' in schema and schema['subscriptionType'] and 'name' in schema['subscriptionType']:
         output['schema']['subscription'] = {
             "type": schema['subscriptionType']['name'],
             "array": False,
@@ -621,7 +621,7 @@ def simplify_introspection(data):
         }
 
     # Get the Root mutation type
-    if schema['mutationType'] and 'name' in schema['mutationType']:
+    if 'mutationType' in schema and schema['mutationType'] and 'name' in schema['mutationType']:
         output['schema']['mutation'] = {
             "type": schema['mutationType']['name'],
             "array": False,
