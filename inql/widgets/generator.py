@@ -256,7 +256,7 @@ class GeneratorPanel():
             if self._filepicker():
                 self._loadurl(evt)
         else:
-            print("Loading JSON schema from: %s" % target)
+            print("Loading JSON schema from file: %s" % target)
             self._run(target=target,
                       key=self._cfg('Authorization Key'),
                       proxy=self._cfg('Proxy'),
@@ -303,9 +303,14 @@ class GeneratorPanel():
 
         # call init method from Introspection tool
         if flag == 'JSON':
-            with open(target, 'r') as f:
-                host = os.path.splitext(os.path.basename(target))[0]
-                self._http_mutator.set_stub_response(host, f.read())
+            if self._http_mutator:
+                with open(target, 'r') as f:
+                    print(f)
+                    host = os.path.splitext(os.path.basename(target))[0]
+                    self._http_mutator.set_stub_response(host, f.read())
+            else:
+                # InQL running as a stanadlone app, without Burp
+                pass
 
         def async_run():
             init(AttrDict(args.copy()))
