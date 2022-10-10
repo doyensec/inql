@@ -44,7 +44,9 @@ def wrap_exit(method, exceptions = (OSError, IOError)):
             sys.exit('Can\'t open \'{0}\'. Error #{1[0]}: {1[1]}'.format(args[0], sys.exc_info()[1].args))
 
     return fn
-exit = wrap_exit(exit)
+
+if sys.version_info[0] == 2:
+    exit = wrap_exit(exit)
 
 # colors for terminal messages
 red = ""
@@ -254,6 +256,7 @@ def init(args, print_help=None):
 
     if args.target is not None or args.schema_json_file is not None:
         if args.target is not None:
+            args.target = str(args.target)
             # Acquire GraphQL endpoint URL as a target
             host = urlparse(args.target).netloc
         else:
