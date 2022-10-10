@@ -120,7 +120,7 @@ class TimerTab(ITab, IHttpListener):
 
     def addLog(self, messageInfo, toolFlag, time, row, operationName):
 
-        self.panel.getLogTableModel().getLogArray().add(Log(LocalDateTime.now(),
+        self.panel.getLogTableModel().getLogArray().add(Log(LocalDateTime.now().toString(),
                                                            self._callbacks.getToolName(toolFlag),
                                                            self._callbacks.saveBuffersToTempFiles(messageInfo),
                                                            self._helpers.analyzeRequest(messageInfo).getUrl(),
