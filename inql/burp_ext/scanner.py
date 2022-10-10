@@ -160,6 +160,10 @@ class BurpScannerCheck(IScannerCheck):
         :return: issues containing all the burp findings, they will be added to the found issues.
         """
         issues = []
+
+        if not (200 <= baseRequestResponse.getStatusCode() < 300):
+            return issues
+            
         for check in TECH_CHECKS:
             # look for matches of our passive check grep string
             matches = self._get_matches(baseRequestResponse.getResponse(), bytearray(check))
@@ -222,6 +226,10 @@ class BurpScannerCheck(IScannerCheck):
         """
 
         issues = []
+
+        if not (200 <= baseRequestResponse.getStatusCode() < 300):
+            return issues
+            
         # will request the URLS, passive scanner will do the grep and match
         for url in URLS:
             path = self._callbacks.getHelpers().analyzeRequest(baseRequestResponse).getUrl().getPath()
