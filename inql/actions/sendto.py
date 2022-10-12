@@ -30,6 +30,8 @@ except ImportError:
 from inql.actions.browser import URLOpener
 from inql.utils import make_http_handler, HTTPRequest
 
+LISTENING_PORT = 0xD09e115ec % (2 ** 16)
+
 
 class SimpleMenuItem:
     """
@@ -105,7 +107,7 @@ class HTTPMutator(object):
         self._stub_responses = stub_responses if stub_responses is not None else {}
 
         # Register GraphIQL Server
-        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(self))
+        self._server = HTTPServer(('127.0.0.1', LISTENING_PORT), make_http_handler(self))
         t = threading.Thread(target=self._server.serve_forever)
         #t.daemon = True
         t.start()
