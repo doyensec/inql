@@ -108,10 +108,10 @@ class GraphQLEditorTab(IMessageEditorTab):
         return self._currentMessage[r.getBodyOffset():].tostring() != self.payload_view.textarea().getText()
 
 
-    def getSeletedData(self):
+    def getSelectedData(self):
         """
         Return the selected data.
 
         :return: the selected string.
         """
-        return  self.payload_view.textarea().getSeletedText()
+        return  self.payload_view.textarea().getSelectedText()
