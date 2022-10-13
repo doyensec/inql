@@ -246,11 +246,10 @@ class PayloadView:
                     self.this.addTab(tname, this)
                     this.setOneTouchExpandable(True)
                     this.setDividerLocation(0.66)
+                    this.getBottomComponent().setVisible(True)
                     if 'variables' in queries[query_key]:
-                        this.getBottomComponent().setVisible(True)
                         self._textareas[vname].setText(json.dumps(queries[query_key]['variables'], indent=4))
                     else:
-                        this.getBottomComponent().setVisible(False)
                         self._textareas[vname].setText("{}")
 
         # Remove empty graphql tabs
