@@ -19,6 +19,34 @@ from inql.actions.sendto import HTTPMutator
 from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string, \
     querify, json_encode
 
+class SendMenuItem(IContextMenuFactory):
+    """Handles additional entries in context (right-click) menu in the "Send To ..." style.
+    
+    This is a new approach, that's only used for "Send to Attacker" right now.
+    The older class, OmniMenuItem has reached it's extensibility.
+    """
+    def __init__(self, callbacks, action, label):
+        self.menu_item = JMenuItem("Send to %s" % label)
+        self.action = action
+        callbacks.registerContextMenuFactory(self)
+
+    def createMenuItems(self, invocation):
+        """Called on a right click, when context menu gets invoked."""
+        listener = SendMenuListener(invocation, self.action)
+        self.menu_item.addActionListener(listener)
+        return [self.menu_item]
+
+class SendMenuListener(ActionListener):
+    """Action Listener - listens for clicks inside the context menu."""
+    def __init__(self, invocation, action):
+        # Invocation contains information about where the context menu was invoked.
+        self.invocation = invocation
+        self.action = action
+
+    def actionPerformed(self, event):
+        """Called when a menu item gets clicked."""
+        for rr in self.invocation.getSelectedMessages():
+            self.action(rr)
 
 class OmniMenuItem(IContextMenuFactory):
     """Menu item for burp and inql interface. IT contains same action but it is shown in multiple places"""
@@ -72,7 +100,7 @@ class OmniMenuItem(IContextMenuFactory):
 
 
 class BurpHTTPMutator(HTTPMutator, IProxyListener):
-    def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None):
+    def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None, attacker_receiver=None):
         super(BurpHTTPMutator, self).__init__(overrideheaders=overrideheaders, requests=requests, stub_responses=stub_responses)
 
         if helpers and callbacks:

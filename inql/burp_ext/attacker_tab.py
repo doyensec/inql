@@ -28,7 +28,7 @@ class AttackerTab(ITab):
     def getUiComponent(self):
         """Factory, should return a new tab."""
         # Request editor & buttons (left pane)
-        request_pane = AttackerRequest(self._callbacks)
+        request_pane = AttackerRequest(self._callbacks, self._helpers)
 
         # Request/response views (top right pane)
         history_viewer = AttackerHistoryViewer(self._callbacks.createMessageEditor)

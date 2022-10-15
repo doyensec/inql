@@ -2,6 +2,8 @@ from __future__ import print_function
 
 import platform
 
+from inql.burp_ext.contextual import SendMenuItem
+
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
@@ -15,10 +17,38 @@ from java.io import PrintWriter;
 from java.awt import BorderLayout, FlowLayout, Dimension
 
 class AttackerRequest(IMessageEditorController):
-    def __init__(self, callbacks):
-        self._callbacks = callbacks
-        self.request_editor = self._callbacks.createMessageEditor(self, True).getComponent()
-        self.fix = self._callbacks.customizeUiComponent
+    def __init__(self, callbacks, helpers):
+        self._helpers = helpers
+        self._analyze = helpers.analyzeRequest
+
+        self.url = JTextField()
+
+        self.request_editor = callbacks.createMessageEditor(self, True)
+        self.fix = callbacks.customizeUiComponent
+
+        self._menu_item = SendMenuItem(callbacks, self.send_to, "Attacker (new)")
+
+    def _get_url(self, rr):
+        """Get URL. Should be as easy as helpers.analyzeRequest(request).getUrl(), but that doesn't work for some reason."""
+        http = rr.httpService
+
+        protocol = http.protocol
+        host = http.host
+        port = http.port
+
+        if (port == 80 and protocol == 'http') or (port == 443 and protocol == 'https'):
+            url = "%s://%s" % (protocol, host)
+        else:
+            url = "%s://%s:%s" % (protocol, host, port)
+
+        return url
+
+    def send_to(self, rr=None):
+        url = self._get_url(rr)
+        request = rr.request
+
+        self.url.text = url
+        self.request_editor.setMessage(request, True)
 
     def render(self):
         # Payloads
@@ -55,18 +85,15 @@ class AttackerRequest(IMessageEditorController):
         # Bottom-Left panel (editor)
         urlpane = JPanel(BorderLayout(5, 5), border = BorderFactory.createEmptyBorder(5, 5, 5, 5))
         urlpane.add(JLabel("Target: "), BorderLayout.WEST)
-        url = JTextField()
-        self.fix(url)
-        urlpane.add(url, BorderLayout.CENTER)
+        self.fix(self.url)
+        urlpane.add(self.url, BorderLayout.CENTER)
         urlpane.add(JButton(text="Send"), BorderLayout.EAST)
         self.fix(urlpane)
 
         bottomleft = JPanel(BorderLayout(5, 5))
         bottomleft.add(urlpane, BorderLayout.NORTH)
-        tabs = JTabbedPane()
-        editor = self.request_editor
-        tabs.addTab("Request", editor)
-        bottomleft.add(tabs, BorderLayout.CENTER)
+        self.editor = self.request_editor.component
+        bottomleft.add(self.editor, BorderLayout.CENTER)
         self.fix(bottomleft)
 
         # This will be a left pane under "InQL Attacker" tab
