@@ -54,7 +54,6 @@ class AttackerHistoryLog(AbstractTableModel, IHttpListener):
         ][col]
 
     def getValueAt(self, row, col):
-        logging.info("getValueAt %s, %s" % (row, col))
         entry = self.db.get(row)
         if col == 0:
             return entry.date

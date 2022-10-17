@@ -15,6 +15,7 @@ from inql.actions.sendto import SendToAction
 from inql.burp_ext.contextual import BurpHTTPMutator as HTTPMutator, OmniMenuItem
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.generator import GeneratorPanel
+from inql.burp_ext.contextual import SendMenuItem
 
 
 class GeneratorTab(ITab):
@@ -63,6 +64,7 @@ class GeneratorTab(ITab):
                                             send_to=http_mutator.send_to_repeater_post_form_data_body)
         graphiql_sender = SendToAction(omnimenu=graphiql_omnimenu, has_host=http_mutator.has_host,
                                        send_to=http_mutator.send_to_graphiql)
+        attacker_sender = SendMenuItem(self._callbacks, "Attacker", inql_handler=http_mutator.send_to_attacker)
 
         custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
         try:
@@ -85,6 +87,7 @@ class GeneratorTab(ITab):
                 repeater_post_urlencoded_sender,
                 repeater_post_form_data_sender,
                 graphiql_sender,
+                attacker_sender,
                 custom_header_setter],
             restore=restore,
             proxy=proxy,

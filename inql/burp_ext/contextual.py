@@ -1,3 +1,4 @@
+from argparse import Action
 import json
 import re
 
@@ -8,6 +9,7 @@ except ImportError:
     import urllib2 as urllib_request # for Python 2 and Jython
     from urllib import urlencode
 
+import logging
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 
@@ -25,16 +27,48 @@ class SendMenuItem(IContextMenuFactory):
     This is a new approach, that's only used for "Send to Attacker" right now.
     The older class, OmniMenuItem has reached it's extensibility.
     """
-    def __init__(self, callbacks, action, label):
-        self.menu_item = JMenuItem("Send to %s" % label)
-        self.action = action
+    def __init__(self, callbacks, label, inql_handler=None, burp_handler=None):
+        # legacy menu, used in InQL Scanner tab
+        self.menuitem = JMenuItem("Send to %s" % label)
+        self.new_menu = JMenuItem("Send to %s" % label)
+        self.label = label
+        self.burp_handler = burp_handler
+        self.inql_handler = inql_handler
         callbacks.registerContextMenuFactory(self)
 
     def createMenuItems(self, invocation):
         """Called on a right click, when context menu gets invoked."""
-        listener = SendMenuListener(invocation, self.action)
-        self.menu_item.addActionListener(listener)
-        return [self.menu_item]
+        if self.burp_handler is None:
+            return
+
+        listener = SendMenuListener(invocation, self.burp_handler)
+        self.new_menu.addActionListener(listener)
+        return [self.new_menu]
+
+    def ctx(self, host=None, payload=None, fname=None):
+        """Called every time a query gets selected in "InQL Scanner" tab.
+        
+        The createMenuItem does not get called and self.menuitem is accessed manually,
+        thus listener needs to be set up manually (and it receives different input).
+        """
+        # Remove previous listeners, if any are set.
+        for listener in self.menuitem.getActionListeners():
+            self.menuitem.removeActionListener(listener)
+
+        # Set up a new listener, passing it selected GraphQL payload.
+        listener = SendMenuListenerFromScannerTab(host, payload, self.inql_handler, self.burp_handler)
+        self.menuitem.addActionListener(listener)
+
+class SendMenuListenerFromScannerTab(ActionListener):
+    def __init__(self, host, payload, inql_handler, burp_handler):
+        self.inql_handler = inql_handler
+        self.burp_handler = burp_handler
+        self.host = host
+        self.payload = payload
+
+    def actionPerformed(self, event):
+        logging.debug("Click received! Host: %s, payload: %s" % (self.host, self.payload))
+        self.inql_handler(self.host, self.payload, self.burp_handler)
 
 class SendMenuListener(ActionListener):
     """Action Listener - listens for clicks inside the context menu."""
@@ -143,6 +177,37 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
         if self._helpers and self._callbacks and messageIsRequest:
             self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
                                   message.getMessageInfo().getRequest())
+
+    def send_to_attacker(self, host, payload, action):
+        logging.debug("send_to_attacker(%s, %s, %s" % (host, payload, action))
+        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        if req and self._callbacks and self._helpers:
+            info = req[0]
+            body = req[1]
+            nobody = body[:info.getBodyOffset()].tostring()
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+
+            try:
+                self._overrideheaders[host]
+            except KeyError:
+                self._overrideheaders[host] = []
+
+            headers = override_headers(headers, self._overrideheaders[host])
+            repeater_body = StringUtil.toBytes(string_join(
+                headers,
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                payload))
+
+            U = info.getUrl()
+            url = "%s://%s" % (
+                U.getProtocol(),
+                U.getHost() if (
+                    (U.getPort() == 80 and U.getProtocol() == 'http') or
+                    (U.getPort() == 443 and U.getProtocol() == 'https')
+                ) else "%s:%s" % (U.getHost(), U.getPort())
+            )
+            action(url, repeater_body, inql=True)
 
     def send_to_repeater(self, host, payload):
         req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
