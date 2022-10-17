@@ -13,11 +13,16 @@ from javax.swing import JTable, JScrollPane
 from javax.swing.table import AbstractTableModel
 from threading import Lock
 from java.io import PrintWriter;
+import logging
 
 class AttackerHistoryLog(AbstractTableModel, IHttpListener):
-    def __init__(self, callbacks, viewer):
+    def __init__(self, callbacks, helpers, viewer, editor):
+        self.helpers = helpers
+        self.callbacks = callbacks
         self._getToolName = callbacks.getToolName
         self.viewer = viewer
+        self.editor = editor
+        self.EXTENDER_FLAG = callbacks.TOOL_EXTENDER
 
         self._lock = Lock()
         self.db = ArrayList()
@@ -35,29 +40,60 @@ class AttackerHistoryLog(AbstractTableModel, IHttpListener):
             return 0
 
     def getColumnCount(self):
-        return 2
+        return 7
 
     def getColumnName(self, col):
-        if col == 0:
-            return "Tool"
-        if col == 1:
-            return "URL"
-        return ""
+        return [
+            "Date",
+            "Host",
+            "Path",
+            "Status",
+            "Length",
+            "From",
+            "To"
+        ][col]
 
     def getValueAt(self, row, col):
+        logging.info("getValueAt %s, %s" % (row, col))
         entry = self.db.get(row)
         if col == 0:
-            return self._getToolName(entry._tool)
+            return entry.date
         if col == 1:
-            return entry.toString()
-        return ""
+            return entry.host
+        if col == 2:
+            return entry.path
+        if col == 3:
+            return entry.status
+        if col == 4:
+            return entry.length
+        if col == 5:
+            return entry.start
+        if col == 6:
+            return entry.end
 
-    def processHttpMessage(self, toolFlag, messageIsRequest, messageInfo):
-        self._stdout.println(
-                ("HTTP request to " if messageIsRequest else "HTTP response from ") +
-                messageInfo.getHttpService().toString() +
-                " [" + self._getToolName(toolFlag) + "]")
+    def processHttpMessage(self, toolFlag, isRequest, rr):
+        if (not isRequest) and (toolFlag == self.EXTENDER_FLAG):
+            request = rr.request
+            hashid = hash(str(request))
+            if hashid in self.editor.requests:
+                data = self.editor.requests.pop(hashid)
 
+                info = self.helpers.analyzeResponse(rr.response)
+
+                status = info.getStatusCode()
+                length = len(rr.response) - info.getBodyOffset()
+
+                # save memory by offloading requests and responses to disk
+                rr_offloaded = self.callbacks.saveBuffersToTempFiles(rr)
+                entry = AttackLogEntry(data, status, length, rr_offloaded)
+
+                # Java's Arraylist isn't thread safe
+                self._lock.acquire()
+                self.db.add(entry)
+                self.fireTableRowsInserted(self.getRowCount(), self.getRowCount())
+                self._lock.release()
+
+                
 
 class AttackHistoryLogTable(JTable):
     """Custom JTable wrapper with row selection support."""
@@ -67,15 +103,20 @@ class AttackHistoryLogTable(JTable):
 
     def changeSelection(self, row, col, toggle, extend):
         entry = self.log.db.get(row)
-        self.log.viewer.response.setMessage(entry.rr.getRequest(), False)
-        self.log.viewer.response.setMessage(entry.rr.getResponse(), False)
+        self.log.viewer.request_editor.setMessage(entry.rr.getRequest(), False)
+        self.log.viewer.response_editor.setMessage(entry.rr.getResponse(), False)
         self.log.current = entry.rr
 
         JTable.changeSelection(self, row, col, toggle, extend)
 
 
 class AttackLogEntry:
-    def __init__(self, tool, requestResponse, url):
-        self.tool = tool
-        self.rr = requestResponse
-        self.url = url
+    def __init__(self, data, status, length, rr):
+        self.date = data.date
+        self.host = data.host
+        self.path = data.path
+        self.status = status
+        self.length = length
+        self.start = data.start
+        self.end = data.end
+        self.rr = rr

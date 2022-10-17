@@ -7,6 +7,7 @@ if platform.system() != "Java":
 import os
 import shutil
 import tempfile
+import logging
 
 from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 
@@ -17,6 +18,7 @@ from inql.burp_ext.generator_tab import GeneratorTab
 from inql.burp_ext.attacker_tab import AttackerTab
 from inql.burp_ext.timer_tab import TimerTab
 from inql.utils import stop
+from java.io import PrintWriter
 
 class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
     """
@@ -30,6 +32,17 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         :param callbacks:  burp callbacks
         :return: None
         """
+        stdout = PrintWriter(callbacks.getStdout(), True)
+        
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler(stdout)
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+        root.info("INFO MESSAGE")
+
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()

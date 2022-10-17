@@ -13,13 +13,13 @@ class AttackerHistoryViewer(IMessageEditorController):
     def __init__(self, createMessageEditor):
         self.createMessageEditor = createMessageEditor
 
-        self.request_editor = self.createMessageEditor(self, False).getComponent()
-        self.response_editor = self.createMessageEditor(self, False).getComponent()
+        self.request_editor = self.createMessageEditor(self, False)
+        self.response_editor = self.createMessageEditor(self, False)
 
     def render(self):
         tabs = JTabbedPane()
-        tabs.addTab("Request", self.request_editor)
-        tabs.addTab("Response", self.response_editor)
+        tabs.addTab("Request", self.request_editor.getComponent())
+        tabs.addTab("Response", self.response_editor.getComponent())
         return tabs
 
     def getHttpService(self):

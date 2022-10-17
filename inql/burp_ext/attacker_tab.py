@@ -34,7 +34,7 @@ class AttackerTab(ITab):
         history_viewer = AttackerHistoryViewer(self._callbacks.createMessageEditor)
 
         # Log entries (bottom right pane)
-        history_log = AttackerHistoryLog(self._callbacks, history_viewer)
+        history_log = AttackerHistoryLog(self._callbacks, self._helpers, history_viewer, request_pane)
 
         # Top level pane
         return JPanel().add(JSplitPane(
