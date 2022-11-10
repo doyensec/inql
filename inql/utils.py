@@ -5,6 +5,7 @@ import threading
 import ssl
 import json
 import random
+import re
 import string
 from .templates import graphiql_template
 
@@ -658,3 +659,9 @@ def raw_request(request):
         '\r\n'.join('{}: {}'.format(k, v) for k, v in headers.items()),
         request.data if request.data else '',
     )
+
+# Source of the regex: https://spec.graphql.org/June2018/#sec-Names
+VALID_GRAPHQL_NAMES = re.compile('^[_A-Za-z][_0-9A-Za-z]*$')
+
+def is_valid_graphql_name(name):
+    return VALID_GRAPHQL_NAMES.match(name) is not None
