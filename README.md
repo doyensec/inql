@@ -6,9 +6,11 @@
 >
 > Please, help us make InQL better by reporting these issues [here](https://github.com/doyensec/inql/issues/new?assignees=execveat&labels=bug%2Cparsing&template=incorrectly_parsed_graphql_schema.yml&title=%5BImproper+parsing%5D%3A+). We will create a test suite and make sure that InQL parses all edge cases correctly, by the next major release.
 
-A security testing tool to facilitate [GraphQL](https://graphql.org/) technology security auditing efforts.
+---
 
-![InQL Logo](docs/inql.jpg)
+<img align="right" width="200" src="docs/inql.jpg">
+
+A security testing tool to facilitate [GraphQL](https://graphql.org/) technology security auditing efforts.
 
 InQL can be used as a stand-alone script or as a [Burp Suite](https://portswigger.net/burp) extension.
 
@@ -242,6 +244,7 @@ We advise to use the Burp to bypass this limitation temporarily.
 # Credits
 
 _Author and original maintainer:_ Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
+
 _Current maintainer:_ Andrew Konstantinov ([@execveat](https://infosec.exchange/@execveat))
 
 This project was made with love in [Doyensec Research island](https://doyensec.com/research.html).
