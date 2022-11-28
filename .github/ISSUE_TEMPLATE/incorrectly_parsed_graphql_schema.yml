@@ -1,0 +1,47 @@
+name: Improperly parsed GraphQL schema / Introspection errors
+description: Submit a GraphQL API or schema that does not get parsed or is parsed incorrectly
+title: "[Improper parsing]: "
+labels: ["bug", "parsing"]
+assignees: "execveat"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: dropdown
+    id: version
+    attributes:
+      label: InQL version
+      description: How did you install InQL (in either case make sure you're using the latest version before reporting)?
+      options:
+        - BApp Store
+        - master branch
+        - other (explain in the description)
+  - type: input
+    id: url
+    attributes:
+      label: GraphQL API
+      description: URL of the GraphQL API (skip this if schema is provided as file)
+      placeholder: https://.../graphql
+    validations:
+      required: false
+  - type: input
+    id: specification
+    attributes:
+      label: GraphQL specification version
+      description: Please add GraphQL [specification](https://spec.graphql.org/) of the API / schema, if you know it.
+      placeholder: unknown
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: What isn't working?
+      description: |
+        Explain, what isn't working as expected. Provide a screenshot or log files if relevant.
+
+        Add schema in the attachment, if the GraphQL URL wasn't shared above.
+
+        Tip: You can attach images or files by clicking this area to highlight it and then dragging files in.
+    validations:
+      required: true
