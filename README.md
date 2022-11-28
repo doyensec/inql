@@ -132,14 +132,14 @@ Replace query argument with a placeholder and InQL will generate batch attack re
 
 ```graphql
 query {
-	Character(id: $[INT:1:2]) {
-		name {
-			first
-			last
-		}
-		gender
-		age
-	}
+  Character(id: $[INT:1:2]) {
+    uname {
+      first
+      last
+    }
+    gender
+    age
+  }
 }
 ```
 
@@ -147,22 +147,22 @@ will get converted into:
 
 ```
 query {
- 	op1: Character(id: 1) {
-		name {
-			first
-			last
-		}
-		gender
-		age
-	}
-	op2: Character(id: 2) {
-		name {
-			first
-			last
-		}
-		gender
-		age
-	}
+   op1: Character(id: 1) {
+    name {
+      first
+      last
+    }
+    gender
+    age
+  }
+  op2: Character(id: 2) {
+    name {
+      first
+      last
+    }
+    gender
+    age
+  }
 }
 ```
 
