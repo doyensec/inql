@@ -89,17 +89,24 @@ The following screenshot shows the use of templates generation:
 Based on InQL's introspection intermediate representation (IIR), the tool is able to generate arbitrarily nested queries with support to
 any scalar type, enumerations, arrays, and objects.
 
-```javascript
+```graphql
 query {
-  Character(id_not_in:[1334], sort:[ROLE_DESC], search:"code", id_not:1334, id:1334, id_in:[1334]) {
+  Character(
+    id_not_in: [1334]
+    sort: [ROLE_DESC]
+    search: "code"
+    id_not: 1334
+    id: 1334
+    id_in: [1334]
+  ) {
     image {
       large
     }
     siteUrl
     favourites
     modNotes
-    description(asHtml:true)
-    media(sort:[TITLE_ROMAJI], type:ANIME, perPage:1334, page:1334) {
+    description(asHtml: true)
+    media(sort: [TITLE_ROMAJI], type: ANIME, perPage: 1334, page: 1334) {
       edges {
         isMainStudio
       }
@@ -145,9 +152,9 @@ query {
 
 will get converted into:
 
-```
+```graphql
 query {
-   op1: Character(id: 1) {
+  op1: Character(id: 1) {
     name {
       first
       last
