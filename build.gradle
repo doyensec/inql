@@ -1,0 +1,50 @@
+apply plugin: 'java'
+
+apply plugin: 'kotlin'
+
+defaultTasks 'fatJar'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+buildscript {
+
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.0"
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main {
+        kotlin {
+            srcDir 'kotlin'
+        }
+        resources {
+            srcDir 'python'
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.8.0"
+    implementation 'org.python:jython-standalone:2.7.3'
+    implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
+} 
+
+task fatJar(type: Jar) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    manifest {
+        attributes('Class-Path': configurations.compileClasspath.collect { it.getName() }.join(' '))
+    }
+    archiveFileName = project.name + '-all.jar'
+    from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
+

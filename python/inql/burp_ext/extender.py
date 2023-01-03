@@ -9,7 +9,8 @@ import shutil
 import tempfile
 import logging
 
-from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
+#from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
+from burp import IExtensionStateListener
 
 from inql import __version__
 from inql.burp_ext.editor import GraphQLEditorTab
@@ -20,18 +21,24 @@ from inql.burp_ext.timer_tab import TimerTab
 from inql.utils import stop
 from java.io import PrintWriter
 
-class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
+#class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
+class BurpExtenderPython(IExtensionStateListener):
     """
     Main Class for Burp Extenders
     """
 
-    def registerExtenderCallbacks(self, callbacks):
+    def __init__(self, callbacks):
+        self.callbacks = callbacks
+
+    def registerExtenderCallbacks(self):
         """
         Overrides IBurpExtender method, it registers all the elements that compose this extension
 
         :param callbacks:  burp callbacks
         :return: None
         """
+        callbacks = self.callbacks
+
         stdout = PrintWriter(callbacks.getStdout(), True)
         
         root = logging.getLogger()

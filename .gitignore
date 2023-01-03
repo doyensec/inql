@@ -396,3 +396,9 @@ inql/__version__.py
 
 # Jython
 .jython*
+
+# Gradle
+.gradle
+gradle
+gradlew
+gradlew.bat
