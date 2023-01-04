@@ -7,15 +7,18 @@ if platform.system() != "Java":
 import os
 import shutil
 import tempfile
+import logging
 
 from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 
+from inql import __version__
 from inql.burp_ext.editor import GraphQLEditorTab
 from inql.burp_ext.scanner import BurpScannerCheck
 from inql.burp_ext.generator_tab import GeneratorTab
-from inql import __version__
+from inql.burp_ext.attacker_tab import AttackerTab
 from inql.burp_ext.timer_tab import TimerTab
 from inql.utils import stop
+from java.io import PrintWriter
 
 class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
     """
@@ -29,6 +32,17 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         :param callbacks:  burp callbacks
         :return: None
         """
+        stdout = PrintWriter(callbacks.getStdout(), True)
+        
+        root = logging.getLogger()
+        root.setLevel(logging.INFO)
+        handler = logging.StreamHandler(stdout)
+        handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+        root.info("INFO MESSAGE")
+
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()
@@ -43,6 +57,7 @@ class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStat
         self._tab = GeneratorTab(callbacks, helpers)
         callbacks.addSuiteTab(self._tab)
         callbacks.addSuiteTab(TimerTab(callbacks, helpers))
+        callbacks.addSuiteTab(AttackerTab(callbacks, helpers))
         # Register extension state listener
         callbacks.registerExtensionStateListener(self)
 

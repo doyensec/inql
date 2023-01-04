@@ -118,20 +118,20 @@ def generate(argument, fpath, custom=False, target="empty", green_print=lambda s
             # Print available operation types, usually: Query, Mutations & Subscriptions
             # This part also holds custom names (schema[Type]['name'] != 'RootQuery', 'RootMutation', 'Subscriptions')
             # --------------------
-            if result['data']['__schema']['mutationType'] is not None:
+            if 'mutationType' in result['data']['__schema'] and result['data']['__schema']['mutationType'] is not None:
                 output_file.write("<ul><li class='mutation'>{0}</li>".format(
                     result['data']['__schema']['mutationType']['name']))
                 Mutation = result['data']['__schema']['mutationType']['name']
             else:
                 # Needed since not all GraphQL endpoints use/have all the three types (Query, Mutations & Subscriptions)
                 Mutation = None
-            if result['data']['__schema']['queryType'] is not None:
+            if 'queryType' in result['data']['__schema'] and result['data']['__schema']['queryType'] is not None:
                 output_file.write("<li class='query'>{0}</li>".format(
                     result['data']['__schema']['queryType']['name']))
                 Query = result['data']['__schema']['queryType']['name']
             else:
                 Query = None
-            if result['data']['__schema']['subscriptionType'] is not None:
+            if 'subscriptionType' in result['data']['__schema'] and result['data']['__schema']['subscriptionType'] is not None:
                 output_file.write(
                     "<li class='subscription'>{0}</li></ul>".format(
                         result['data']['__schema']['subscriptionType']['name']))

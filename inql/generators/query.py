@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import json
 
-from inql.utils import open, simplify_introspection
+from inql.utils import open, simplify_introspection, is_valid_graphql_name
 
 ORDER = {
     "scalar": 0,
@@ -239,6 +239,10 @@ def generate(argument, qpath="%s/%s", detect=True, green_print=lambda s: print(s
         else:
             rec = recurse_fields(s, rev, qvalues['type'], non_required_levels=2)
         for qname, qval in rec.items():
+            if not is_valid_graphql_name(qname):
+                print("Skipping a weird query: -->%s<--" % qname)
+                continue
+
             print("Writing %s %s" % (qname, qtype))
             with open(qpath % (qtype, '%s.query' % qname), 'w') as ofile:
                 body = "%s {\n\t%s%s\n}" % (qtype, qname, dict_to_qbody(qval, prefix='\t'))

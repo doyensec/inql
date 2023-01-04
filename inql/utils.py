@@ -5,7 +5,10 @@ import threading
 import ssl
 import json
 import random
+import re
 import string
+from .templates import graphiql_template
+
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -253,160 +256,55 @@ def run_timeout(execute, timeout):
 
 def make_http_handler(http_mutator=None):
     class GraphQLRequestHandler(BaseHTTPRequestHandler):
-        def graphiql_page(self, address, extrascript=""):
-            """
-            Return a graphiql console page given a domain
-            :param listenin_on: address on which the graphiql server proxy is listening on
-            :param domain: input domain on which to perform queries
-            :return: a string representing the graphiql page
-            """
-            return """<html>
-        <head>
-          <title>InQL GraphiQL Console</title>
-          <link href="https://unpkg.com/graphiql/graphiql.min.css" rel="stylesheet" />
-        </head>
-        <body style="margin: 0;">
-          <div id="graphiql" style="height: 100vh;"></div>
 
-          <script
-          crossorigin
-          src="https://unpkg.com/react/umd/react.production.min.js"
-          ></script>
-          <script
-          crossorigin
-          src="https://unpkg.com/react-dom/umd/react-dom.production.min.js"
-          ></script>
-          <script
-          crossorigin
-          src="https://unpkg.com/graphiql/graphiql.min.js"
-          ></script>
+        @property
+        def graphiql_html(self):
+            return graphiql_template(address=self.path.split('?')[0],
+                                     burp=not not http_mutator)
 
-          <script>
+        @property
+        def allowed_origin(self):
+            if not hasattr(self, '_allowed_origin'):
+                self._allowed_origin = re.compile('https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$')
+            return self._allowed_origin
 
-            /**
-             * This GraphiQL example illustrates how to use some of GraphiQL's props
-             * in order to enable reading and updating the URL parameters, making
-             * link sharing of queries a little bit easier.
-             *
-             * This is only one example of this kind of feature, GraphiQL exposes
-             * various React params to enable interesting integrations.
-             */
+        def log(self):
+            print("%s %s" % (self.command, self.path))
 
-              // Parse the search string to get url parameters.
-              var address = "%s";
-              var search = window.location.search;
-              var parameters = {};
-              search.substr(1).split('&').forEach(function (entry) {
-                var eq = entry.indexOf('=');
-                if (eq >= 0) {
-                  parameters[decodeURIComponent(entry.slice(0, eq))] =
-                  decodeURIComponent(entry.slice(eq + 1));
-                }
-              });
+        def send_cors_headers(self):
+            # Only allow cross-origin requests from localhost
+            request_origin = self.headers.getheader('Origin', '*')
+            response_origin = request_origin if self.allowed_origin.match(request_origin) else 'http://localhost'
 
-            // if variables was provided, try to format it.
-            if (parameters.variables) {
-              try {
-                parameters.variables =
-                JSON.stringify(JSON.parse(parameters.variables), null, 2);
-              } catch (e) {
-                    // Do nothing, we want to display the invalid JSON as a string, rather
-                    // than present an error.
-                  }
-                }
+            self.send_header('Access-Control-Allow-Origin', response_origin)
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-            // When the query and variables string is edited, update the URL bar so
-            // that it can be easily shared
-            function onEditQuery(newQuery) {
-              parameters.query = newQuery;
-              updateURL();
-            }
+        def do_OPTIONS(self):
+            self.log()
 
-            function onEditVariables(newVariables) {
-              parameters.variables = newVariables;
-              updateURL();
-            }
-
-            function onEditOperationName(newOperationName) {
-              parameters.operationName = newOperationName;
-              updateURL();
-            }
-
-            function updateURL() {
-              var newSearch = '?' + Object.keys(parameters).filter(function (key) {
-                return Boolean(parameters[key]);
-              }).map(function (key) {
-                return encodeURIComponent(key) + '=' +
-                encodeURIComponent(parameters[key]);
-              }).join('&');
-              history.replaceState(null, null, newSearch);
-            }
-
-            const graphQLFetcher = graphQLParams =>
-            fetch(address, {
-              method: 'post',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(graphQLParams),
-            })
-            .then(response => response.json())
-            .catch(() => response.text());
-            ReactDOM.render(
-              React.createElement(GraphiQL, {
-                fetcher: graphQLFetcher,
-                query: parameters.query,
-                variables: parameters.variables,
-                operationName: parameters.operationName,
-                onEditQuery: onEditQuery,
-                onEditVariables: onEditVariables,
-                onEditOperationName: onEditOperationName
-              }),
-              document.getElementById('graphiql'),
-            );
-            while (document.querySelector('.title') == null) {
-                // wait for the title to be something
-            }
-            document.querySelector('.title').innerHTML = '<a href="https://github.com/doyensec/inql"><img src="https://github.com/doyensec/inql/blob/master/docs/inql.png?raw=true" style="display: block; height:6em; z-index: 10; position: relative"></img></a>';
-            %s
-          </script>
-        </body>
-        </html>""" % (address, extrascript)
+            self.send_response(200, "ok")
+            self.send_cors_headers()
+            self.end_headers()
 
         # Handler for the GET requests
         def do_GET(self):
+            self.log()
+
+            if self.path == '/favicon.ico':
+                self.send_error(404, 'Not found')
+                return
             self.send_response(200)
+            self.send_cors_headers()
             self.send_header('Content-type', 'text/html')
             self.end_headers()
 
-            # Send the html message
-            if http_mutator:
-                page = self.graphiql_page(self.path, extrascript="""(function() {
-              var toolbar = document.querySelector('.toolbar');
-              var sendToRepeater = document.createElement('button');
-              sendToRepeater.classList.add('toolbar-button');
-              sendToRepeater.innerHTML = 'Send To Repeater';
-              sendToRepeater.title = 'Send To Repeater';
-              sendToRepeater.setAttribute('aria-invalid', true);
-              sendToRepeater.onclick = function() {
-                var xhr = new XMLHttpRequest();
-                xhr.open("PUT", address, true);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                var params = JSON.parse(JSON.stringify(parameters));
-                try {
-                    params['variables'] = JSON.parse(params['variables']);
-                } catch (e) {
-                    console.log('Cannot parse parameters');
-                }
-                xhr.send(JSON.stringify(params));
-              }
-              toolbar.appendChild(sendToRepeater);
-            } ());""")
-            else:
-                page = self.graphiql_page(self.path)
-
-            self.wfile.write(page.encode())
+            self.wfile.write(self.graphiql_html.encode())
             return
 
         def do_POST(self):
+            self.log()
+
             try:
                 content_len = int(self.headers.getheader('content-length', 0))
             except AttributeError:  # python3 has not the getheader type, use get instead
@@ -426,6 +324,7 @@ def make_http_handler(http_mutator=None):
                     host = url.hostname
                 else:
                     host = url.netloc
+
                 self.headers['Host'] = host
                 body = self.rfile.read(content_len)
                 if not http_mutator:
@@ -440,18 +339,20 @@ def make_http_handler(http_mutator=None):
                     raise Exception("IntrospectionQuery request contains errors")
 
                 self.send_response(200)
-                self.send_header('Content-type', 'application/json')
+                self.send_cors_headers()
+                self.send_header('Content-Type', 'application/json')
                 self.end_headers()
 
-                self.wfile.write(contents)
+                self.wfile.write(contents.encode())
             except Exception as ex:
+                print("An exception occured during POST: %s" % ex)
                 if host and http_mutator and http_mutator.get_stub_response(host) and "IntrospectionQuery" in body:
                     self.send_response(200)
+                    self.send_cors_headers()
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
                     self.wfile.write(http_mutator.get_stub_response(host))
                     return
-                print(ex)
                 self.send_response(400)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
@@ -464,6 +365,8 @@ def make_http_handler(http_mutator=None):
             return
 
         def do_PUT(self):
+            self.log()
+
             try:
                 content_len = int(self.headers.getheader('content-length', 0))
             except AttributeError:  # python3 has not the getheader type, use get instead
@@ -482,6 +385,7 @@ def make_http_handler(http_mutator=None):
                 print(self.rfile.read(content_len))
 
             self.send_response(200)
+            self.send_cors_headers()
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             return
@@ -605,7 +509,7 @@ def simplify_introspection(data):
     schema = data['data']['__schema']
 
     # Get the Root query type
-    if schema['queryType'] and 'name' in schema['queryType']:
+    if 'queryType' in schema and schema['queryType'] and 'name' in schema['queryType']:
         output['schema']['query'] = {
             "type": schema['queryType']['name'],
             "array": False,
@@ -613,7 +517,7 @@ def simplify_introspection(data):
         }
 
     # Get the Root subscription type
-    if schema['subscriptionType'] and 'name' in schema['subscriptionType']:
+    if 'subscriptionType' in schema and schema['subscriptionType'] and 'name' in schema['subscriptionType']:
         output['schema']['subscription'] = {
             "type": schema['subscriptionType']['name'],
             "array": False,
@@ -621,7 +525,7 @@ def simplify_introspection(data):
         }
 
     # Get the Root mutation type
-    if schema['mutationType'] and 'name' in schema['mutationType']:
+    if 'mutationType' in schema and schema['mutationType'] and 'name' in schema['mutationType']:
         output['schema']['mutation'] = {
             "type": schema['mutationType']['name'],
             "array": False,
@@ -755,3 +659,9 @@ def raw_request(request):
         '\r\n'.join('{}: {}'.format(k, v) for k, v in headers.items()),
         request.data if request.data else '',
     )
+
+# Source of the regex: https://spec.graphql.org/June2018/#sec-Names
+VALID_GRAPHQL_NAMES = re.compile('^[_A-Za-z][_0-9A-Za-z]*$')
+
+def is_valid_graphql_name(name):
+    return VALID_GRAPHQL_NAMES.match(name) is not None

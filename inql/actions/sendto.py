@@ -16,6 +16,7 @@ except ImportError:
     import urllib2 as urllib_request # for Python 2 and Jython
     from urllib import urlencode
 
+import errno
 import json
 import threading
 
@@ -29,6 +30,9 @@ except ImportError:
 
 from inql.actions.browser import URLOpener
 from inql.utils import make_http_handler, HTTPRequest
+
+LISTENING_PORT = 0xD09e115ec % (2 ** 16)
+LISTENING_PORT_FALLBACK = 20
 
 
 class SimpleMenuItem:
@@ -105,7 +109,21 @@ class HTTPMutator(object):
         self._stub_responses = stub_responses if stub_responses is not None else {}
 
         # Register GraphIQL Server
-        self._server = HTTPServer(('127.0.0.1', 0), make_http_handler(self))
+        for attempt in range(LISTENING_PORT_FALLBACK + 1):
+            try:
+                port = LISTENING_PORT + attempt
+                self._server = HTTPServer(('127.0.0.1', port), make_http_handler(self))
+                print("Starting HTTP server on http://127.0.0.1://%s" % port)
+                break
+            except Exception as e:
+                # If the static port isn't available (probably another Burp instance running in background), take the next port
+                if e.errno in (errno.EADDRINUSE, errno.EADDRNOTAVAIL):
+                    continue
+                else:
+                    raise
+        else:
+            raise Exception("No available ports for running embedded web server (tried ports from %s to %s)" %
+                (LISTENING_PORT, port))
         t = threading.Thread(target=self._server.serve_forever)
         #t.daemon = True
         t.start()

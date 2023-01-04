@@ -2,9 +2,17 @@
 from setuptools import setup
 import distutils.cmd
 import distutils.log
+import re
 
 def version():
-   return os.popen('git describe --tags --dirty').read().strip()[1:]
+   version = "unknown"
+   if os.path.isdir(".git"):
+      version = os.popen('git describe --tags --dirty').read().strip()[1:]
+   else:
+      m = re.search('-([-_0-9a-f.]+?)$', os.getcwd())
+      if m:
+         version = m.group(1)
+   return version
 
 class GenerateVersion(distutils.cmd.Command):
   """A custom command to create version file."""

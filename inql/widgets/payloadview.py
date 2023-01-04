@@ -32,19 +32,6 @@ class _PayloadListener(DocumentListener):
     def changedUpdate(self, e):
         self.changed_update(e)
 
-BaseTabbedPaneUI = JTabbedPane().getUI().getClass()
-
-class SneakTabbedPaneUI(BaseTabbedPaneUI):
-    def __init__(self, tabbed_pane):
-        self.tabbed_pane = tabbed_pane
-
-    def calculateTabAreaHeight(self, tab_placement, run_count, max_tab_height):
-        if self.tabbed_pane.getTabCount() > 1:
-            return self.super__calculateTabAreaHeight(tab_placement, run_count, max_tab_height)
-        else:
-            return 0
-
-
 class PayloadView:
     """
     PayloadView is a TextView viewer and editor.
@@ -59,7 +46,6 @@ class PayloadView:
         self._listener = None
 
         self.this = JTabbedPane()
-        self.this.setUI(SneakTabbedPaneUI(self.this))
 
         if payload:
             self.refresh(payload)
@@ -246,11 +232,10 @@ class PayloadView:
                     self.this.addTab(tname, this)
                     this.setOneTouchExpandable(True)
                     this.setDividerLocation(0.66)
+                    this.getBottomComponent().setVisible(True)
                     if 'variables' in queries[query_key]:
-                        this.getBottomComponent().setVisible(True)
                         self._textareas[vname].setText(json.dumps(queries[query_key]['variables'], indent=4))
                     else:
-                        this.getBottomComponent().setVisible(False)
                         self._textareas[vname].setText("{}")
 
         # Remove empty graphql tabs
