@@ -19,7 +19,7 @@ from datetime import date
 
 
 from .utils import string_join, mkdir_p, raw_request, urlopen
-from .generators import html, schema, cycles, query, tsv
+from .generators import html, schema, cycles, query, tsv, poi
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -172,6 +172,8 @@ def main():
                         help="Some graph are too complex to generate cycles in reasonable time, stream to stdout")
     parser.add_argument("--generate-tsv", dest="generate_tsv", action='store_true', default=False,
                         help="Generate TSV representation of query templates. It may be useful to quickly search for vulnerable I/O.")
+    parser.add_argument("--generate-poi", dest="generate_poi", action='store_true', default=False,
+                        help="Generate report on points of interest with detected sensitive fields")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -316,6 +318,11 @@ def init(args, print_help=None):
             tsv.generate(argument,
                          fpath=os.path.join(host, "endpoint_%s.tsv"),
                          green_print=lambda s: print(string_join(green, s, reset)))
+    
+        if args.generate_poi:
+            poi.generate(argument,
+                        fpath=os.path.join(host, "poi-%s-%s.txt" % (today, timestamp)),
+                        green_print=lambda s: print(string_join(green, s, reset)))
 
     else:
         # Likely missing a required arguments
