@@ -2,8 +2,8 @@ Uuid: 296e9a0730384be4b2fffef7b4e19b1f
 ExtensionType: 2
 Name: InQL - Introspection GraphQL Scanner
 RepoName: inql
-ScreenVersion: 4.0.5
-SerialVersion: 13
+ScreenVersion: 4.0.6
+SerialVersion: 14
 MinPlatformVersion: 2
 ProOnly: False
 Author: Andrea Brancaleoni @ Doyensec
