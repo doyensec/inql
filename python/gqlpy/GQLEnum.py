@@ -1,4 +1,4 @@
-class GQLEnum:
+class GQLEnum(object):
     name = ''                # type: str
     description = ''         # type: str
     is_deprecated = False    # type: bool

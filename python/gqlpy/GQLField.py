@@ -3,12 +3,12 @@ import gqlpy
 # FIXME: Add support for InputFields
 
 
-class GQLField:
+class GQLField(object):
     name = ''                # type: str
     description = ''         # type: str
     kind  = None             # type: gqlpy.GQLTypeKind
-    type  = None             # type: gqlply.GQLType
-    args = None              # type: gqlpy.GQLArg
+    type  = None             # type: gqlpy.GQLTypeProxy
+    args = None              # type: gqlpy.GQLArgs
     is_deprecated = False    # type: bool
     deprecation_reason = ''  # type: str
     schema = None            # type: gqlpy.GQLSchema
@@ -23,11 +23,8 @@ class GQLField:
         self.is_deprecated = is_deprecated
         self.deprecation_reason = deprecation_reason
 
-        #type_of_field = gqlpy.GQLType(field['type'])
-
-
     @staticmethod
-    def _wrap_inputs(json, schema):
+    def _wrap_args(json, schema):
         args = []
         for i in (json.get('args', []) or []):
             args.append(gqlpy.GQLArg.from_json(i, schema))
@@ -40,7 +37,7 @@ class GQLField:
             kind=gqlpy.GQLTypeKind(field['type']),
             schema=schema,
             description=field.get('description', ''),
-            args=GQLField._wrap_inputs(field, schema),
+            args=GQLField._wrap_args(field, schema),
             is_deprecated=field.get('isDeprecated', False),
             deprecation_reason=field.get('deprecationReason', '')
         )

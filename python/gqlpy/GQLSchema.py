@@ -1,9 +1,8 @@
 import gqlpy
-from collections import OrderedDict
 
 
-class GQLSchema:
-    types          = None  # type: OrderedDict[gqlpy.GQLType]
+class GQLSchema(object):
+    types          = None  # type: gqlpy.GQLTypes
     query          = None  # type: gqlpy.GQLType
     mutation       = None  # type: gqlpy.GQLType
     _query_type    = None  # type: str
@@ -12,7 +11,14 @@ class GQLSchema:
     def __init__(self, url, extra_headers=None):
         introspection_result = self.send_request(url, extra_headers)
         original_schema = introspection_result['data']['__schema']
-        self.populate(original_schema)
+
+        self._query_type    = original_schema['queryType']['name']
+        self._mutation_type = original_schema['mutationType']['name']
+
+        self.types = gqlpy.GQLTypes(self, original_schema)
+
+        self.query          = self.types[self._query_type]
+        self.mutation       = self.types[self._mutation_type]
 
     @staticmethod
     def send_request(url, extra_headers=None, minimize=True):
@@ -29,28 +35,27 @@ class GQLSchema:
 
         return result
 
-    def populate(self, original_schema):
-        self._query_type    = original_schema['queryType']['name']
-        self._mutation_type = original_schema['mutationType']['name']
+    def generate_query(self, name):
+        if type(name) == str:
+            field = self.query.fields[name]
+        else:
+            field = name
+        return gqlpy.GQLQuery(self.query, 'query', fields=[field])
 
-        types = []
-        for t in original_schema['types']:
-            if t['name'].startswith('__'):
-                # skip introspection types
-                continue
+    def generate_mutation(self, name):
+        if type(name) == str:
+            field = self.query.fields[name]
+        else:
+            field = name
+        return gqlpy.GQLQuery(self.mutation, 'mutation', fields=[field])
 
-            types.append(gqlpy.GQLType.from_json(t, self))
-        ordered = sorted(types, key=lambda i: i.name)
-        self.types = OrderedDict(((t.name, t) for t in ordered))
-
-        self.query    = self.types[self._query_type]
-        self.mutation = self.types[self._mutation_type]
-
-    def generate_sample_queries(self):
+    def print_sample_queries(self):
         for field in self.query.fields:
             query = gqlpy.GQLQuery(self.query, 'query', fields=[field])
 
             print("Query '%s.graphql':" % field.name)
-            query_string = query.print_query().splitlines()
+            query_string = self.generate_query(field)\
+                .print_query()\
+                .splitlines()
             print('\n'.join('    ' + line for line in query_string))
             print("")

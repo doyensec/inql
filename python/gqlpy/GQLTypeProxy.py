@@ -1,7 +1,7 @@
 import gqlpy
 
 
-class GQLTypeProxy:
+class GQLTypeProxy(object):
     name = ''      # type: str
     schema = None  # type: gqlpy.GQLSchema
     max_depth = 4  # type: int
@@ -23,3 +23,7 @@ class GQLTypeProxy:
             return proxy(item, 0)
 
         return getattr(upstream, item)
+
+    def __dir__(self):
+        return super(gqlpy.GQLType, self.schema.types[self.name]).__dir__()
+

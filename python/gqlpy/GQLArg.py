@@ -1,7 +1,7 @@
 import gqlpy
 
 
-class GQLArg:
+class GQLArg(object):
     name         = ''     # type: str
     kind         = None   # type: gqlpy.GQLTypeKind
     description  = ''     # type: str

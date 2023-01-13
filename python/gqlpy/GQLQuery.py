@@ -1,12 +1,12 @@
 import gqlpy
 
 
-class GQLQuery:
+class GQLQuery(object):
     type    = None    # type: gqlpy.GQLType
     operation = ''    # type: str
     name   = ''       # type: str
     description = ''  # type: str
-    fields = None     # type: List[gqlpy.GQLField]
+    fields = None     # type: gqlpy.GQLFields
 
     def __init__(self, gqltype, operation='query', name='', fields=None):
         self.fields = fields if fields else self.type.fields
@@ -50,7 +50,7 @@ class GQLQuery:
         middle_lines = ""
         for field in self.fields:
             subquery = gqlpy.GQLSubQuery(field)
-            middle_lines += PADDING + NEWLINE.join(subquery.print_query(indent + 2).splitlines()) + NEWLINE
+            middle_lines += '    ' + NEWLINE.join(subquery.print_query(indent + 2).splitlines()) + NEWLINE
 
         last_line = '}' + NEWLINE if not self.type.kind.is_leaf else ""
 

@@ -1,4 +1,4 @@
-class GQLTypeKind:
+class GQLTypeKind(object):
     """Construct a type out of GraphQL schema fragment.
 
     Type kinds are stored in the 'kind' property, which is defined by __TypeKind enum:

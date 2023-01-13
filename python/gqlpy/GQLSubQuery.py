@@ -1,8 +1,8 @@
 import gqlpy
 
 
-class GQLSubQuery:
-    field        = None  # type: gqlpy.GQLField
+class GQLSubQuery(object):
+    field       = None  # type: gqlpy.GQLField
     name        = ''    # type: str
     description = ''    # type: str
     max_depth   = 4     # type: int

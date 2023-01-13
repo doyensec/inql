@@ -1,18 +1,18 @@
 import gqlpy
 
 
-class GQLType:
+class GQLType(object):
     name = ''          # type: str
     kind = None        # type: gqlpy.GQLTypeKind
     schema = None      # type: gqlpy.GQLSchema
     description = ''   # type: str
-    fields = None      # type: List[gqlpy.gqlpy.GQLTypeProxy]
-    interfaces = None  # type: List[gqlpy.gqlpy.GQLTypeProxy]
-    enums = None       # type: List[gqlpy.gqlpy.GQLEnum]
-    inputs = None      # type: List[gqlpy.gqlpy.GQLArg]
+    fields = None      # type: gqlpy.GQLFields
+    interfaces = None  # type: gqlpy.GQLInterfaces
+    enums = None       # type: gqlpy.GQLEnums
+    args = None      # type: gqlpy.GQLArgs
     url = ''           # type: str
 
-    def __init__(self, name, kind, schema, description='', fields=None, interfaces=None, enums=None, inputs=None, url=''):
+    def __init__(self, name, kind, schema, description='', fields=None, interfaces=None, enums=None, args=None, url=''):
         self.name = name
         self.kind = kind
         self.schema = schema
@@ -20,67 +20,34 @@ class GQLType:
         self.fields = fields
         self.interfaces = interfaces
         self.enums = enums
-        self.inputs = inputs
+        self.args = args
         self.url = url
 
     @staticmethod
-    def _wrap_typeref(json, schema, name):
-        types = []
-        for value in (json.get(name, []) or []):
-            if 'type' in value:
-                kind = gqlpy.GQLTypeKind(value['type'])
-            elif 'kind' in value:
-                kind = gqlpy.GQLTypeKind(value)
-            else:
-                print("wtf, I don't get this", name, value)
-                print()
-                print(json)
-            types.append(gqlpy.GQLTypeProxy(kind.name, schema))
-        return types
-
-    @staticmethod
-    def _wrap_fields(json, schema):
-        fields = []
-        for value in (json.get('fields', []) or []):
-            field = gqlpy.GQLField.from_json(value, schema)
-            fields.append(field)
-        return fields
-
-    @staticmethod
-    def _wrap_enums(json):
-        enums = []
-        for enum in (json.get('enumValues', []) or []):
-            enums.append(gqlpy.GQLEnum.from_json(enum))
-        return enums
-
-    @staticmethod
-    def _wrap_inputs(json, schema):
-        inputs = []
-        for i in (json.get('inputFields', []) or []):
-            inputs.append(gqlpy.GQLArg.from_json(i, schema))
-        return inputs
-
-    @staticmethod
     def from_json(json, schema):
+        wrap = gqlpy.GQLWrapFactory(schema, json)
+
         return GQLType(
             name=json['name'],
             kind=gqlpy.GQLTypeKind(json),
             schema=schema,
             description=json.get('description', ''),
-            fields=GQLType._wrap_fields(json, schema),
-            interfaces=GQLType._wrap_typeref(json, schema, 'interfaces'),
-            enums=GQLType._wrap_enums(json),
-            inputs=GQLType._wrap_inputs(json, schema),
+
+            fields     = wrap.fields(),
+            interfaces = wrap.interfaces(),
+            enums      = wrap.enums(),
+            args       = wrap.args(),
+
             url=json.get('specifiedByURL', '')
         )
 
     def __repr__(self):
-        return '"{name}" ({kind}) - {description} - [fields: {fields}] [interfaces: {interfaces}] [enums: {enums}] [ inputs: {inputs}]'.format(
+        return '"{name}" ({kind}) - {description} - [fields: {fields}] [interfaces: {interfaces}] [enums: {enums}] [ args: {args}]'.format(
             name        = self.name,
             kind        = self.kind.kind,
             description = self.description,
             fields      = ', '.join([str(x) for x in self.fields]),
             interfaces  = ', '.join([str(x) for x in self.interfaces]),
             enums       = ', '.join([str(x) for x in self.enums]),
-            inputs      = ', '.join([str(x) for x in self.inputs])
+            args        = ', '.join([str(x) for x in self.args])
         )

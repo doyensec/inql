@@ -97,3 +97,11 @@ def format_comment(string, max_length=60):
     return '\n'.join(['# ' + line for line in formatted_lines])
 
 
+def safe_get_list(dictionary, name):
+    """Safely extract list from the dictionary, even if the key does not exist or type is wrong."""
+    res = dictionary.get(name, [])
+
+    if type(res) is list:
+        return res
+    else:
+        return []
