@@ -49,7 +49,6 @@ class BurpExtenderPython(IExtensionStateListener):
         handler.setFormatter(formatter)
         root.addHandler(handler)
         root.info("INFO MESSAGE")
-
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
         helpers = callbacks.getHelpers()

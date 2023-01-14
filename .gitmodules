@@ -1,0 +1,3 @@
+[submodule "lib/GQLSpection"]
+	path = lib/GQLSpection
+	url = git@github.com:doyensec/GQLSpection.git
