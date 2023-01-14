@@ -8,5 +8,5 @@ MinPlatformVersion: 2
 ProOnly: False
 Author: Andrea Brancaleoni @ Doyensec
 ShortDescription: InQL - A Burp Extension for GraphQL Security Testing
-EntryPoint: build/libs/InQL-all.jar
-BuildCommand: gradle
+EntryPoint: build/libs/InQL.jar
+BuildCommand: ./gradlew

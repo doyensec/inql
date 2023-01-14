@@ -399,6 +399,3 @@ inql/__version__.py
 
 # Gradle
 .gradle
-gradle
-gradlew
-gradlew.bat
