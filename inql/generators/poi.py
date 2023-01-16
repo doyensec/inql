@@ -1,24 +1,27 @@
 from inql.utils import simplify_introspection
+from collections import defaultdict
 import re
 import json
 
 GRAPHQL_BUILTINS = ["Int", "String", "ID", "Boolean", "Float"]
-DEFAULT_REGEX = "|".join([
-    r"pass",
-    r"pwd",
-    r"user",
-    r"email",
-    r"key",
-    r"config",
-    r"secret",
-    r"cred",
-    r"env",
-    r"api",
-    r"hook",
-    r"token",
-    r"hash",
-    r"salt"
-])
+DEFAULT_REGEX = "|".join(
+    [
+        r"pass",
+        r"pwd",
+        r"user",
+        r"email",
+        r"key",
+        r"config",
+        r"secret",
+        r"cred",
+        r"env",
+        r"api",
+        r"hook",
+        r"token",
+        r"hash",
+        r"salt",
+    ]
+)
 
 
 class Graph:
@@ -70,17 +73,22 @@ class Graph:
     def __repr__(self):
         return f"Graph()"
 
-    def gen_poi(self,pattern=DEFAULT_REGEX):
+    def gen_poi(self, pattern=DEFAULT_REGEX):
         def isInteresting(s):
-            matches = re.findall(pattern,s,re.IGNORECASE)
+            matches = re.findall(pattern, s, re.IGNORECASE)
             return bool(matches)
-        poi = {"Interesting Functions Names":{},"Interesting Node Names":[],"Interesting Field Names":{}}
+
+        poi = {
+            "Interesting Functions Names": {},
+            "Interesting Node Names": [],
+            "Interesting Field Names": {},
+        }
         # interesting function names
         for node in self.schema.values():
             print(node.name)
             for name in node.children:
                 if isInteresting(name):
-                    arr = poi["Interesting Functions Names"].get(node.name,[])
+                    arr = poi["Interesting Functions Names"].get(node.name, [])
                     arr.append(name)
                     poi["Interesting Functions Names"][node.name] = arr
         # interesting object names
@@ -91,24 +99,24 @@ class Graph:
         for node in self.nodes.values():
             for field in node.children:
                 if isInteresting(field):
-                    arr = poi["Interesting Field Names"].get(node.name,[])
+                    arr = poi["Interesting Field Names"].get(node.name, [])
                     arr.append(field)
                     poi["Interesting Field Names"][node.name] = arr
         return poi
-    
+
     def gen_matrix(self):
-        keys = {name:idx for idx,name in enumerate(self.nodes)}
+        keys = {name: idx for idx, name in enumerate(self.nodes)}
         length = len(keys)
-        matrix = [[0]*length]*length
+        matrix = [[0] * length] * length
         for node in self.nodes.values():
             row = keys[node.name]
             for field in node.children.values():
-                if isinstance(field,str):
+                if isinstance(field, str):
                     # must be a scalar
                     continue
                 matrix[row][keys[field.name]] = 1
-        return matrix
-            
+        return matrix, keys
+
 
 class Node:
     def __init__(
@@ -149,7 +157,13 @@ class Node:
         return not (self == other)
 
 
-def generate(argument, fpath="poi.txt", regex=None, streaming=False, green_print=lambda s: print(s)):
+def generate(
+    argument,
+    fpath="poi.txt",
+    regex=None,
+    streaming=False,
+    green_print=lambda s: print(s),
+):
     """
     Generate Report on Sensitive Field Names
 
@@ -171,7 +185,7 @@ def generate(argument, fpath="poi.txt", regex=None, streaming=False, green_print
 
     report = graph.gen_poi(pattern=regex or DEFAULT_REGEX)
     if streaming:
-        
+
         print(json.dumps(report, indent=4, sort_keys=True))
     else:
         with open(fpath, "w") as schema_file:
