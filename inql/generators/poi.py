@@ -107,15 +107,71 @@ class Graph:
     def gen_matrix(self):
         keys = {name: idx for idx, name in enumerate(self.nodes)}
         length = len(keys)
-        matrix = [[0] * length] * length
+        matrix = Matrix(length)
         for node in self.nodes.values():
             row = keys[node.name]
-            for field in node.children.values():
+            for fname,field in node.children.items():
                 if isinstance(field, str):
                     # must be a scalar
                     continue
-                matrix[row][keys[field.name]] = 1
+                # intermediate node edge
+                intermediate = (node.name,fname)
+                keys[intermediate] = length
+                matrix.addEdge(row,length)
+                matrix.addEdge(length, keys[field.name])
+                length += 1
+        matrix.V = length
         return matrix, keys
+
+
+class Matrix:
+    # https://www.geeksforgeeks.org/tarjan-algorithm-find-strongly-connected-components/
+    def __init__(self, num_vertices):
+        self.V = num_vertices
+        self.graph = defaultdict(list)
+        self.Time = 0
+        self.cycles = []
+
+    def addEdge(self, u, v):
+        self.graph[u].append(v)
+
+    def SCCUtil(self, u, low, disc, stackMember, st):
+        disc[u] = self.Time
+        low[u] = self.Time
+        self.Time += 1
+        stackMember[u] = True
+        st.append(u)
+        for v in self.graph[u]:
+            if disc[v] == -1:
+                self.SCCUtil(v, low, disc, stackMember, st)
+                low[u] = min(low[u], low[v])
+            elif stackMember[v] == True:
+                low[u] = min(low[u], disc[v])
+        w = -1
+        if low[u] == disc[u]:
+            tmp = []
+            while w != u:
+                w = st.pop()
+                tmp.append(w)
+                stackMember[w] = False
+            self.cycles.append(tmp)
+
+    def SCC(self):
+        disc = [-1] * (self.V)
+        low = [-1] * (self.V)
+        stackMember = [False] * (self.V)
+        st = []
+        for i in range(self.V):
+            if disc[i] == -1:
+                self.SCCUtil(i, low, disc, stackMember, st)
+    
+    def format_cycles(self,keys):
+        transformed = []
+        for cycle in self.cycles:
+            if len(cycle) == 1:
+                continue
+            transformed.append([keys[idx] for idx in cycle[::-1]])
+        return transformed
 
 
 class Node:
@@ -169,6 +225,8 @@ def generate(
 
     :param argument: introspection query result
     :param fpath: output result
+    :param regex: custom regex to filter graph against
+    :param streaming: boolean trigger to output to stdout or write to file with fpath
     :return: None
     """
     green_print("Generating POI's")
@@ -190,4 +248,3 @@ def generate(
     else:
         with open(fpath, "w") as schema_file:
             schema_file.write(json.dumps(report, indent=4, sort_keys=True))
-    breakpoint()
