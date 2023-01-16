@@ -1,7 +1,24 @@
 from inql.utils import simplify_introspection
 import re
+import json
 
 GRAPHQL_BUILTINS = ["Int", "String", "ID", "Boolean", "Float"]
+DEFAULT_REGEX = "|".join([
+    r"pass",
+    r"pwd",
+    r"user",
+    r"email",
+    r"key",
+    r"config",
+    r"secret",
+    r"cred",
+    r"env",
+    r"api",
+    r"hook",
+    r"token",
+    r"hash",
+    r"salt"
+])
 
 
 class Graph:
@@ -53,29 +70,30 @@ class Graph:
     def __repr__(self):
         return f"Graph()"
 
-    def gen_poi(self):
+    def gen_poi(self,pattern=DEFAULT_REGEX):
         def isInteresting(s):
-            return "pass" in s
-        poi = {"functions":{},"nodes":[],"fields":{}}
+            matches = re.findall(pattern,s,re.IGNORECASE)
+            return bool(matches)
+        poi = {"Interesting Functions Names":{},"Interesting Node Names":[],"Interesting Field Names":{}}
         # interesting function names
         for node in self.schema.values():
             print(node.name)
             for name in node.children:
                 if isInteresting(name):
-                    arr = poi["functions"].get(node.name,[])
+                    arr = poi["Interesting Functions Names"].get(node.name,[])
                     arr.append(name)
-                    poi["functions"][node.name] = arr
+                    poi["Interesting Functions Names"][node.name] = arr
         # interesting object names
         for name in self.nodes:
             if isInteresting(name):
-                poi["nodes"].append(name)
+                poi["Interesting Node Names"].append(name)
         # interesting field names
         for node in self.nodes.values():
             for field in node.children:
                 if isInteresting(field):
-                    arr = poi["fields"].get(node.name,[])
+                    arr = poi["Interesting Field Names"].get(node.name,[])
                     arr.append(field)
-                    poi["fields"][node.name] = arr
+                    poi["Interesting Field Names"][node.name] = arr
         return poi
     
     def gen_matrix(self):
@@ -131,7 +149,7 @@ class Node:
         return not (self == other)
 
 
-def generate(argument, fpath="cycles.txt", green_print=lambda s: print(s)):
+def generate(argument, fpath="poi.txt", regex=None, streaming=False, green_print=lambda s: print(s)):
     """
     Generate Report on Sensitive Field Names
 
@@ -151,6 +169,11 @@ def generate(argument, fpath="cycles.txt", green_print=lambda s: print(s)):
     )
     graph.generate()
 
-    report = graph.gen_poi()
-
+    report = graph.gen_poi(pattern=regex or DEFAULT_REGEX)
+    if streaming:
+        
+        print(json.dumps(report, indent=4, sort_keys=True))
+    else:
+        with open(fpath, "w") as schema_file:
+            schema_file.write(json.dumps(report, indent=4, sort_keys=True))
     breakpoint()

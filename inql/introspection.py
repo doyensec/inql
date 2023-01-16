@@ -174,6 +174,10 @@ def main():
                         help="Generate TSV representation of query templates. It may be useful to quickly search for vulnerable I/O.")
     parser.add_argument("--generate-poi", dest="generate_poi", action='store_true', default=False,
                         help="Generate report on points of interest with detected sensitive fields")
+    parser.add_argument("--poi-regex", dest="poi_regex", default=None, type=str,
+                        help="User defined Point of Interest regex")
+    parser.add_argument("--poi-streaming", dest="poi_stdout", action='store_true', default=False,
+                        help="Stream points of interest to stdout")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -322,6 +326,8 @@ def init(args, print_help=None):
         if args.generate_poi:
             poi.generate(argument,
                         fpath=os.path.join(host, "poi-%s-%s.txt" % (today, timestamp)),
+                        regex=args.poi_regex,
+                        streaming=args.poi_stdout,
                         green_print=lambda s: print(string_join(green, s, reset)))
 
     else:
