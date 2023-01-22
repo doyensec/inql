@@ -34,6 +34,8 @@ def generate(
     matrix,keys = graph.gen_matrix()
     matrix.SCC()
     cycles = matrix.format_cycles(list(keys))
+    cycles_view = ',\n\t'.join(['->'.join(cycle) for cycle in cycles])
+    cycles = f"Cycles(\n\t{cycles_view}\n)"
 
     if streaming:
         print(cycles)

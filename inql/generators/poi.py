@@ -170,7 +170,12 @@ class Matrix:
         for cycle in self.cycles:
             if len(cycle) == 1:
                 continue
-            transformed.append([keys[idx] for idx in cycle[::-1]])
+            tmp = []
+            for idx in cycle[::-1]:
+                n = keys[idx]
+                rep = n if isinstance(n,str) else f"{n[0]}-[{n[1]}]"
+                tmp.append(rep)
+            transformed.append(tmp)
         return transformed
 
 
