@@ -3,7 +3,6 @@ from collections import defaultdict
 import re
 import json
 
-GRAPHQL_BUILTINS = ["Int", "String", "ID", "Boolean", "Float"]
 DEFAULT_REGEX = "|".join(
     [
         r"pass",
@@ -25,11 +24,12 @@ DEFAULT_REGEX = "|".join(
 
 
 class Graph:
-    def __init__(self, nodes=None, data=None, schema=None, functions=None):
+    def __init__(self, nodes=None, data=None, schema=None, functions=None, types=None):
         self.nodes = nodes or {}
         self.schema = schema or {}
         self.functions = functions or {}
         self.data = data or {}
+        self.GRAPHQL_BUILTINS = ["Int", "String", "ID", "Boolean", "Float"] + (types or [])
 
     def node(self, node_name=None):
         if node_name:
@@ -60,7 +60,7 @@ class Graph:
                 for field_name, field_data in obj_data.items():
                     if field_name in ["__implements"]:
                         continue
-                    elif field_data["type"].startswith(tuple(GRAPHQL_BUILTINS)):
+                    elif field_data["type"].startswith(tuple(self.GRAPHQL_BUILTINS)):
                         field = field_data["type"]
                     else:
                         field = self.node(field_data["type"])
@@ -238,6 +238,7 @@ def generate(
             v["type"]: Node(name=v["type"], ntype=k) for k, v in si["schema"].items()
         },
         data=si["type"],
+        types=list(si.get("enum",{}).keys()) + list(si.get("scalar",{}).keys())
     )
     graph.generate()
 

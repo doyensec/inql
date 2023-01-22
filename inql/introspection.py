@@ -19,7 +19,7 @@ from datetime import date
 
 
 from .utils import string_join, mkdir_p, raw_request, urlopen
-from .generators import html, schema, cycles, query, tsv, poi
+from .generators import html, schema, cycles, query, tsv, poi, fastcycles
 
 try:
     # Use UTF8 On Python2 and Jython
@@ -178,6 +178,10 @@ def main():
                         help="User defined Point of Interest regex")
     parser.add_argument("--poi-streaming", dest="poi_stdout", action='store_true', default=False,
                         help="Stream points of interest to stdout")
+    parser.add_argument("--generate-fast-cycles", dest="generate_fast_cycles", action='store_true', default=False,
+                        help="Generate report on points of interest with detected sensitive fields")
+    parser.add_argument("--fast-cycles-streaming", dest="fast_cycles_stdout", action='store_true', default=False,
+                        help="Stream points of interest to stdout")
     parser.add_argument("--insecure", dest="insecure_certificate", action="store_true",
                         help="Accept any SSL/TLS certificate")
     parser.add_argument("-o", dest="output_directory", default=os.getcwd(),
@@ -328,6 +332,11 @@ def init(args, print_help=None):
                         fpath=os.path.join(host, "poi-%s-%s.txt" % (today, timestamp)),
                         regex=args.poi_regex,
                         streaming=args.poi_stdout,
+                        green_print=lambda s: print(string_join(green, s, reset)))
+        if args.generate_fast_cycles:
+            fastcycles.generate(argument,
+                        fpath=os.path.join(host, "fastcycles-%s-%s.txt" % (today, timestamp)),
+                        streaming=args.fast_cycles_stdout,
                         green_print=lambda s: print(string_join(green, s, reset)))
 
     else:

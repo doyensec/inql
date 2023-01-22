@@ -27,6 +27,7 @@ def generate(
             v["type"]: Node(name=v["type"], ntype=k) for k, v in si["schema"].items()
         },
         data=si["type"],
+        types=list(si.get("enum",{}).keys()) + list(si.get("scalar",{}).keys())
     )
     graph.generate()
 
