@@ -1,14 +1,12 @@
 apply plugin: 'java'
-
 apply plugin: 'kotlin'
 
-defaultTasks 'fatJar'
+defaultTasks 'build'
 
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 buildscript {
-
     repositories {
         mavenCentral()
     }
@@ -23,11 +21,11 @@ repositories {
 
 sourceSets {
     main {
-        kotlin {
+        java {
             srcDir 'kotlin'
         }
         resources {
-            srcDir 'python'
+            srcDirs = ['python', 'lib/gqlspection/src']
         }
     }
 }
@@ -38,13 +36,11 @@ dependencies {
     implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
 } 
 
-task fatJar(type: Jar) {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+// build standalone jar with bundled dependencies
+jar {
     manifest {
         attributes('Class-Path': configurations.compileClasspath.collect { it.getName() }.join(' '))
     }
-    archiveFileName = project.name + '-all.jar'
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
-    with jar
 }
 
