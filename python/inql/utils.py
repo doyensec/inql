@@ -8,7 +8,7 @@ import random
 import re
 import string
 from .templates import graphiql_template
-
+from collections import OrderedDict
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -125,19 +125,36 @@ def override_headers(http_metadata, overrideheaders):
     :param overrideheaders: an overrideheaders object.
     :return: a new overridden headers string
     """
-    ree = [(
-        re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE | re.IGNORECASE),
-        "%s: %s" % (header, val))
-        for (header, val) in overrideheaders]
-    h = http_metadata
-    for find, replace in ree:
-        hn = re.sub(find, replace, h)
-        if hn == h:
-            h = "%s\n%s" % (hn, str(replace))
-        else:
-            h = hn
+    # decomposing the headers
+    headers = OrderedDict()
+    lines = http_metadata.split('\n')
+    first_line = ''
+    for line in lines:
+        if len(line) < 3:
+            continue
+        if line[:len("GET")] == "GET":
+            first_line = line
+            continue
+        if line[:len("PUT")] == "PUT":
+            first_line = line
+            continue
+        if line[:len("POST")] == "POST":
+            first_line = line
+            continue
+        line = line.strip()
+        l = line.split(':')
+        headers[l[0]] = "".join(l[1:])
 
-    return h
+    # changing/extending the headers 
+    for elem in overrideheaders:
+        headers[elem[0]] = elem[1]
+
+    # ricomposing the headers
+    new_headers = first_line
+    for key in headers:
+        new_headers += "%s:%s\r\n" % (key, headers[key])
+
+    return new_headers.strip()
 
 
 def json_encode(metadata):
@@ -327,7 +344,8 @@ def make_http_handler(http_mutator=None):
 
                 self.headers['Host'] = host
                 body = self.rfile.read(content_len)
-                if not http_mutator:
+                
+                if not http_mutator:    
                     request = urllib_request.Request(endpoint, body, headers=self.headers)
                 else:
                     request = http_mutator.build_python_request(endpoint, host, body)
