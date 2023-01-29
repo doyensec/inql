@@ -116,18 +116,24 @@ def query_result(target, key, headers=None, verify_certificate=True, requests=No
 
     try:
         # Issue the Introspection request against the GraphQL endpoint
+        # Storing the requests to avoid scraping from proxy
         request = urllib_request.Request(target, json.dumps({"query": introspection_query}, sort_keys=True).encode('UTF-8'), headers=headers)
         request.add_header('Content-Type', 'application/json')
-
         url = urlparse(target)
         reqbody = raw_request(request)
         if url.netloc not in requests:
             requests[url.netloc] = {}
-        requests[url.netloc]['POST'] = (None, reqbody)
-        requests[url.netloc]['url'] = target
-
+        requests[url.netloc]['body'] = reqbody
+        requests[url.netloc]['host'] = url.hostname
+        if url.port == None:
+            if url.scheme == 'http':
+                requests[url.netloc]['port'] = 80
+            else:
+                requests[url.netloc]['port'] = 443
+        else:
+            requests[url.netloc]['port'] = url.port
+        requests[url.netloc]['scheme'] = url.scheme
         contents = urlopen(request, verify=verify_certificate).read()
-
         stub_responses[url.netloc] = contents
 
         return contents
