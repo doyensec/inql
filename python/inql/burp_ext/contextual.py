@@ -37,7 +37,10 @@ class SendMenuItem(IContextMenuFactory):
         callbacks.registerContextMenuFactory(self)
 
     def createMenuItems(self, invocation):
-        """Called on a right click, when context menu gets invoked."""
+        """Overrides IContextMenuFactory callback
+        
+        Called on a right click, when context menu gets invoked.
+        """
         if self.burp_handler is None:
             return
 
@@ -141,30 +144,8 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             self._helpers = helpers
             self._callbacks = callbacks
             self._callbacks.registerProxyListener(self)
-            for r in self._callbacks.getProxyHistory():
-                self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
-
-    def _process_request(self, reqinfo, reqbody):
-        """
-        Process request and extract key values
-
-        :param reqinfo:
-        :param reqbody:
-        :return:
-        """
-        url = str(reqinfo.getUrl())
-        if is_query(reqbody[reqinfo.getBodyOffset():].tostring()):
-            for h in reqinfo.getHeaders():
-                if h.lower().startswith("host:"):
-                    domain = h[5:].strip()
-
-            method = reqinfo.getMethod()
-            try:
-                self._requests[domain]
-            except KeyError:
-                self._requests[domain] = {'POST': None, 'PUT': None, 'GET': None, 'url': None}
-            self._requests[domain][method] = (reqinfo, reqbody)
-            self._requests[domain]['url'] = url
+            # for r in self._callbacks.getProxyHistory():
+            #     self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
 
     def processProxyMessage(self, messageIsRequest, message):
         """
@@ -174,20 +155,19 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
         :param message: message content
         :return: None
         """
-        if self._helpers and self._callbacks and messageIsRequest:
-            self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
-                                  message.getMessageInfo().getRequest())
+        return None
 
     def send_to_attacker(self, host, payload, action):
         logging.debug("send_to_attacker(%s, %s, %s" % (host, payload, action))
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        req = self._requests[host]
         if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+            body = req['body']
+            info = self._helpers.analyzeRequest(body)
 
+            nobody = body[:info.getBodyOffset()]
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset]
+           
             try:
                 self._overrideheaders[host]
             except KeyError:
@@ -196,84 +176,84 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
             headers = override_headers(headers, self._overrideheaders[host])
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()],
                 payload))
 
-            U = info.getUrl()
-            url = "%s://%s" % (
-                U.getProtocol(),
-                U.getHost() if (
-                    (U.getPort() == 80 and U.getProtocol() == 'http') or
-                    (U.getPort() == 443 and U.getProtocol() == 'https')
-                ) else "%s:%s" % (U.getHost(), U.getPort())
-            )
+            url = "%s://%s" % (req['scheme'], req['host'])
+            if req['port'] != None:
+                url = url + ":" + str(req['port'])
             action(url, repeater_body, inql=True)
 
     def send_to_repeater(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        # get the request
+        req = self._requests[host]
         if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+            body = req['body']
+            info = self._helpers.analyzeRequest(body)
 
+            nobody = body[:info.getBodyOffset()]
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset]
+           
             try:
                 self._overrideheaders[host]
             except KeyError:
                 self._overrideheaders[host] = []
 
+            # override/add the custom headers to the default ones
             headers = override_headers(headers, self._overrideheaders[host])
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()],
                 payload))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
+           
+            self._callbacks.sendToRepeater(req['host'], int(req['port']),
+                                           req['scheme'] == 'https', repeater_body,
                                           'GraphQL #%s' % self._index)
             self._index += 1
 
     def send_to_repeater_get_query(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        req = self._requests[host]
         if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            metadata = body[:info.getBodyOffset()-rstripoffset].tostring()
+            body = req['body']
+            info = self._helpers.analyzeRequest(body)
 
+            nobody = body[:info.getBodyOffset()]
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset]
+           
             try:
                 self._overrideheaders[host]
             except KeyError:
                 self._overrideheaders[host] = []
 
-            metadata = override_headers(metadata, self._overrideheaders[host])
+            headers = override_headers(headers, self._overrideheaders[host])
             # remove Content-Type on GET requests
-            metadata = re.sub(r'(?m)^Content-Type:.*\n?', '', metadata)
+            headers = re.sub(r'(?m)^Content-Type:.*\n?', '', headers)
             content = json.loads(payload)
             if isinstance(content, list):
                 content = content[0]
-            metadata = override_uri(metadata, method="GET", query=urlencode(querify(clean_dict(content))))
+            headers = override_uri(headers, method="GET", query=urlencode(querify(clean_dict(content))))
 
             repeater_body = StringUtil.toBytes(string_join(
-                metadata,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring()))
+                headers,
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()]))
 
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
+            self._callbacks.sendToRepeater(req['host'], int(req['port']),
+                                           req['scheme'] == 'https', repeater_body,
                                           'GraphQL - GET query #%s' % self._index)
             self._index += 1
 
     def send_to_repeater_post_urlencoded_body(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        req = self._requests[host]
         if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+            body = req['body']
+            info = self._helpers.analyzeRequest(body)
 
+            nobody = body[:info.getBodyOffset()]
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset]
+           
             try:
                 self._overrideheaders[host]
             except KeyError:
@@ -287,23 +267,24 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
                 content = content[0]
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()],
                 urlencode(querify(clean_dict(content)))))
 
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
+            self._callbacks.sendToRepeater(req['host'], int(req['port']),
+                                           req['scheme'] == 'https', repeater_body,
                                           'GraphQL - POST urlencoded #%s' % self._index)
             self._index += 1
 
     def send_to_repeater_post_form_data_body(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        req = self._requests[host]
         if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
+            body = req['body']
+            info = self._helpers.analyzeRequest(body)
 
+            nobody = body[:info.getBodyOffset()]
+            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
+            headers = body[:info.getBodyOffset()-rstripoffset]
+           
             try:
                 self._overrideheaders[host]
             except KeyError:
@@ -318,10 +299,10 @@ class BurpHTTPMutator(HTTPMutator, IProxyListener):
                 content = content[0]
             repeater_body = StringUtil.toBytes(string_join(
                 headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
+                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()],
                 multipart(data=querify(clean_dict(content)), boundary=boundary)))
 
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
+            self._callbacks.sendToRepeater(req['host'], int(req['port']),
+                                           req['scheme'] == 'https', repeater_body,
                                           'GraphQL - POST form-data #%s' % self._index)
             self._index += 1
