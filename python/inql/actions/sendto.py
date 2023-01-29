@@ -130,7 +130,11 @@ class HTTPMutator(object):
 
 
     def get_graphiql_target(self, server_port, host=None, query=None, variables=None):
-        base_url = "http://localhost:%s/%s" % (server_port, self._requests[host]['url'])
+        print(self._requests[host])
+        req = self._requests[host]
+        target_url = "%s://%s/" % (req['scheme'], req['host'])
+        base_url = "http://localhost:%s/%s" % (server_port, target_url)
+        print(base_url)
         arguments = ""
         if query or variables:
             arguments += '?'
@@ -151,9 +155,11 @@ class HTTPMutator(object):
             return False
 
     def build_python_request(self, endpoint, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
+        
+        req = self._requests[host]
+        
         if req:
-            original_request = HTTPRequest(req[1])
+            original_request = HTTPRequest(req['body'])
             del original_request.headers['Content-Length']
 
             # TODO: Implement custom headers in threads. It is not easy to share them with the current architecture.
