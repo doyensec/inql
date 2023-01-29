@@ -21,10 +21,16 @@ from inql.burp_ext.contextual import SendMenuItem
 class GeneratorTab(ITab):
     """
     Java GUI
+
+    This class represents the Scanner tab of the burp extension. The main panel is
+    build as an instance of "GeneratorPanel" while the components for the context 
+    menu are build here. 
     """
-    def __init__(self, callbacks, helpers):
+    def __init__(self, callbacks, helpers, requests=None, custom_headers=None):
         self._callbacks = callbacks
         self._helpers = helpers
+        self._requests = requests
+        self._custom_headers = custom_headers
         self.disable_http2_ifbogus()
 
     def getTabCaption(self):
@@ -39,34 +45,68 @@ class GeneratorTab(ITab):
         Override ITab method
         :return: Tab UI Component
         """
-        overrideheaders = {}
+        # overrideheaders = {}
 
-        repeater_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to Repeater")
-        repeater_get_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
-                                             text="Send to Repeater (GET - Query Params)")
-        repeater_post_urlencoded_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
-                                              text="Send to Repeater (POST - Body URLEncoded)")
-        repeater_post_formdata_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers,
-                                              text="Send to Repeater (POST - Body form-data)")
-        graphiql_omnimenu = OmniMenuItem(callbacks=self._callbacks, helpers=self._helpers, text="Send to GraphiQL")
+        repeater_omnimenu = OmniMenuItem(
+            callbacks=self._callbacks, 
+            helpers=self._helpers, 
+            text="Send to Repeater")
+        repeater_get_omnimenu = OmniMenuItem(
+            callbacks=self._callbacks, 
+            helpers=self._helpers,
+            text="Send to Repeater (GET - Query Params)")
+        repeater_post_urlencoded_omnimenu = OmniMenuItem(
+            callbacks=self._callbacks, 
+            helpers=self._helpers,
+            text="Send to Repeater (POST - Body URLEncoded)")
+        repeater_post_formdata_omnimenu = OmniMenuItem(
+            callbacks=self._callbacks, 
+            helpers=self._helpers,
+            text="Send to Repeater (POST - Body form-data)")
+        graphiql_omnimenu = OmniMenuItem(
+            callbacks=self._callbacks, 
+            helpers=self._helpers, 
+            text="Send to GraphiQL")
 
         http_mutator = HTTPMutator(
-            callbacks=self._callbacks, helpers=self._helpers, overrideheaders=overrideheaders)
+            callbacks=self._callbacks, 
+            helpers=self._helpers, 
+            requests=self._requests,
+            overrideheaders=self._custom_headers)
+
         self.http_mutator = http_mutator
 
-        repeater_sender = SendToAction(omnimenu=repeater_omnimenu, has_host=http_mutator.has_host,
-                                       send_to=http_mutator.send_to_repeater)
-        repeater_get_sender = SendToAction(omnimenu=repeater_get_omnimenu, has_host=http_mutator.has_host,
-                                           send_to=http_mutator.send_to_repeater_get_query)
-        repeater_post_urlencoded_sender = SendToAction(omnimenu=repeater_post_urlencoded_omnimenu, has_host=http_mutator.has_host,
-                                            send_to=http_mutator.send_to_repeater_post_urlencoded_body)
-        repeater_post_form_data_sender = SendToAction(omnimenu=repeater_post_formdata_omnimenu, has_host=http_mutator.has_host,
-                                            send_to=http_mutator.send_to_repeater_post_form_data_body)
-        graphiql_sender = SendToAction(omnimenu=graphiql_omnimenu, has_host=http_mutator.has_host,
-                                       send_to=http_mutator.send_to_graphiql)
-        attacker_sender = SendMenuItem(self._callbacks, "Attacker", inql_handler=http_mutator.send_to_attacker)
+        # Elements that will compose the context menu
 
-        custom_header_setter = CustomHeaderSetterAction(overrideheaders=overrideheaders, text="Set Custom Header")
+        repeater_sender = SendToAction(
+            omnimenu=repeater_omnimenu, 
+            has_host=http_mutator.has_host,
+            send_to=http_mutator.send_to_repeater)
+        repeater_get_sender = SendToAction(
+            omnimenu=repeater_get_omnimenu, 
+            has_host=http_mutator.has_host,
+            send_to=http_mutator.send_to_repeater_get_query)
+        repeater_post_urlencoded_sender = SendToAction(
+            omnimenu=repeater_post_urlencoded_omnimenu, 
+            has_host=http_mutator.has_host,
+            send_to=http_mutator.send_to_repeater_post_urlencoded_body)
+        repeater_post_form_data_sender = SendToAction(
+            omnimenu=repeater_post_formdata_omnimenu, 
+            has_host=http_mutator.has_host,
+            send_to=http_mutator.send_to_repeater_post_form_data_body)
+        graphiql_sender = SendToAction(
+            omnimenu=graphiql_omnimenu, 
+            has_host=http_mutator.has_host,
+            send_to=http_mutator.send_to_graphiql)
+        attacker_sender = SendMenuItem(
+            callbacks=self._callbacks, 
+            label="Attacker", 
+            inql_handler=http_mutator.send_to_attacker)
+
+        custom_header_setter = CustomHeaderSetterAction(
+            overrideheaders=self._custom_headers, 
+            text="Set Custom Header")
+        
         try:
             restore = self._callbacks.loadExtensionSetting(GeneratorPanel.__name__)
         except Exception as ex:
@@ -81,6 +121,7 @@ class GeneratorTab(ITab):
                 break
 
         self.panel = GeneratorPanel(
+            # passing the elements composing the context menu
             actions=[
                 repeater_sender,
                 repeater_get_sender,
@@ -92,7 +133,8 @@ class GeneratorTab(ITab):
             restore=restore,
             proxy=proxy,
             http_mutator=http_mutator,
-            texteditor_factory=self._callbacks.createTextEditor
+            texteditor_factory=self._callbacks.createTextEditor,
+            requests=self._requests
         )
         self._callbacks.customizeUiComponent(self.panel.this)
         return self.panel.this
