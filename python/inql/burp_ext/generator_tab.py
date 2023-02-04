@@ -1,9 +1,14 @@
 from __future__ import print_function
 
 import platform
+import logging
+
+# building the logger
+logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
+
 
 if platform.system() != "Java":
-    print("Load this file inside jython, if you need the stand-alone tool run: inql")
+    logging.error("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
 
 import json
@@ -11,8 +16,8 @@ import sys
 
 from burp import ITab
 
-from inql.actions.sendto import SendToAction
-from inql.burp_ext.contextual import BurpHTTPMutator as HTTPMutator, OmniMenuItem
+from inql.actions.sendto import SendToAction, HTTPMutator
+from inql.burp_ext.contextual import OmniMenuItem
 from inql.actions.setcustomheader import CustomHeaderSetterAction
 from inql.widgets.generator import GeneratorPanel
 from inql.burp_ext.contextual import SendMenuItem
@@ -110,7 +115,7 @@ class GeneratorTab(ITab):
         try:
             restore = self._callbacks.loadExtensionSetting(GeneratorPanel.__name__)
         except Exception as ex:
-            print("Cannot restore state! %s" % ex)
+            logging.error("Cannot restore state! %s" % ex)
             restore = None
 
         proxy = None
@@ -143,12 +148,12 @@ class GeneratorTab(ITab):
         try:
             _, major, minor = self._callbacks.getBurpVersion()
             if not (int(major) >= 2021 and float(minor) >= 8):
-                print("Jython does not support HTTP/2 on Burp <= 2021.8: disabling it!")
+                logging.info("Jython does not support HTTP/2 on Burp <= 2021.8: disabling it!")
                 j = json.loads(self._callbacks.saveConfigAsJson())
                 j['project_options']['http']['http2']['enable_http2'] = False
                 self._callbacks.loadConfigFromJson(json.dumps(j))
         except Exception as ex:
-            print("Cannot disable HTTP/2! %s" % ex)
+            logging.error("Cannot disable HTTP/2! %s" % ex)
         finally:
             sys.stdout.flush()
             sys.stderr.flush()
@@ -165,7 +170,7 @@ class GeneratorTab(ITab):
         try:
             self._callbacks.saveExtensionSetting(self.panel.__class__.__name__, self.panel.state())
         except:
-            print("Cannot save state!")
+            logging.error("Cannot save state!")
 
     def stop(self):
         self.http_mutator.stop()
