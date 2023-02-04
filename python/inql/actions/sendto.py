@@ -5,49 +5,31 @@ if platform.system() != "Java":
     exit(-1)
 
 try:
-    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+    from BaseHTTPServer import HTTPServer
 except ImportError:
-    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from http.server import HTTPServer
 
 try:
     import urllib.request as urllib_request # for Python 3
-    from urllib.parse import urlencode
 except ImportError:
     import urllib2 as urllib_request # for Python 2 and Jython
-    from urllib import urlencode
 
 import errno
 import json
 import threading
+import logging
 
 from java.awt.event import ActionListener
-from javax.swing import JMenuItem
 
-try:
-    from burp import IContextMenuFactory
-except ImportError:
-    IContextMenuFactory = object
 
 from inql.actions.browser import URLOpener
-from inql.utils import make_http_handler, HTTPRequest
+from inql.grapiql_request_handler import run_http_server
 
 LISTENING_PORT = 0xD09e115ec % (2 ** 16)
 LISTENING_PORT_FALLBACK = 20
 
-
-class SimpleMenuItem:
-    """
-    An OmniMenuItem implemented on top of a single item entry.
-    """
-    def __init__(self, text=None):
-        self.menuitem = JMenuItem(text)
-        self.menuitem.setEnabled(False)
-
-    def add_action_listener(self, action_listener):
-        self.menuitem.addActionListener(action_listener)
-
-    def set_enabled(self, enabled):
-        self.menuitem.setEnabled(enabled)
+# building the logger
+logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
 
 
 class SendToAction(ActionListener):
@@ -96,7 +78,6 @@ class SendToAction(ActionListener):
         else:
             self._omnimenu.set_enabled(False)
 
-
 class HTTPMutator(object):
     """
     An implementation of an HTTPMutater which employs the Burp Utilities to enhance the requests
@@ -112,8 +93,8 @@ class HTTPMutator(object):
         for attempt in range(LISTENING_PORT_FALLBACK + 1):
             try:
                 port = LISTENING_PORT + attempt
-                self._server = HTTPServer(('127.0.0.1', port), make_http_handler(self))
-                print("Starting HTTP server on http://127.0.0.1://%s" % port)
+                self._server = HTTPServer(('127.0.0.1', port), run_http_server(self, self._requests, self._overrideheaders))
+                logging.info("Starting HTTP server on http://127.0.0.1://%s" % port)
                 break
             except Exception as e:
                 # If the static port isn't available (probably another Burp instance running in background), take the next port
@@ -130,11 +111,10 @@ class HTTPMutator(object):
 
 
     def get_graphiql_target(self, server_port, host=None, query=None, variables=None):
-        print(self._requests[host])
+
         req = self._requests[host]
         target_url = "%s://%s/" % (req['scheme'], req['host'])
         base_url = "http://localhost:%s/%s" % (server_port, target_url)
-        print(base_url)
         arguments = ""
         if query or variables:
             arguments += '?'
@@ -153,18 +133,7 @@ class HTTPMutator(object):
             return True
         except KeyError:
             return False
-
-    def build_python_request(self, endpoint, host, payload):
-        
-        req = self._requests[host]
-        
-        if req:
-            original_request = HTTPRequest(req['body'])
-            del original_request.headers['Content-Length']
-
-            # TODO: Implement custom headers in threads. It is not easy to share them with the current architecture.
-            return urllib_request.Request(endpoint, payload, headers=original_request.headers)
-
+  
     def get_stub_response(self, host):
         return self._stub_responses[host] if host in self._stub_responses else None
 
@@ -172,9 +141,11 @@ class HTTPMutator(object):
         self._stub_responses[host] = payload
 
     def send_to_graphiql(self, host, payload):
+        logging.debug("Send to GraphiQL triggered")
         content = json.loads(payload)
         if isinstance(content, list):
             content = content[0]
+
 
         URLOpener().open(self.get_graphiql_target(
             self._server.server_port, host,
