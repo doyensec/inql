@@ -23,9 +23,6 @@ import logging
 from .templates import graphiql_template
 from inql.utils import urlopen
 
-# building the logger
-logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
-
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, request_text):

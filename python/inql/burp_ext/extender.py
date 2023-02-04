@@ -20,9 +20,8 @@ from inql.burp_ext.generator_tab import GeneratorTab
 from inql.burp_ext.attacker_tab import AttackerTab
 from inql.burp_ext.timer_tab import TimerTab
 from inql.utils import stop
-from java.io import PrintWriter
 
-DEBUG = False
+DEBUG = True
 
 #class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
 class BurpExtenderPython(IExtensionStateListener):
@@ -32,11 +31,15 @@ class BurpExtenderPython(IExtensionStateListener):
 
     def __init__(self, callbacks):
         self.callbacks = callbacks
+        sys.stdout = self.callbacks.getStdout()
+        sys.stderr = self.callbacks.getStderr()
 
         # adding the stdout and stderr to the burps one
         if DEBUG:
-            sys.stdout = self.callbacks.getStdout()
-            sys.stderr = self.callbacks.getStderr()
+            logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s')
+
 
         # setting the name of the extension
         self.callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % __version__)
@@ -52,16 +55,6 @@ class BurpExtenderPython(IExtensionStateListener):
 
         :return: None
         """
-
-        # building the logger
-        stdout = PrintWriter(self.callbacks.getStdout(), True)
-        root = logging.getLogger()
-        root.setLevel(logging.INFO)
-        handler = logging.StreamHandler(stdout)
-        handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        handler.setFormatter(formatter)
-        root.addHandler(handler)
 
         # creating temp dir
         self._tmpdir = tempfile.mkdtemp()
@@ -81,10 +74,11 @@ class BurpExtenderPython(IExtensionStateListener):
         self.callbacks.addSuiteTab(self._tab)
         self.callbacks.addSuiteTab(TimerTab(self.callbacks, helpers))
         self.callbacks.addSuiteTab(AttackerTab(self.callbacks, helpers))
+        
         # Register extension state listener
         self.callbacks.registerExtensionStateListener(self)
 
-        root.info("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
+        logging.info("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
 
     def extensionUnloaded(self):
         """

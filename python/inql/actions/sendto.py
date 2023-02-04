@@ -37,9 +37,6 @@ from inql.utils import override_headers, string_join, override_uri, clean_dict, 
 LISTENING_PORT = 0xD09e115ec % (2 ** 16)
 LISTENING_PORT_FALLBACK = 20
 
-# building the logger
-logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
-
 
 class SendToAction(ActionListener):
     """
@@ -201,7 +198,8 @@ class HTTPMutator(object):
             action(url, repeater_body, inql=True)
 
     def send_to_repeater(self, host, payload):
-        # get the request
+        logging.debug("Send to Repeater triggered")
+        
         req = self._requests[host]
         if req and self._callbacks and self._helpers:
             body = req['body']
@@ -229,6 +227,8 @@ class HTTPMutator(object):
             self._index += 1
 
     def send_to_repeater_get_query(self, host, payload):
+        logging.debug("Send to Repeater (GET) triggered")
+        
         req = self._requests[host]
         if req and self._callbacks and self._helpers:
             body = req['body']
@@ -261,6 +261,7 @@ class HTTPMutator(object):
             self._index += 1
 
     def send_to_repeater_post_urlencoded_body(self, host, payload):
+        logging.debug("Send to Repeater (POST urlencoded) triggered")
         req = self._requests[host]
         if req and self._callbacks and self._helpers:
             body = req['body']
@@ -292,6 +293,7 @@ class HTTPMutator(object):
             self._index += 1
 
     def send_to_repeater_post_form_data_body(self, host, payload):
+        logging.debug("Send to Repeater (POST data body) triggered")
         req = self._requests[host]
         if req and self._callbacks and self._helpers:
             body = req['body']

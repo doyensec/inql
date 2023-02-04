@@ -3,10 +3,6 @@ from __future__ import print_function
 import platform
 import logging
 
-# building the logger
-logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
-
-
 if platform.system() != "Java":
     logging.error("Load this file inside jython, if you need the stand-alone tool run: inql")
     exit(-1)
