@@ -248,6 +248,10 @@ To use `inql` stand-alone UI:
 NDR: At the current stage Jython does not support HTTP/2. Any request to an HTTP/2 server will fail silently.
 We advise to use the Burp to bypass this limitation temporarily.
 
+# Contributing
+
+Please see [Contributing Guide](https://github.com/doyensec/inql/blob/master/CONTRIBUTING.md) for instructions and guidelines on how to contribute to the project.
+
 # Credits
 
 _Author and original maintainer:_ Andrea Brancaleoni ([@nJoyneer](https://twitter.com/nJoyneer) - [thypon](https://github.com/thypon))
