@@ -1,4 +1,5 @@
 import platform
+import logging
 
 if platform.system() != "Java":
     print("Load this file inside jython, if you need the stand-alone tool run: inql")
@@ -38,7 +39,7 @@ class URLOpener():
                 return
             except:
                 pass
-        print("Cannot open url %s!!!" % url)
+        logging.error("Cannot open url %s!!!" % url)
 
 
 class BrowserAction(ActionListener):

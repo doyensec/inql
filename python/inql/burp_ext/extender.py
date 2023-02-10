@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import logging
+import sys
 
 #from burp import (IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener)
 from burp import IExtensionStateListener
@@ -19,7 +20,8 @@ from inql.burp_ext.generator_tab import GeneratorTab
 from inql.burp_ext.attacker_tab import AttackerTab
 from inql.burp_ext.timer_tab import TimerTab
 from inql.utils import stop
-from java.io import PrintWriter
+
+DEBUG = True
 
 #class BurpExtender(IBurpExtender, IScannerInsertionPointProvider, IExtensionStateListener):
 class BurpExtenderPython(IExtensionStateListener):
@@ -29,43 +31,54 @@ class BurpExtenderPython(IExtensionStateListener):
 
     def __init__(self, callbacks):
         self.callbacks = callbacks
+        sys.stdout = self.callbacks.getStdout()
+        sys.stderr = self.callbacks.getStderr()
+
+        # adding the stdout and stderr to the burps one
+        if DEBUG:
+            logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s')
+
+
+        # setting the name of the extension
+        self.callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % __version__)
+
+        # shared data structured to store request issued across the extension
+        self.requests = {}
+        self.custom_headers = {}
+
 
     def registerExtenderCallbacks(self):
         """
         Overrides IBurpExtender method, it registers all the elements that compose this extension
 
-        :param callbacks:  burp callbacks
         :return: None
         """
-        callbacks = self.callbacks
 
-        stdout = PrintWriter(callbacks.getStdout(), True)
-        
-        root = logging.getLogger()
-        root.setLevel(logging.INFO)
-        handler = logging.StreamHandler(stdout)
-        handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        handler.setFormatter(formatter)
-        root.addHandler(handler)
-        root.info("INFO MESSAGE")
+        # creating temp dir
         self._tmpdir = tempfile.mkdtemp()
         os.chdir(self._tmpdir)
-        helpers = callbacks.getHelpers()
-        callbacks.setExtensionName("InQL: Introspection GraphQL Scanner %s" % __version__)
-        callbacks.issueAlert("InQL Scanner Started")
-        print("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
+
+        self.callbacks.issueAlert("InQL Scanner Started")
+        
+        helpers = self.callbacks.getHelpers()
+
         # Registering GraphQL Tab
-        callbacks.registerMessageEditorTabFactory(lambda _, editable: GraphQLEditorTab(callbacks, editable))
+        self.callbacks.registerMessageEditorTabFactory(lambda _, editable: GraphQLEditorTab(self.callbacks, editable))
         # Register ourselves as a custom scanner check
-        callbacks.registerScannerCheck(BurpScannerCheck(callbacks))
+        self.callbacks.registerScannerCheck(BurpScannerCheck(self.callbacks))
+
         # Register Suite Tab(s)
-        self._tab = GeneratorTab(callbacks, helpers)
-        callbacks.addSuiteTab(self._tab)
-        callbacks.addSuiteTab(TimerTab(callbacks, helpers))
-        callbacks.addSuiteTab(AttackerTab(callbacks, helpers))
+        self._tab = GeneratorTab(self.callbacks, helpers, self.requests, self.custom_headers)
+        self.callbacks.addSuiteTab(self._tab)
+        self.callbacks.addSuiteTab(TimerTab(self.callbacks, helpers))
+        self.callbacks.addSuiteTab(AttackerTab(self.callbacks, helpers))
+        
         # Register extension state listener
-        callbacks.registerExtensionStateListener(self)
+        self.callbacks.registerExtensionStateListener(self)
+
+        logging.info("InQL Scanner Started! (tmpdir: %s )" % os.getcwd())
 
     def extensionUnloaded(self):
         """

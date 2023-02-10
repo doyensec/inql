@@ -7,8 +7,7 @@ import json
 import random
 import re
 import string
-from .templates import graphiql_template
-
+from collections import OrderedDict
 
 try:
     import urllib.request as urllib_request # for Python 3
@@ -20,12 +19,6 @@ try:
 except ImportError:
     from urlparse import urlparse # for Python 2 and Jython
 
-try:
-    from BaseHTTPServer import BaseHTTPRequestHandler
-except ImportError:
-    from http.server import BaseHTTPRequestHandler
-
-from io import BytesIO
 
 def string_join(*ss):
     """
@@ -125,19 +118,36 @@ def override_headers(http_metadata, overrideheaders):
     :param overrideheaders: an overrideheaders object.
     :return: a new overridden headers string
     """
-    ree = [(
-        re.compile("^%s\s*:\s*[^\n]+$" % re.escape(header), re.MULTILINE | re.IGNORECASE),
-        "%s: %s" % (header, val))
-        for (header, val) in overrideheaders]
-    h = http_metadata
-    for find, replace in ree:
-        hn = re.sub(find, replace, h)
-        if hn == h:
-            h = "%s\n%s" % (hn, str(replace))
-        else:
-            h = hn
+    # decomposing the headers
+    headers = OrderedDict()
+    lines = http_metadata.split('\n')
+    first_line = ''
+    for line in lines:
+        if len(line) < 3:
+            continue
+        if line[:len("GET")] == "GET":
+            first_line = line
+            continue
+        if line[:len("PUT")] == "PUT":
+            first_line = line
+            continue
+        if line[:len("POST")] == "POST":
+            first_line = line
+            continue
+        line = line.strip()
+        l = line.split(':')
+        headers[l[0]] = "".join(l[1:])
 
-    return h
+    # changing/extending the headers 
+    for elem in overrideheaders:
+        headers[elem[0]] = elem[1]
+
+    # ricomposing the headers
+    new_headers = first_line
+    for key in headers:
+        new_headers += "%s:%s\r\n" % (key, headers[key])
+
+    return new_headers.strip()
 
 
 def json_encode(metadata):
@@ -152,6 +162,7 @@ def random_string():
     # printing lowercase
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for i in range(10))
+
 
 def multipart(data, boundary):
     ss = []
@@ -253,154 +264,6 @@ def run_timeout(execute, timeout):
     t.start()
     t.join(timeout=timeout)
 
-
-def make_http_handler(http_mutator=None):
-    class GraphQLRequestHandler(BaseHTTPRequestHandler):
-
-        @property
-        def graphiql_html(self):
-            return graphiql_template(address=self.path.split('?')[0],
-                                     burp=not not http_mutator)
-
-        @property
-        def allowed_origin(self):
-            if not hasattr(self, '_allowed_origin'):
-                self._allowed_origin = re.compile('https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$')
-            return self._allowed_origin
-
-        def log(self):
-            print("%s %s" % (self.command, self.path))
-
-        def send_cors_headers(self):
-            # Only allow cross-origin requests from localhost
-            request_origin = self.headers.getheader('Origin', '*')
-            response_origin = request_origin if self.allowed_origin.match(request_origin) else 'http://localhost'
-
-            self.send_header('Access-Control-Allow-Origin', response_origin)
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
-
-        def do_OPTIONS(self):
-            self.log()
-
-            self.send_response(200, "ok")
-            self.send_cors_headers()
-            self.end_headers()
-
-        # Handler for the GET requests
-        def do_GET(self):
-            self.log()
-
-            if self.path == '/favicon.ico':
-                self.send_error(404, 'Not found')
-                return
-            self.send_response(200)
-            self.send_cors_headers()
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-
-            self.wfile.write(self.graphiql_html.encode())
-            return
-
-        def do_POST(self):
-            self.log()
-
-            try:
-                content_len = int(self.headers.getheader('content-length', 0))
-            except AttributeError:  # python3 has not the getheader type, use get instead
-                content_len = int(self.headers.get('Content-Length'))
-
-            host = None
-            body = None
-            try:
-                idx = self.path.find('?')
-                if idx != -1:
-                    endpoint = self.path[1:idx]
-                else:
-                    endpoint = self.path[1:]
-
-                url = urlparse(endpoint)
-                if url.scheme == "https" and url.port == 443 or url.scheme == "http" and url.port == 80:
-                    host = url.hostname
-                else:
-                    host = url.netloc
-
-                self.headers['Host'] = host
-                body = self.rfile.read(content_len)
-                if not http_mutator:
-                    request = urllib_request.Request(endpoint, body, headers=self.headers)
-                else:
-                    request = http_mutator.build_python_request(endpoint, host, body)
-
-                contents = urlopen(request, verify=not ('http_proxy' in os.environ or 'https_proxy' in os.environ)).read()
-
-                jres = json.loads(contents)
-                if 'errors' in jres and len(jres['errors']) > 0 and "IntrospectionQuery" in body:
-                    raise Exception("IntrospectionQuery request contains errors")
-
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-
-                self.wfile.write(contents.encode())
-            except Exception as ex:
-                print("An exception occured during POST: %s" % ex)
-                if host and http_mutator and http_mutator.get_stub_response(host) and "IntrospectionQuery" in body:
-                    self.send_response(200)
-                    self.send_cors_headers()
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(http_mutator.get_stub_response(host))
-                    return
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-
-                try:
-                    # Try to get the 400 page error content since it is used by the GraphiQL Console
-                    self.wfile.write(ex.read())
-                except:
-                    pass
-            return
-
-        def do_PUT(self):
-            self.log()
-
-            try:
-                content_len = int(self.headers.getheader('content-length', 0))
-            except AttributeError:  # python3 has not the getheader type, use get instead
-                content_len = int(self.headers.get('Content-Length'))
-
-            if http_mutator:
-                body = self.rfile.read(content_len)
-                url = urlparse(self.path[1:])
-                if url.scheme == "https" and url.port == 443 or url.scheme == "http" and url.port == 80:
-                    host = url.hostname
-                else:
-                    host = url.netloc
-                http_mutator.send_to_repeater(host, body)
-            else:
-                print(self.path)
-                print(self.rfile.read(content_len))
-
-            self.send_response(200)
-            self.send_cors_headers()
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            return
-    return GraphQLRequestHandler
-
-class HTTPRequest(BaseHTTPRequestHandler):
-    def __init__(self, request_text):
-        self.rfile = BytesIO(request_text)
-        self.raw_requestline = self.rfile.readline()
-        self.error_code = self.error_message = None
-        self.parse_request()
-
-    def send_error(self, code, message):
-        self.error_code = code
-        self.error_message = message
 
 try:
     import sys

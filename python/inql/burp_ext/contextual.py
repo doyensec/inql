@@ -1,25 +1,10 @@
-from argparse import Action
-import json
-import re
-
-try:
-    import urllib.request as urllib_request # for Python 3
-    from urllib.parse import urlencode
-except ImportError:
-    import urllib2 as urllib_request # for Python 2 and Jython
-    from urllib import urlencode
-
 import logging
 from java.awt.event import ActionListener
 from javax.swing import JMenuItem
 
-from org.python.core.util import StringUtil
+from burp import IContextMenuFactory
 
-from burp import IProxyListener, IContextMenuFactory
-
-from inql.actions.sendto import HTTPMutator
-from inql.utils import is_query, override_headers, string_join, override_uri, clean_dict, multipart, random_string, \
-    querify, json_encode
+from inql.utils import is_query
 
 class SendMenuItem(IContextMenuFactory):
     """Handles additional entries in context (right-click) menu in the "Send To ..." style.
@@ -37,7 +22,10 @@ class SendMenuItem(IContextMenuFactory):
         callbacks.registerContextMenuFactory(self)
 
     def createMenuItems(self, invocation):
-        """Called on a right click, when context menu gets invoked."""
+        """Overrides IContextMenuFactory callback
+        
+        Called on a right click, when context menu gets invoked.
+        """
         if self.burp_handler is None:
             return
 
@@ -131,197 +119,3 @@ class OmniMenuItem(IContextMenuFactory):
         except Exception as ex:
             return None
         return mymenu
-
-
-class BurpHTTPMutator(HTTPMutator, IProxyListener):
-    def __init__(self, callbacks=None, helpers=None, overrideheaders=None, requests=None, stub_responses=None, attacker_receiver=None):
-        super(BurpHTTPMutator, self).__init__(overrideheaders=overrideheaders, requests=requests, stub_responses=stub_responses)
-
-        if helpers and callbacks:
-            self._helpers = helpers
-            self._callbacks = callbacks
-            self._callbacks.registerProxyListener(self)
-            for r in self._callbacks.getProxyHistory():
-                self._process_request(self._helpers.analyzeRequest(r), r.getRequest())
-
-    def _process_request(self, reqinfo, reqbody):
-        """
-        Process request and extract key values
-
-        :param reqinfo:
-        :param reqbody:
-        :return:
-        """
-        url = str(reqinfo.getUrl())
-        if is_query(reqbody[reqinfo.getBodyOffset():].tostring()):
-            for h in reqinfo.getHeaders():
-                if h.lower().startswith("host:"):
-                    domain = h[5:].strip()
-
-            method = reqinfo.getMethod()
-            try:
-                self._requests[domain]
-            except KeyError:
-                self._requests[domain] = {'POST': None, 'PUT': None, 'GET': None, 'url': None}
-            self._requests[domain][method] = (reqinfo, reqbody)
-            self._requests[domain]['url'] = url
-
-    def processProxyMessage(self, messageIsRequest, message):
-        """
-        Implements IProxyListener method
-
-        :param messageIsRequest: True if BURP Message is a request
-        :param message: message content
-        :return: None
-        """
-        if self._helpers and self._callbacks and messageIsRequest:
-            self._process_request(self._helpers.analyzeRequest(message.getMessageInfo()),
-                                  message.getMessageInfo().getRequest())
-
-    def send_to_attacker(self, host, payload, action):
-        logging.debug("send_to_attacker(%s, %s, %s" % (host, payload, action))
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                payload))
-
-            U = info.getUrl()
-            url = "%s://%s" % (
-                U.getProtocol(),
-                U.getHost() if (
-                    (U.getPort() == 80 and U.getProtocol() == 'http') or
-                    (U.getPort() == 443 and U.getProtocol() == 'https')
-                ) else "%s:%s" % (U.getHost(), U.getPort())
-            )
-            action(url, repeater_body, inql=True)
-
-    def send_to_repeater(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                payload))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL #%s' % self._index)
-            self._index += 1
-
-    def send_to_repeater_get_query(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            metadata = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            metadata = override_headers(metadata, self._overrideheaders[host])
-            # remove Content-Type on GET requests
-            metadata = re.sub(r'(?m)^Content-Type:.*\n?', '', metadata)
-            content = json.loads(payload)
-            if isinstance(content, list):
-                content = content[0]
-            metadata = override_uri(metadata, method="GET", query=urlencode(querify(clean_dict(content))))
-
-            repeater_body = StringUtil.toBytes(string_join(
-                metadata,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring()))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL - GET query #%s' % self._index)
-            self._index += 1
-
-    def send_to_repeater_post_urlencoded_body(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            headers = override_headers(headers, [("Content-Type", "application/x-www-form-urlencoded")])
-            headers = override_uri(headers, method="POST")
-            content = json.loads(payload)
-            if isinstance(content, list):
-                content = content[0]
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                urlencode(querify(clean_dict(content)))))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL - POST urlencoded #%s' % self._index)
-            self._index += 1
-
-    def send_to_repeater_post_form_data_body(self, host, payload):
-        req = self._requests[host]['POST'] or self._requests[host]['PUT'] or self._requests[host]['GET']
-        if req and self._callbacks and self._helpers:
-            info = req[0]
-            body = req[1]
-            nobody = body[:info.getBodyOffset()].tostring()
-            rstripoffset = info.getBodyOffset()-len(nobody.rstrip())
-            headers = body[:info.getBodyOffset()-rstripoffset].tostring()
-
-            try:
-                self._overrideheaders[host]
-            except KeyError:
-                self._overrideheaders[host] = []
-
-            headers = override_headers(headers, self._overrideheaders[host])
-            boundary = "---------------------------%s" % random_string()
-            headers = override_headers(headers, [("Content-Type", "multipart/form-data, boundary=%s" % boundary)])
-            headers = override_uri(headers, method="POST")
-            content = json.loads(payload)
-            if isinstance(content, list):
-                content = content[0]
-            repeater_body = StringUtil.toBytes(string_join(
-                headers,
-                body[info.getBodyOffset()-rstripoffset:info.getBodyOffset()].tostring(),
-                multipart(data=querify(clean_dict(content)), boundary=boundary)))
-
-            self._callbacks.sendToRepeater(info.getUrl().getHost(), info.getUrl().getPort(),
-                                           info.getUrl().getProtocol() == 'https', repeater_body,
-                                          'GraphQL - POST form-data #%s' % self._index)
-            self._index += 1
