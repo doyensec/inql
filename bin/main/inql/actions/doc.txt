@@ -1,0 +1,5 @@
+Actions Package contains all the contextual actions needed to operate in a BURP Extension context.
+Ideally an action will generate a contextual menu item (left click, eg. in InQL Tab).
+
+Each and every *Action* class MUST implement a ctx(self, host=None, payload=None, fname=None) method
+and expose a menuitem field in order to be included in a menuitem array.
