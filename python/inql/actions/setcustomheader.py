@@ -7,9 +7,9 @@ if platform.system() != "Java":
     exit(-1)
 
 from java.awt.event import ActionListener
-from javax.swing import JMenuItem
+from javax.swing import JMenuItem, JCheckBox
 
-from inql.widgets.propertyeditor import PropertyEditor
+from inql.widgets.headers_editor import HeadersEditor
 
 
 class CustomHeaderSetterAction(ActionListener):
@@ -17,12 +17,13 @@ class CustomHeaderSetterAction(ActionListener):
     Set Custom Header Action
     """
 
-    def __init__(self, overrideheaders, text="Set Custom Header"):
+    def __init__(self, custom_headers, scraped_headers, text="Set Custom Header"):
         self.requests = {}
         self.menuitem = JMenuItem(text)
         self.menuitem.setEnabled(False)
         self.menuitem.addActionListener(self)
-        self._overrideheaders = overrideheaders
+        self._custom_headers = custom_headers
+        self._scraped_headers = scraped_headers
         self._host = None
 
     def actionPerformed(self, e):
@@ -33,15 +34,18 @@ class CustomHeaderSetterAction(ActionListener):
         :return:
         """
         if self._host:
-            try:
-                self._overrideheaders[self._host]
-            except KeyError:
-                logging.error("No custom header for %s, generating an empty set" % self._host)
-                self._overrideheaders[self._host] = []
-            PropertyEditor.get_instance("Set Custom Header for %s" % self._host,
-                           columns=["Header", "Value"],
-                           data=self._overrideheaders[self._host],
-                           empty=["X-New-Header", "X-New-Header-Value"])
+            # Check if host is present in custom headers and scraped headers
+            if not self._host in self._custom_headers:
+                logging.debug("No custom header for %s, generating an empty set" % self._host)
+                self._custom_headers[self._host] = []
+            if not self._host in self._scraped_headers:
+                logging.debug("No scraped header for %s, generating an empty set" % self._host)
+                self._scraped_headers[self._host] = {}
+            
+            HeadersEditor.get_instance(
+                           custom_headers=self._custom_headers[self._host],
+                           scraped_headers=self._scraped_headers[self._host],
+                           text="Set Custom Header for %s" % self._host)
 
     def ctx(self, host=None, payload=None, fname=None):
         """

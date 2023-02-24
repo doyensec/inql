@@ -112,7 +112,8 @@ class GeneratorTab(ITab):
             inql_handler=http_mutator.send_to_attacker)
 
         custom_header_setter = CustomHeaderSetterAction(
-            overrideheaders=self._custom_headers, 
+            custom_headers=self._custom_headers,
+            scraped_headers=self._scraped_headers,
             text="Set Custom Header")
         
         try:
