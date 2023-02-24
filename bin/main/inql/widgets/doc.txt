@@ -1,5 +1,0 @@
-Java Swing Widgets, composable and used through the burp extension. All of them may be run in debug through:
-
-jython -m inql.widget.$WIDGETNAME
-
-This mode is thought as a debugging mode and should not replace the normal usage as a burp plugin.

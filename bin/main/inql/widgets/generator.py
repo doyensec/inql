@@ -25,8 +25,8 @@ from inql.introspection import init
 from inql.constants import *
 from inql.widgets.omnibar import Omnibar, OmnibarMultipleActions
 from inql.widgets.fileview import FileView
-from inql.widgets.propertyeditor import PropertyEditor
-from inql.widgets.headers_selector import HeadersSelector
+from inql.widgets.configuration_editor import ConfigurationEditor
+from inql.widgets.headers_editor import HeadersEditor
 from inql.utils import inherits_popup_menu, AttrDict, run_async, host_from_url
 
 
@@ -55,22 +55,21 @@ class GeneratorPanel():
         self._stub_responses = stub_responses if stub_responses is not None else {}
         self._actions = actions
         self._load_headers = []
-        self._run_config = [
-            ['Proxy', proxy],
-            ['Authorization Key', None],
-            ['Load Placeholders', True],
-            ['Generate HTML DOC', True],
-            ['Generate Schema DOC', False],
-            ['Generate Stub Queries', True],
-            ['Accept Invalid SSL Certificate', True],
-            ['Generate Cycles Report', False],
-            ['Cycles Report Timeout', 60],
-            ['Generate TSV', False]
-        ]
+        self._run_config = {
+            'Proxy': proxy,
+            'Authorization Key': None,
+            'Load Placeholders': True,
+            'Generate HTML DOC': True,
+            'Generate Schema DOC': False,
+            'Generate Stub Queries': True,
+            'Accept Invalid SSL Certificate': True,
+            'Generate Cycles Report': False,
+            'Cycles Report Timeout': 60,
+            'Generate TSV': False
+        }
         self._init_config = json.loads(json.dumps(self._run_config))
-        self._default_config = {}
-        for k, v in self._run_config:
-            self._default_config[k] = v
+        self._default_config = self._run_config
+        
         self._old_config_hash = None
         self._actions.insert(0, BrowserAction())
         self._actions.insert(0, ExecutorAction("Configure", lambda _: self._setup()))
@@ -125,18 +124,6 @@ class GeneratorPanel():
             logging.error("Cannot Load old configuration: starting with a clean state: %s" % ex)
             self._state['config'] = self._run_config
 
-    def _setup_headers(self):
-        """
-        Setup Headers callback
-        :return: None
-        """
-        logging.debug("Inside the function setup headers")
-        PropertyEditor.get_instance(
-            text='Load Headers',
-            columns=['Header', 'Value'],
-            data=self._load_headers,
-            empty=["X-New-Header", "X-New-Header-Value"])
-
     def _select_headers(self, evt):
         logging.debug("Inside select headers")
         target = self._omnibar.getText().strip()
@@ -155,25 +142,29 @@ class GeneratorPanel():
             logging.debug("The host %s was not present in the scraped headers" % host)
             logging.debug("Scraped headers: %s" % self._scraped_headers)
             self._scraped_headers[host] = {}
+        
+        # check if there are custom header for that host
         if host not in self._custom_headers.keys():
             logging.debug("The host %s was not present in the custom headers" % host)
             logging.debug("Custom headers: %s" % self._scraped_headers)
-            self._custom_headers[host] = {}
-
-        HeadersSelector(self._scraped_headers[host], self._custom_headers[host])
+            self._custom_headers[host] = []
+        
+        HeadersEditor.get_instance(
+                           custom_headers=self._custom_headers[host],
+                           scraped_headers=self._scraped_headers[host],
+                           text="Set Custom Header for %s" % host)
+        
 
     def _setup(self):
         """
         Setup callback
         :return: None
         """
-        PropertyEditor.get_instance(
+        ConfigurationEditor.get_instance(
             text="Configure InQL",
             columns=['Property', 'Value'],
             data=self._run_config,
             actions=[
-                ExecutorAction("Setup Load Headers",
-                               lambda _: self._setup_headers()),
                 ExecutorAction("Reset",
                                lambda _: self._reset())
             ]
@@ -184,11 +175,10 @@ class GeneratorPanel():
         :param key: the key of the configuration
         :return: configuration value or default if unset
         """
-        new_hash = hash(string.join([str(i) for _, i in self._run_config]))
+        new_hash = hash(string.join([str(i) for i in self._run_config.values()]))
+        
         if self._old_config_hash != new_hash:
-            self._config = {}
-            for k, v in self._run_config:
-                self._config[k] = v
+            self._config = self._run_config
             self._old_config_hash = new_hash
         try:
             return self._config[key]
@@ -276,9 +266,6 @@ class GeneratorPanel():
                 self._loadurl(evt)
         elif target == 'about:config':
             self._setup()
-            self._omnibar.reset()
-        elif target == 'about:headers':
-            self._setup_headers()
             self._omnibar.reset()
         elif target.startswith('http://') or target.startswith('https://'):
             logging.debug("Quering GraphQL schema from: %s" % target)
