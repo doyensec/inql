@@ -7,6 +7,7 @@ import json
 import random
 import re
 import string
+import logging
 from collections import OrderedDict
 
 try:
@@ -146,16 +147,19 @@ def override_headers(http_metadata, overrideheaders):
     :return: a new overridden headers string
     """
     headers, first_line = header_decomposition(http_metadata)
-
+    
     # changing/extending the headers 
     for elem in overrideheaders:
         headers[elem[0]] = elem[1]
 
     # ricomposing the headers
-    new_headers = first_line
+    # adding the first line with the HTTP protocol
+    new_headers = first_line + '\n'
     for key in headers:
         new_headers += "%s:%s\r\n" % (key, headers[key])
 
+    logging.debug("New Headers: ")
+    logging.debug(new_headers)
     return new_headers.strip()
 
 
