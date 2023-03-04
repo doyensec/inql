@@ -43,12 +43,14 @@ class ProxyListener(IProxyListener):
             header, _ = header_decomposition(h)
             if len(header) < 1: continue
             for h in header:
+                # removing connection header
+                if h == "Connection": 
+                    continue
                 self._scraped_headers[host][h.encode('utf-8')] = header[h].encode('utf-8')
         
         self._lock.release()
         logging.debug("Final scraped headers for host: %s" % host)
         logging.debug(self._scraped_headers[host])
-        logging.debug("FULL Scraped headers: %s" % self._scraped_headers)
 
     def processProxyMessage(self, messageIsRequest, message):
         """
