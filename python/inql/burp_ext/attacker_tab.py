@@ -52,7 +52,7 @@ class AttackerTab(ITab):
     def disable_http2_ifbogus(self):
         try:
             _, major, minor = self._callbacks.getBurpVersion()
-            if not (int(major) >= 2021 and float(minor) >= 8):
+            if int(major) < 2021 or (int(major) == 2021 and float(minor)<= 8):
                 print("Jython does not support HTTP/2 on Burp <= 2021.8: disabling it!")
                 j = json.loads(self._callbacks.saveConfigAsJson())
                 j['project_options']['http']['http2']['enable_http2'] = False
