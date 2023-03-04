@@ -74,7 +74,6 @@ class GeneratorPanel():
         self._actions.insert(0, BrowserAction())
         self._actions.insert(0, ExecutorAction("Configure", lambda _: self._setup()))
         self._actions.insert(0, ExecutorAction("Load", self._loadurl))
-        self._actions.insert(0, ExecutorAction("Select Headers", self._select_headers))
         self._http_mutator = http_mutator
 
         self.this = JPanel()
