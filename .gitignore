@@ -394,3 +394,4 @@ inql/__version__.py
 
 # Gradle
 .gradle
+bin/

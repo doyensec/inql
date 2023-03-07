@@ -1,0 +1,38 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+default_language_version:
+  python: python3.10
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: check-added-large-files
+    -   id: check-ast
+    -   id: check-case-conflict
+    -   id: check-docstring-first
+    -   id: check-executables-have-shebangs
+    -   id: check-merge-conflict
+    -   id: check-yaml
+    -   id: fix-encoding-pragma
+        args: [--pragma, '# coding: utf-8']
+    -   id: mixed-line-ending
+        args: [--fix, 'no']
+    -   id: no-commit-to-branch
+        args: [--branch, master]
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+
+-   repo: local
+    hooks:
+    -   id: isort
+        name: isort
+        entry: isort --atomic --jobs=10 --recursive ./python/inql/
+        language: system
+        types: [python]
+
+    -   id: pylint
+        name: pylint
+        entry: pylint -j2 --output-format=parseable python/inql
+        language: system
+        types: [python]
+        require_serial: true

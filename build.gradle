@@ -3,8 +3,14 @@ apply plugin: 'kotlin'
 
 defaultTasks 'build'
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+sourceCompatibility = 17
+targetCompatibility = 17
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
 
 buildscript {
     repositories {
@@ -34,7 +40,8 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:1.8.0"
     implementation 'org.python:jython-standalone:2.7.3'
     implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
-} 
+    implementation 'net.portswigger.burp.extensions:montoya-api:1.0.0'
+}
 
 // build standalone jar with bundled dependencies
 jar {
@@ -44,3 +51,28 @@ jar {
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 }
 
+// 'gradle clean' should clean all the annoying trash
+build.doLast {
+    delete "${rootDir}/bin/"
+    delete fileTree("${rootDir}/") {
+        include '**/*.class'
+        include '**/*.pyc'
+    }
+}
+
+// 'gradle build' should remove trash as well
+build.doFirst {
+    delete fileTree("${rootDir}/") {
+        include '**/*.class'
+        include '**/*.pyc'
+    }
+}
+build.doLast {
+    delete "${rootDir}/bin/"
+    ant.move file: "${rootDir}/build/libs/InQL.jar", todir: "${rootDir}/build/"
+    delete "${rootDir}/build/classes"
+    delete "${rootDir}/build/kotlin"
+    delete "${rootDir}/build/libs"
+    delete "${rootDir}/build/resources"
+    delete "${rootDir}/build/tmp"
+}
