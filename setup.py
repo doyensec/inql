@@ -7,7 +7,7 @@ import re
 def version():
    version = "unknown"
    if os.path.isdir(".git"):
-      version = os.popen('git describe --tags --dirty').read().strip()[1:]
+      version = os.popen('git describe --tags --dirty --abbrev=0').read().strip()[1:]
    else:
       m = re.search('-([-_0-9a-f.]+?)$', os.getcwd())
       if m:
