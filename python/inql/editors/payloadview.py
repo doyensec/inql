@@ -134,7 +134,7 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
 
         # Set mouse listener for the context menu
         mouse_listener = SendFromInQL(request, include_scanner=True)
-        add_recursive_mouse_listener(mouse_listener, self.component, SendFromInQL)
+        add_recursive_mouse_listener(mouse_listener, self.component)
 
     # TODO: Parameters aren't processed right due to awkward Montoya API - need to work around this
     def getRequest(self):

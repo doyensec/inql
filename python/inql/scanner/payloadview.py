@@ -59,4 +59,4 @@ class ScannerPayloadView(object):
         log.debug("Built request for context menu handlers")
 
         mouse_listener = SendFromInQL(request)
-        add_recursive_mouse_listener(mouse_listener, self.component, ScannerPayloadView)
+        add_recursive_mouse_listener(mouse_listener, self.component)

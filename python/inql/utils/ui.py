@@ -131,11 +131,10 @@ def byte_array(string_message):
     # TODO: We might need to handle encoding ourselves (intelligent detection / fallback), but first need to identify all of places that need this
     return ByteArray.byteArray(string_message)
 
-
-def add_recursive_mouse_listener(mouse_listener, component, parent_type):
+def add_recursive_mouse_listener(mouse_listener, component):
     for listener in component.getMouseListeners():
-        # Remove previously attached listeners
-        if isinstance(listener, parent_type):
+        # Remove previously attached listeners of the same class
+        if isinstance(listener, type(mouse_listener)):
             component.removeMouseListener(listener)
 
     # Add a fresh listener
@@ -144,4 +143,4 @@ def add_recursive_mouse_listener(mouse_listener, component, parent_type):
 
     for child in component.getComponents():
         if isinstance(child, Component):
-            add_recursive_mouse_listener(child)
+            add_recursive_mouse_listener(mouse_listener, child)
