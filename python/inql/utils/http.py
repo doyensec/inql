@@ -1,4 +1,6 @@
 # coding: utf-8
+from urlparse import urlparse
+
 from burp.api.montoya.http.HttpService import httpService
 from burp.api.montoya.http.message.requests.HttpRequest import httpRequest
 
@@ -10,7 +12,8 @@ def request_template(url, method, headers):
     """Generate request template - the HTTP message sans body"""
     # Create basic HTTP request from the URL (don't add any headers at this point)
     http_service = httpService(url)
-    req = httpRequest().withService(http_service).withMethod(method)
+    path = urlparse(url).path
+    req = httpRequest().withService(http_service).withMethod(method).withPath(path)
 
     if headers:
         # Set the provided headers
