@@ -48,7 +48,10 @@ Load the file `build/InQL.jar` into Burp as a Java extension.
 
 ## Setting up development environment
 
-First, set up a virtual environment with Python 2.7 (for Jython compatibility). Note that headers are needed to build
+Start by running the same steps as described above for building InQL. Of course, you might want to use git instead, fork
+the repo first, etc.
+
+Then, set up a virtual environment with Python 2.7 (for Jython compatibility). Note that headers are needed to build
 libraries with `pip`. For example, with virtualenv:
 
 ```bash
