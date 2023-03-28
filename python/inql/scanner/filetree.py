@@ -33,7 +33,6 @@ class ScannerFileTreeModel(TreeModel):
         return NoPathPlease(self.root_element)
 
     def getChild(self, parent, index):
-        log.debug("getChild(%s, %s)", parent, index)
         files = parent.listFiles()
         if files:
             log.debug("return %s", files[index])
@@ -41,13 +40,11 @@ class ScannerFileTreeModel(TreeModel):
         return None
 
     def getChildCount(self, parent):
-        log.debug("getChildCount(%s)", parent)
         if not parent.isDirectory():
-            log.debug("it is not a directory -> 0")
+            log.debug("'%s' is not a directory -> 0", parent)
             return 0
         files = parent.list()
         if files:
-            log.debug("non-zero files found: %s", len(files))
             return len(files)
         return 0
 
@@ -55,10 +52,8 @@ class ScannerFileTreeModel(TreeModel):
         return not node.isDirectory()
 
     def getIndexOfChild(self, parent, child):
-        log.debug("getIndexOfChild(%s, %s)", parent, child)
         for n, el in enumerate(parent.list()):
             if child.getName() == el:
-                log.debug("returning %s", n)
                 return n
         return -1
 
