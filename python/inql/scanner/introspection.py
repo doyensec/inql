@@ -12,6 +12,7 @@ from ..logger import log
 from ..utils.decorators import threaded
 from ..utils.graphql import is_valid_graphql_name
 from ..utils.http import request_template, send_request
+from ..utils.ui import visual_error
 
 
 # TODO: Support four additional content-type options:
@@ -89,16 +90,13 @@ def analyze(url, filename=None, headers=None):
 
     'url' must be provided, schema_filename could be None.
     """
-#    try:
-#        _analyze(url, filename, headers)
-#        app.omnibar.file = ''
-#    except Exception as e:
-#        visual_error(str(e))
-#    finally:
-#        app.fileview.refresh()
-    _analyze(url, filename, headers)
-    app.omnibar.file = ''
-    app.fileview.refresh()
+    try:
+        _analyze(url, filename, headers)
+        app.omnibar.file = ''
+    except Exception as e:
+        visual_error(str(e))
+    finally:
+        app.fileview.refresh()
 
 
 # TODO: The exception handling here is all over the place. Improvements are welcome.
