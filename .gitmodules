@@ -1,3 +1,4 @@
 [submodule "lib/GQLSpection"]
 	path = lib/GQLSpection
 	url = ../GQLSpection.git
+	branch = dev
