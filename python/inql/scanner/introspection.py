@@ -4,9 +4,10 @@ import os
 from datetime import datetime
 from urlparse import urlparse
 
-from gqlspection import GQLSchema
+from gqlspection import GQLQuery, GQLSchema
 from gqlspection.introspection_query import get_introspection_query
 
+from ..config import config
 from ..globals import app
 from ..logger import log
 from ..utils.decorators import threaded
@@ -163,7 +164,11 @@ def _analyze(url, filename=None, explicit_headers=None):
     # Write queries
     log.debug("Writing queries for the url: '%s'.", url)
     try:
-        queries = parsed_schema.queries
+        queries = [
+            GQLQuery(parsed_schema.query, 'query', name=field.name, fields=[field],
+                     depth=config.get('codegen.depth'))
+            for field in parsed_schema.query.fields if field.name
+        ]
     except:
         raise Exception("Failed to parse queries.")
 
@@ -190,7 +195,11 @@ def _analyze(url, filename=None, explicit_headers=None):
     # Write mutations
     log.debug("Writing mutations for the url: '%s'.", url)
     try:
-        mutations = parsed_schema.mutations
+        mutations = [
+            GQLQuery(parsed_schema.mutation, 'mutation', name=field.name, fields=[field],
+                     depth=config.get('codegen.depth'))
+            for field in parsed_schema.query.fields if field.name
+        ]
     except:
         raise Exception("Failed to parse mutations.")
 

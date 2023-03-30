@@ -56,11 +56,9 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
         return self.component
 
     def caption(self):
-        log.debug("montoya editor payload test - caption")
         return "GraphQL"
 
     def isEnabledFor(self, requestResponse):
-        log.debug("montoya editor payload test - isEnabledFor")
         body = requestResponse.request().bodyToString()
         if is_query(body):
             log.debug("GraphQL request detected, attaching GraphQL tab to the message editor")

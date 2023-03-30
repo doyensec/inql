@@ -44,14 +44,16 @@ class MontoyaAPI(object):
 
         return getattr(self._upstream, item)
 
+
 callbacks = Callbacks()
 helpers   = Helpers(callbacks)
 montoya   = MontoyaAPI()
 
 
-# TODO: This class is dire need of error handling
+# TODO: This class is in dire need of error handling
 class App(object):
     """Dummy class to hold app elements."""
     pass
+
 
 app = App()

@@ -13,6 +13,7 @@ from javax.swing import JTabbedPane, UIManager
 from gqlspection import log as gql_log
 
 from .attacker.tab import AttackerTab
+from .config import config
 from .editors.payloadview import provideHttpRequestEditor
 from .globals import app, callbacks, montoya
 from .logger import log, set_log_level
@@ -64,12 +65,18 @@ class BurpExtenderPython(IExtensionStateListener):
         sys.stdout = callbacks.getStdout()
         sys.stderr = callbacks.getStderr()
 
-        if DEBUG:
-            set_log_level(log, 'DEBUG')
-            set_log_level(gql_log, 'DEBUG')
-        else:
-            set_log_level(log, 'INFO')
-            set_log_level(gql_log, 'INFO')
+        # FIXME: Remove this once this is exposed through Settings UI
+        config.set('logging.level', 'INFO', scope='global')
+        config.set('codegen.depth', 6, scope='project')
+
+        set_log_level(log, config.get('logging.level'))
+        set_log_level(gql_log, config.get('logging.level'))
+
+        # Remove InQL v4.x settings
+        config.delete('ScannerPanel', 'global')
+
+        # Dump configs (at the INFO level)
+        config.debug_contents()
 
         # creating temp dir
         self._tmpdir = tempfile.mkdtemp()
