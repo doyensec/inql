@@ -4,9 +4,9 @@ from burp.api.montoya.core import ByteArray
 from burp.api.montoya.ui.editor import EditorOptions
 
 from java.awt import BorderLayout, Color, Component, Container, Font
-from javax.swing import BorderFactory, JButton, JLabel, JOptionPane, JPanel, JTextArea, UIManager
+from javax.swing import BorderFactory, JButton, JLabel, JOptionPane, JPanel, JTextArea
 
-from ..globals import app, callbacks, montoya
+from ..globals import callbacks, montoya
 from ..logger import log
 
 
@@ -40,25 +40,15 @@ def ui_panel(border=5):
 def raw_editor(read_only=None):
     """Create raw editor provide by Burp, making sure that it's created in Burp's style context."""
 
-    saved_laf = UIManager.getLookAndFeel()
-    try:
-        UIManager.setLookAndFeel(app.burp_laf)
-        if read_only:
-            return montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
-        return montoya.userInterface().createRawEditor()
-    finally:
-        UIManager.setLookAndFeel(saved_laf)
+    if read_only:
+        return montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
+    return montoya.userInterface().createRawEditor()
 
 
 def raw_editor_obsolete(*args, **kwargs):
     """Create raw editor for the obsolete InQL components not rewritten to Montoya API yet."""
 
-    saved_laf = UIManager.getLookAndFeel()
-    try:
-        UIManager.setLookAndFeel(app.burp_laf)
-        return callbacks.createMessageEditor(*args, **kwargs)
-    finally:
-        UIManager.setLookAndFeel(saved_laf)
+    return callbacks.createMessageEditor(*args, **kwargs)
 
 
 
