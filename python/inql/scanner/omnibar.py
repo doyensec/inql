@@ -345,4 +345,4 @@ class ScannerOmnibar(ActionListener):
 
     def custom_header_button_handler(self, _):
         HeadersEditor.get_instance(app.session_name)
-        log.error("Working")
+        log.debug("Working")
