@@ -80,6 +80,9 @@ class HeadersEditor(WindowAdapter):
             HeadersEditor.last_location = HeadersEditor.instances[text].this.getLocation()
             HeadersEditor.last_size = HeadersEditor.instances[text].this.getSize()
 
+        # Before setting it as visible, update possible new domains
+        HeadersEditor.instances[text]._update_domains()
+
         # In any case I have to set it visible and on top
         HeadersEditor.instances[text].this.setVisible(True)
         HeadersEditor.instances[text].this.setAlwaysOnTop(True)
@@ -171,7 +174,8 @@ class HeadersEditor(WindowAdapter):
         self._custom_headers_button_panel.add(self._remove_custom_header)
 
         self._custom_header_pane = JPanel(BorderLayout())
-        self._custom_header_pane.add(self._custom_headers_table, BorderLayout.CENTER)
+        self._custom_header_table_scroll_pane = JScrollPane(self._custom_headers_table)
+        self._custom_header_pane.add(self._custom_header_table_scroll_pane, BorderLayout.CENTER)
         self._custom_header_pane.add(self._custom_headers_button_panel, BorderLayout.SOUTH);
 
     def _build_scraped_headers_pane(self):
@@ -189,7 +193,8 @@ class HeadersEditor(WindowAdapter):
         self._scraped_headers_button_panel.add(self._remove_scraped_headers)
 
         self._scraped_header_pane = JPanel(BorderLayout())
-        self._scraped_header_pane.add(self._scraped_headers_table, BorderLayout.CENTER)
+        self._scraped_header_table_scroll_pane = JScrollPane(self._scraped_headers_table)
+        self._scraped_header_pane.add(self._scraped_header_table_scroll_pane, BorderLayout.CENTER)
         self._scraped_header_pane.add(self._scraped_headers_button_panel, BorderLayout.SOUTH);
 
 
@@ -207,13 +212,6 @@ class HeadersEditor(WindowAdapter):
     
         self._scraped_headers_label = JLabel("Scraped Headers")
         self._scraped_headers_label.setHorizontalAlignment(JLabel.CENTER)
-        self._scraped_headers_pane = JScrollPane(self._scraped_headers_table)
-        self._scraped_headers_pane.add(self._scraped_headers_label)
-
-        self._button_pane = JPanel()
-        self._move_button = JButton("Move to Custom")
-        self._move_button.addActionListener(lambda _: self._move_scraped_headers_row())
-        self._button_pane.add(self._move_button)
 
         self._main_headers_panel.addTab("Custom Headers", self._custom_header_pane)
         self._main_headers_panel.addTab("Scraped Headers", self._scraped_header_pane)
@@ -250,7 +248,7 @@ class HeadersEditor(WindowAdapter):
                 return
             
             self._domain_dtm.addRow([name])
-            self._custom_headers[name] = [] # TODO check if it should be a dict or if a list is fine
+            self._custom_headers[name.encode('utf-8')] = [] # TODO check if it should be a dict or if a list is fine
             
 
     def _domain_selection_listener(self):
@@ -265,7 +263,6 @@ class HeadersEditor(WindowAdapter):
         self._current_domain = None
 
         # get custom domains
-        
         self._custom_headers_dtm.setRowCount(0);
         log.debug(self._custom_private_data.keys())
         if selected_domain in self._custom_private_data.keys():
@@ -287,8 +284,17 @@ class HeadersEditor(WindowAdapter):
         if selected_domain in self._scraped_headers.keys():
             log.debug("Selected domain is in scraped headers")
             for header in self._scraped_headers[selected_domain]:
-                log.debug("Scraped header to add is: " + header)
-                self._scraped_headers_dtm.addRow(header)
+                log.debug("Scraped header to add is: %s: %s" % (header, self._scraped_headers[selected_domain][header]))
+                new_header = []
+                new_header.append(header)
+                new_header.append(self._scraped_headers[selected_domain][header])
+                # header = header.split(":")
+                # for elem in header:
+                #     new_header.append(elem)
+                    
+                log.debug("New header to add is: ")
+                log.debug(new_header)
+                self._scraped_headers_dtm.addRow(new_header)
 
         self._current_domain = selected_domain
 
@@ -327,6 +333,16 @@ class HeadersEditor(WindowAdapter):
             self._scraped_headers_dtm.removeRow(rows[i] - i)
         
         # TODO add scraped header modifier
+        nRow = self._scraped_headers_dtm.getRowCount()
+        log.debug("Removing all the scraped headers associated to this domain")
+        self._scraped_headers[self._current_domain] = {}
+
+        for i in range(0, nRow):
+            name = str(self._scraped_headers_dtm.getValueAt(i, 0)).lower()
+            value = str(self._scraped_headers_dtm.getValueAt(i, 1)).lower()
+            self._scraped_headers[self._current_domain][name] = value
+            
+
     
     def _move_scraped_headers_row(self, _):
         """
@@ -348,6 +364,23 @@ class HeadersEditor(WindowAdapter):
             self._custom_headers_dtm.addRow(row_to_move)
             self._scraped_headers_dtm.removeRow(rows[i] - i)
         self._custom_headers_update()
+    
+    def _update_domains(self):
+        """
+        Checks the content of the Domains table and adds all the domains that are in the scraped headers but not in the
+        domain table
+        """
+
+        for domain in self._scraped_headers:
+            log.debug("Considered domain: %s" % domain)
+            if(domain != None and len(domain)>0):
+                if domain in self._custom_headers:
+                    log.debug("Domain already present")
+                    continue
+            
+            self._domain_dtm.addRow([domain])
+            self._custom_headers[domain] = [] # TODO check if it should be a dict or if a list is fine
+
 
     def windowClosing(self, _):
         """
@@ -355,7 +388,8 @@ class HeadersEditor(WindowAdapter):
 
         :param evt: unused
         :return: None
-        """
+        """        
+
         HeadersEditor.locations[self._text] = self.this.getLocation()
         HeadersEditor.sizes[self._text] = self.this.getSize()
         HeadersEditor.last_location = self.this.getLocation()
@@ -371,6 +405,8 @@ class HeadersEditor(WindowAdapter):
 
         log.debug("Custom Headers in the app")
         log.debug(app.custom_headers)
+
+
 
     def _custom_headers_update(self):
         """
