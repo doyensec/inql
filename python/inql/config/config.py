@@ -9,7 +9,9 @@ DEFAULT_CONFIG = {
     # Valid levels: DEBUG, INFO (called 'verbose' in UI), WARN (called 'normal' in UI)
     'logging.level': 'WARN',
     # The depth of the auto-generated GraphQL requests
-    'codegen.depth': 4
+    'codegen.depth': 2,
+    # The padding of the auto-generated GraphQL requests
+    'codegen.pad': 2
 }
 
 # Note that Config only supports strings, integers and bools.

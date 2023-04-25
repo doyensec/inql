@@ -8,37 +8,74 @@ from ..globals import montoya
 from ..logger import log
 
 
-def request_template(url, method, headers):
-    """Generate request template - the HTTP message sans body"""
-    # Create basic HTTP request from the URL (don't add any headers at this point)
-    http_service = httpService(url)
-    path = urlparse(url).path
-    req = httpRequest().withService(http_service).withMethod(method).withPath(path)
+class Request(object):
+    def __init__(self, mock=False):
+        self.mock = mock
+        self.template = None
 
-    if headers:
-        # Set the provided headers
-        log.debug("Custom headers provided: %s of them", len(headers))
-        for k, v in headers:
-            req = req.withAddedHeader(k, v)
-        log.debug("Successfully added all headers")
+    def __call__(self, method, url, data=None, headers=None, cookies=None):
+        """Mimic the requests library's 'request' function, but use Burp's HTTP API instead of the requests library."""
 
-    log.debug("Created the request template")
-    return req
+        http_service = httpService(url)
+        path = urlparse(url).path
+        request = httpRequest().withService(http_service).withMethod(method).withPath(path)
+
+        # Set headers
+        headers = headers or {}
+        for header, value in headers.items():
+            request = request.withAddedHeader(header, value)
+
+        # Set cookies
+        cookies = cookies or {}
+        cookie_string = "; ".join(["{}={}".format(name, value) for name, value in cookies.items()])
+        if cookie_string:
+            request = request.withAddedHeader("Cookie", cookie_string)
+
+        # Save the template of the request (this gets dropped as a file in the Scanner's fileview)
+        self.template = request.toString()
+        log.debug("The request template is: {0}".format(self.template))
+
+        # If we're mocking, just return the template and raise an Exception
+        if self.mock:
+            log.debug("Mocking the request, so we're not actually gonna send it.")
+            raise Exception("Not actually gonna send a real request, we were just building the template.")
+        log.debug("Not mocking, so we're gonna send the request.")
+
+        # Set request body
+        if data is not None:
+            request = request.withBody(data)
+
+        # Send request and get response
+        response = montoya.http().sendRequest(request).response()
+
+        # Parse response
+        response_headers = {}
+        for header in response.headers():
+            response_headers[header.name()] = header.value()
+        response_cookies = parse_cookies(response_headers.get("Set-Cookie", ""))
+        response_body = response.bodyToString()
+        log.debug("The response is: {0}".format(response_body))
+
+        return Response(response.statusCode(), response_headers, response_body, response_cookies)
 
 
-def send_request(url, headers=None, method='GET', body=None):
-    log.debug("send_request(url: %s, headers: %s, method: %s, body:%s)", url, headers, method, body)
-    req = request_template(url, method, headers)
-    log.debug("acquired request_template")
+class Response(object):
+    """Mimic the requests library's Response object."""
+    def __init__(self, status_code, headers, text, cookies):
+        self.status_code = status_code
+        self.headers = headers
+        self.text = text
+        self.cookies = cookies
 
-    # Finally, add the body
-    req = req.withBody(body)
-    log.debug("Request that I'm sending to %s: %s", url, req.toString())
+    def json(self):
+        # This implementation assumes that the response body is JSON
+        import json
+        return json.loads(self.text)
 
-    # Send the request through Burp
-    response = montoya.http().sendRequest(req).response()
-    log.debug("Sent the request through Burp")
-
-    result = response.bodyToString()
-    log.debug("Response that I received from %s: %s", url, result)
-    return result
+def parse_cookies(cookie_string):
+    cookies = {}
+    if cookie_string:
+        for cookie in cookie_string.split(";"):
+            name, value = cookie.strip().split("=")
+            cookies[name] = value
+    return cookies

@@ -1,18 +1,19 @@
 # coding: utf-8
 import json
 import os
+from collections import OrderedDict
 from datetime import datetime
 from urlparse import urlparse
 
-from gqlspection import GQLQuery, GQLSchema
-from gqlspection.introspection_query import get_introspection_query
+from gqlspection import GQLSchema
+from gqlspection.utils import query_introspection
 
 from ..config import config
 from ..globals import app
 from ..logger import log
 from ..utils.decorators import threaded
 from ..utils.graphql import is_valid_graphql_name
-from ..utils.http import request_template, send_request
+from ..utils.http import Request
 from ..utils.ui import visual_error
 
 
@@ -22,66 +23,34 @@ from ..utils.ui import visual_error
 #   3. urlencoded POST
 #   4. form-data POST
 def _normalize_headers(host, explicit_headers):
-    """Make sure headers contain valid host and content type."""
+    """Make sure headers contain valid host and content type.
 
-    headers = []
+    If no content type is provided, default to application/json.
+    Explicit headers should be a dict. _normalize_headers will return a dict as well.
+    """
+    explicit_headers = explicit_headers or {}
 
-    content_type_present, host_header_present = False, False
-    for k, v in (explicit_headers or []):
-        headers.append((k, v))
+    headers = OrderedDict()
+
+    # Host header is required, and must be the first header
+    if 'Host' in explicit_headers:
+        headers['Host'] = explicit_headers['Host']
+        del explicit_headers['Host']
+    else:
+        headers['Host'] = host
+
+    content_type_present = False
+    for k, v in explicit_headers:
+        headers[k] = v
 
         if (k.lower() == 'content-type' and
             v.lower() in ('application/json', 'application/graphql')):
             content_type_present = True
-        elif k.lower() == 'host':
-            host_header_present = True
 
     if not content_type_present:
-        headers.append(('Content-Type', 'application/json'))
+        headers['Content-Type'] = 'application/json'
 
-    if not host_header_present:
-        headers = [('Host', host)] + headers
     return headers
-
-
-def query_introspection(url, headers=None):
-    """
-    Send introspection query (through Burp facilities) and get the GraphQL schema.
-    """
-    log.debug("Introspection query about to be sent")
-    for version in ('draft', 'oct2021', 'jun2018'):
-        # Iterate through all introspection query versions, starting from the most recent one
-        log.debug("Will try to get introspection query using '%s' version from '%s'.", version, url)
-
-        # Get the introspection query
-        body = '{{"query":"{}"}}'.format(get_introspection_query(version=version))
-        log.debug("acquired introspection query body")
-
-        # Send HTTP request through Burp facilities
-        response = send_request(url, headers=headers, method='POST', body=body)
-        log.debug("sent the request and got the response")
-
-        try:
-            schema = json.loads(response)
-            log.debug("successfully parsed JSON")
-        except Exception:
-            # TODO: Doesn't this mean it's not a GraphQL endpoint? Maybe early return?
-            log.error("Could not parse introspection query for the url '%s' (version: %s).", url, version)
-            continue
-
-        if 'errors' in schema:
-            for msg in schema['errors']:
-                log.debug("Received an error from %s (version: %s): %s", url, version, msg)
-            continue
-
-        # Got successful introspection response!
-        log.info("Found the introspection response with '%s' version schema.", version)
-        log.debug("The received introspection schema: %s", schema)
-        return schema
-
-    # None of the introspection queries were successful
-    log.error("Introspection seems disabled for this endpoint: '%s'.", url)
-    raise Exception("Introspection seems disabled for this endpoint: '%s'." % url)
 
 
 @threaded
@@ -118,10 +87,18 @@ def _analyze(url, filename=None, explicit_headers=None):
                 # TODO: Doesn't this mean it's not a GraphQL endpoint? Maybe early return?
                 log.error("Could not parse introspection schema from the file '%s' (exception: %s)", filename, str(e))
                 raise Exception("Could not parse introspection schema, make sure it's valid JSON GraphQL schema.")
+        # Build the request template by initializing query_introspection with a mocked request
+        try:
+            request = Request(mock=True)
+            query_introspection(url, headers, request_fn=request)
+        except:
+            # Expected to fail, always
+            pass
     else:
         log.debug("GraphQL schema wil be queried from the server.")
         try:
-            schema = query_introspection(url, headers)
+            request = Request()
+            schema = query_introspection(url, headers, request_fn=request)
         except Exception as e:
             # TODO: show some visual feedback here as well
             log.error("No JSON schema provided and server '%s' did not return results for the introspection query (exception: %s).", host, e)
@@ -142,12 +119,10 @@ def _analyze(url, filename=None, explicit_headers=None):
         log.warning("Failed to create a new directory for the reports '%s' - as it already exists")
     log.debug("Created the directory structure for the '%s'", url)
 
-    # Dump request template
-    template = request_template(url, method='POST', headers=headers)
     with open(os.path.join(report_dir, "request_template.txt"), "wb") as f:
         log.debug("Dumping the request template.")
         f.write(url + '\n')
-        f.write(template.toString())
+        f.write(request.template)
 
     # Dump JSON schema
     with open(os.path.join(report_dir, "schema.json"), "w") as schema_file:
@@ -161,64 +136,52 @@ def _analyze(url, filename=None, explicit_headers=None):
         log.error("Could not parse the received GraphQL schema.")
         raise Exception("Could not parse the received GraphQL schema. Validate dumped JSON manually and file a bug report if it seems correct.")
 
-    # Write queries
+    # Write query files
     log.debug("Writing queries for the url: '%s'.", url)
-    try:
-        queries = [
-            GQLQuery(parsed_schema.query, 'query', name=field.name, fields=[field],
-                     depth=config.get('codegen.depth'))
-            for field in parsed_schema.query.fields if field.name
-        ]
-    except:
-        raise Exception("Failed to parse queries.")
+    for query in parsed_schema.query.fields:
+        if not query.name:
+            log.error("Query without a name detected.")
+            continue
 
-    for query in queries:
         if not is_valid_graphql_name(query.name):
-            # TODO: this does not warrant a popup, but it would be nice to show some kind of indication anyway
             log.error("Query with invalid GraphQL name detected: '%s'.", query.name)
             continue
 
-        log.debug("Writing query '%s'.", query.name + '.graphql' + ' to ' + os.getcwd())
         filename = os.path.join(
             queries_dir,
             "{}.graphql".format(query.name)
         )
 
-        try:
-            parsed = query.to_string(pad=4)
-        except:
-            raise Exception("Failed to parse query '%s'!" % query.name)
-
+        log.debug("Writing query " + query.name + '.graphql to ' + filename)
         with open(filename, "w") as query_file:
-            query_file.write(parsed)
+            query_file.write(
+                parsed_schema.generate_query(query, depth=config.get('codegen.depth'))
+                .to_string(pad=config.get('codegen.pad')))
+        log.debug("Wrote query '%s'.", query.name + '.graphql')
 
-    # Write mutations
+    # Write mutations, if any
+    if parsed_schema.mutation is None:
+        log.debug("No mutations found for the url: '%s'.", url)
+        return
+
     log.debug("Writing mutations for the url: '%s'.", url)
-    try:
-        mutations = [
-            GQLQuery(parsed_schema.mutation, 'mutation', name=field.name, fields=[field],
-                     depth=config.get('codegen.depth'))
-            for field in parsed_schema.query.fields if field.name
-        ]
-    except:
-        raise Exception("Failed to parse mutations.")
+    for mutation in parsed_schema.mutation.fields:
+        if not mutation.name:
+            log.error("Mutation without a name detected.")
+            continue
 
-    for mutation in mutations:
         if not is_valid_graphql_name(mutation.name):
-            # TODO: this does not warrant a popup, but it would be nice to show some kind of indication anyway
             log.error("Mutation with invalid GraphQL name detected: '%s'.", mutation.name)
             continue
 
-        log.debug("Writing mutation '%s'.", mutation.name + '.graphql')
         filename = os.path.join(
             mutations_dir,
             "{}.graphql".format(mutation.name)
         )
 
-        try:
-            parsed = mutation.to_string(pad=4)
-        except:
-            raise Exception("Failed to parse mutation: '%s'!" % mutation.name)
-
+        log.debug("Writing mutation " + mutation.name + '.graphql to ' + filename)
         with open(filename, "w") as mutation_file:
-            mutation_file.write(parsed)
+            mutation_file.write(
+                parsed_schema.generate_mutation(mutation, depth=config.get('codegen.depth'))
+                .to_string(pad=config.get('codegen.pad')))
+        log.debug("Wrote mutation '%s'.", mutation.name + '.graphql')

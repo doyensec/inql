@@ -66,8 +66,10 @@ class BurpExtenderPython(IExtensionStateListener):
         sys.stderr = callbacks.getStderr()
 
         # FIXME: Remove this once this is exposed through Settings UI
-        config.set('logging.level', 'INFO', scope='global')
-        config.set('codegen.depth', 6, scope='project')
+        config.set('logging.level', 'DEBUG', scope='global')
+
+        config.delete('codegen.depth', 'global')
+        config.delete('codegen.pad', 'global')
 
         set_log_level(log, config.get('logging.level'))
         set_log_level(gql_log, config.get('logging.level'))
