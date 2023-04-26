@@ -23,6 +23,7 @@ from .timer.tab import TimerTab
 from .traffic_scan.scan_handler import BurpScannerCheck
 from .utils.decorators import unroll_exceptions
 from .utils.ui import ui_panel
+from .scraper.headers_scraper import CustomProxyListener
 
 DEBUG = True
 
@@ -92,6 +93,8 @@ class BurpExtenderPython(IExtensionStateListener):
             montoya.userInterface().registerHttpRequestEditorProvider(provideHttpRequestEditor)
             # Register ourselves as a custom scanner check
             callbacks.registerScannerCheck(BurpScannerCheck())
+            # Register the proxy listener 
+            montoya.proxy().registerRequestHandler(CustomProxyListener(app.scraped_headers))
 
 
             app.burp_laf = UIManager.getLookAndFeel()
@@ -112,6 +115,7 @@ class BurpExtenderPython(IExtensionStateListener):
                     ("Scanner", app.scanner_tab),
                     ("Timer", app.timer_tab),
                     ("Attacker", app.attacker_tab)
+                    # TODO add the settings here probably
                 )
             except Exception as e:
                 log.error("Exception: %s", str(e))

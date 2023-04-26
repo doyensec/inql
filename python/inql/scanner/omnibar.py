@@ -5,14 +5,19 @@ from java.awt import BorderLayout, Dimension
 from java.awt.event import ActionListener, FocusListener, KeyAdapter, KeyEvent
 from java.io import File
 from java.lang import System
-from javax.swing import Box, BoxLayout, JFileChooser, JSeparator, JTextField, SwingConstants
+from javax.swing import Box, BoxLayout, JFileChooser, JSeparator, JTextField, SwingConstants, JPanel 
+from java.awt import BorderLayout, FlowLayout
 
-from ..editors.propertyeditor import HeadersEditor, SettingsEditor
+from ..editors.propertyeditor import SettingsEditor
 from ..globals import app
 from ..logger import log
 from ..utils.decorators import single, single_with_error_handling
 from ..utils.ui import ui_button, ui_label, ui_panel, ui_textarea
 from .introspection import analyze
+
+from .customheaders import HeadersEditor
+from urlparse import urlparse
+
 
 
 class ScannerUrlField(FocusListener, KeyAdapter):
@@ -185,14 +190,22 @@ class ScannerOmnibar(ActionListener):
         label = ui_label("1. Provide URL of the GraphQL endpoint")
 
         #  1.1.1 First line, right - the main scanner button
-        self.main_button = ui_button('Build queries', self, main=True)
+        self.main_button = ui_button('Run Scanner', self, main=True)
+
+        self.custom_headers_button = ui_button('Custom Headers', self.custom_header_button_handler, main=False)
 
         first_line = ui_panel()
         first_line.add(BorderLayout.WEST, label)
-        first_line.add(BorderLayout.EAST, self.main_button)
+
+        button_pane = JPanel(FlowLayout())
+        button_pane.add(self.custom_headers_button)
+        button_pane.add(self.main_button)
+
+        first_line.add(BorderLayout.EAST, button_pane)
 
 
         #  1.2 Second line - just a single Text field for URL
+        # TODO add a dropdown menu to allow the user to specify which "session" to use
         self.url_field  = ScannerUrlField(self)
 
         url_panel = ui_panel(10)
@@ -267,9 +280,20 @@ class ScannerOmnibar(ActionListener):
             raise Exception("URL not provided")
 
         try:
-            analyze(self.url, self.file)
-        except:
+            log.debug("URL to be scanned: %s" % self.url)
+
+            domain = urlparse(self.url).netloc
+            log.debug("The domain is: %s" % domain)
+            
+            if domain in app.custom_headers[app.session_name]:
+                log.debug("The URL has some custom headers set")
+                analyze(self.url, self.file, headers=app.custom_headers[app.session_name][domain])
+            else:
+                log.debug("The URL has not set any custom headers, setting headers=none")
+                analyze(self.url, self.file)
+        except Exception as e:
             # analyze() is running in a separate thread and doing it's own error handling, don't raise exceptions here
+            log.error(e)
             log.error("File couldn't be analyzed properly.")
 
     @single
@@ -279,6 +303,7 @@ class ScannerOmnibar(ActionListener):
         log.debug("Received introspection analysis request from context menu.")
 
         self.url = url
+        # self.file = None
         self.file = ''
 
         try:
@@ -317,3 +342,7 @@ class ScannerOmnibar(ActionListener):
     def file(self, filename):
         log.debug("Set selected file to '%s'", filename)
         self.file_field.value = filename
+
+    def custom_header_button_handler(self, _):
+        HeadersEditor.get_instance(app.session_name)
+        log.debug("Working")
