@@ -1,23 +1,20 @@
 # coding: utf-8
 from threading import Lock
+from urlparse import urlparse
 
-from java.awt import BorderLayout, Dimension
+from java.awt import BorderLayout, Dimension, FlowLayout
 from java.awt.event import ActionListener, FocusListener, KeyAdapter, KeyEvent
 from java.io import File
 from java.lang import System
-from javax.swing import Box, BoxLayout, JFileChooser, JSeparator, JTextField, SwingConstants, JPanel 
-from java.awt import BorderLayout, FlowLayout
+from javax.swing import Box, BoxLayout, JFileChooser, JPanel, JSeparator, JTextField, SwingConstants
 
 from ..editors.propertyeditor import SettingsEditor
 from ..globals import app
 from ..logger import log
 from ..utils.decorators import single, single_with_error_handling
 from ..utils.ui import ui_button, ui_label, ui_panel, ui_textarea
-from .introspection import analyze
-
 from .customheaders import HeadersEditor
-from urlparse import urlparse
-
+from .introspection import analyze
 
 
 class ScannerUrlField(FocusListener, KeyAdapter):
@@ -284,7 +281,7 @@ class ScannerOmnibar(ActionListener):
 
             domain = urlparse(self.url).netloc
             log.debug("The domain is: %s" % domain)
-            
+
             if domain in app.custom_headers[app.session_name]:
                 log.debug("The URL has some custom headers set")
                 analyze(self.url, self.file, headers=app.custom_headers[app.session_name][domain])

@@ -61,12 +61,11 @@ app = App()
 # This is the current selected session, by default the session is set to inql
 app.session_name = "InQL"
 
-# Custom Headers will be a dictionary of sessions. 
+# Custom Headers will be a dictionary of sessions.
 # Each session will be a dictionary where all the domains have a list of headers
 app.custom_headers = {}
 app.custom_headers[app.session_name] = {}
 
-# Scraped Header will be a dictionary of domains with associated scraped headers 
+# Scraped Header will be a dictionary of domains with associated scraped headers
 # TODO decide if the headeres will be stored in dicsts or lists.
 app.scraped_headers = {}
-

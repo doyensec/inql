@@ -1,10 +1,12 @@
-from burp.api.montoya.proxy.http import ProxyRequestHandler, ProxyRequestReceivedAction, ProxyRequestToBeSentAction
-
-from urlparse import urlparse
+# coding: utf-8
 from threading import Lock
+from urlparse import urlparse
+
+from burp.api.montoya.proxy.http import ProxyRequestHandler, ProxyRequestReceivedAction, ProxyRequestToBeSentAction
 
 from ..globals import app
 from ..logger import log
+
 
 class CustomProxyListener(ProxyRequestHandler):
     """
@@ -14,10 +16,10 @@ class CustomProxyListener(ProxyRequestHandler):
 
     def __init__(self, scraped_headers):
         log.debug("Initializing the proxy listener for scraping headers")
-        
+
         self._scraped_headers = scraped_headers
 
-        # burp will call the processProxyMessage concurrently thus the scraped headers 
+        # burp will call the processProxyMessage concurrently thus the scraped headers
         # needs to be protected by a lock
         self._lock = Lock()
 
@@ -37,7 +39,7 @@ class CustomProxyListener(ProxyRequestHandler):
 
         if domain not in self._scraped_headers:
             self._scraped_headers[domain] = {}
-        
+
         # get the headers
         headers = interceptedRequest.headers()
         log.debug("Headers:")
@@ -48,7 +50,7 @@ class CustomProxyListener(ProxyRequestHandler):
             log.debug("Header is -> %s: %s" % (h.name(), h.value()))
 
             # removing connection header and host
-            if h.name() == "Connection" or h.name() == "Host": 
+            if h.name() == "Connection" or h.name() == "Host":
                 continue
 
             if h.value() == None or len(h.value()) <=0:
@@ -60,7 +62,7 @@ class CustomProxyListener(ProxyRequestHandler):
 
         # continue with the request
         return ProxyRequestReceivedAction.intercept(interceptedRequest.withDefaultHeaders())
-    
+
 
     def handleRequestToBeSent(self, interceptedRequest):
         return ProxyRequestToBeSentAction.continueWith(interceptedRequest.withDefaultHeaders())

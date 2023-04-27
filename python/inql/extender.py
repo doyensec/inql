@@ -18,11 +18,11 @@ from .globals import app, callbacks, montoya
 from .logger import log, set_log_level
 from .menu.context_menu import ContextMenu
 from .scanner.tab import ScannerTab
+from .scraper.headers_scraper import CustomProxyListener
 from .timer.tab import TimerTab
 from .traffic_scan.scan_handler import BurpScannerCheck
 from .utils.decorators import unroll_exceptions
 from .utils.ui import ui_panel
-from .scraper.headers_scraper import CustomProxyListener
 
 DEBUG = True
 
@@ -94,7 +94,7 @@ class BurpExtenderPython(IExtensionStateListener):
             montoya.userInterface().registerHttpRequestEditorProvider(provideHttpRequestEditor)
             # Register ourselves as a custom scanner check
             callbacks.registerScannerCheck(BurpScannerCheck())
-            # Register the proxy listener 
+            # Register the proxy listener
             montoya.proxy().registerRequestHandler(CustomProxyListener(app.scraped_headers))
 
 

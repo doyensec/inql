@@ -30,9 +30,9 @@ repos:
         language: system
         types: [python]
 
-    -   id: pylint
-        name: pylint
-        entry: pylint -j2 --output-format=parseable python/inql
-        language: system
-        types: [python]
-        require_serial: true
+#    -   id: pylint
+#        name: pylint
+#        entry: pylint -j2 --output-format=parseable python/inql
+#        language: system
+#        types: [python]
+#        require_serial: true

@@ -1,17 +1,18 @@
-from java.awt import Color, Dimension
-from java.awt.event import WindowAdapter 
-from java.awt import BorderLayout, FlowLayout
-from javax.swing import JFrame, JTable, JScrollPane, JPopupMenu, JTabbedPane, JLabel, JButton, JPanel, JList, ListSelectionModel, JOptionPane
-from javax.swing.table import DefaultTableModel, DefaultTableCellRenderer
-
+# coding: utf-8
+from java.awt import BorderLayout, Color, Dimension, FlowLayout
+from java.awt.event import WindowAdapter
 from java.lang import Boolean
-
-# from inql.actions.executor import ExecutorAction
+from javax.swing import (JButton, JFrame, JLabel, JList, JOptionPane, JPanel, JPopupMenu,
+                         JScrollPane, JTabbedPane, JTable, ListSelectionModel)
+from javax.swing.table import DefaultTableCellRenderer, DefaultTableModel
 
 from ..globals import app
 from ..logger import log
+from ..utils.ui import inherits_popup_menu, ui_button, ui_label, ui_panel, ui_textarea
 
-from ..utils.ui import ui_button, ui_label, ui_panel, ui_textarea, inherits_popup_menu
+# from inql.actions.executor import ExecutorAction
+
+
 
 
 class CustomTable(DefaultTableModel):
@@ -27,12 +28,12 @@ class CustomTable(DefaultTableModel):
         # In case the type is bool, I need to return the real Boolean type of Java
         x = Boolean(False)
         return type(x)
-    
+
 class NonEditableModel(DefaultTableModel):
-    
+
     def isCellEditable(self, row, column):
         return False  # Make the column non-editable
-            
+
 
 
 class HeadersEditor(WindowAdapter):
@@ -40,7 +41,7 @@ class HeadersEditor(WindowAdapter):
     Edits Tabular Properties of a given WindowAdapter
     """
     instances = {}
-    
+
     last_location = None
     locations = {}
     last_size = None
@@ -52,14 +53,14 @@ class HeadersEditor(WindowAdapter):
     @staticmethod
     def get_instance(text="Header Selector"):
         """
-        Singleton Method based on the text property. It tries to generate only one 
+        Singleton Method based on the text property. It tries to generate only one
         header selector for each "session".
 
         :param custom_headers: it contains the current custom headers
-        :param scraped_headers: it contains the current scraped headers 
+        :param scraped_headers: it contains the current scraped headers
         :param text: getinstance key
         :return: a new instance of HeadersEditor or a reused one.
-        """        
+        """
 
         # Check if the instance is already present
         if text not in HeadersEditor.instances:
@@ -76,7 +77,7 @@ class HeadersEditor(WindowAdapter):
                     HeadersEditor.last_location.y+HeadersEditor.offset
                     )
                 HeadersEditor.offset = HeadersEditor.NEW_WINDOW_OFFSET
-            
+
             HeadersEditor.last_location = HeadersEditor.instances[text].this.getLocation()
             HeadersEditor.last_size = HeadersEditor.instances[text].this.getSize()
 
@@ -87,11 +88,11 @@ class HeadersEditor(WindowAdapter):
         HeadersEditor.instances[text].this.setVisible(True)
         HeadersEditor.instances[text].this.setAlwaysOnTop(True)
         HeadersEditor.instances[text].this.setAlwaysOnTop(False)
-        
+
         return HeadersEditor.instances[text]
 
     def __private_init__(self, text):
-        """Build the GUI for the header selection associate to a particular "text" 
+        """Build the GUI for the header selection associate to a particular "text"
         which is usually associated to a HOST
 
         Args:
@@ -113,26 +114,26 @@ class HeadersEditor(WindowAdapter):
         self._custom_headers = app.custom_headers[text]
         self._scraped_headers = app.scraped_headers
 
-        # Data to store the state of the custom and scraped headers. 
+        # Data to store the state of the custom and scraped headers.
         # Inside the private data will be stored all the headers while in the
         # Data structures we will only store the selected ones (for the custom)
-        # For each domain we will store a dictionary 
+        # For each domain we will store a dictionary
         self._custom_private_data = {}
-   
+
 
         # Table to display the Domains
         self._build_domains_pane()
 
-        # Table to display the headers 
+        # Table to display the headers
         self._build_custom_headers_pane()
         self._build_scraped_headers_pane()
         self._build_gui_tabs()
 
-        # Adding custom headers with object boolean 
+        # Adding custom headers with object boolean
         self._augmenting_scraped_headers_data()
 
         return self
-        
+
     def _build_domains_pane(self):
         domain_colum = ["Domains"]
         self._domain_table = JTable()
@@ -146,7 +147,7 @@ class HeadersEditor(WindowAdapter):
 
         self._domain_scroll_pane = JScrollPane(self._domain_table)
         self._domain_scroll_pane.setPreferredSize(Dimension(150,200))
-        
+
         self._domain_table.getSelectionModel().addListSelectionListener(lambda _: self._domain_selection_listener())
 
         self._add_domain_button = ui_button("Add Domain", self._add_domain_listener, True)
@@ -154,7 +155,7 @@ class HeadersEditor(WindowAdapter):
         self._domain_table_panel.add(self._domain_scroll_pane, BorderLayout.CENTER)
         self._domain_table_panel.add(self._add_domain_button, BorderLayout.SOUTH)
 
-    def _build_custom_headers_pane(self):        
+    def _build_custom_headers_pane(self):
         custom_headers_columns = ["Flag", "Header", "Value"]
         self._custom_headers_table = JTable()
         self._custom_headers_dtm = CustomTable(0, 0)
@@ -167,7 +168,7 @@ class HeadersEditor(WindowAdapter):
         self._add_custom_header = ui_button("Add Header", self._add_custom_headers_row)
         # Create the "Remove Row" button for the second table
         self._remove_custom_header = ui_button("Remove Headers", self._remove_custom_headers_row)
-               
+
         # create the panel to hold the buttons
         self._custom_headers_button_panel = JPanel(FlowLayout())
         self._custom_headers_button_panel.add(self._add_custom_header)
@@ -184,7 +185,7 @@ class HeadersEditor(WindowAdapter):
         self._scraped_headers_dtm = CustomTable(0, 0)
         self._scraped_headers_dtm.setColumnIdentifiers(scraped_headers_columns)
         self._scraped_headers_table.setModel(self._scraped_headers_dtm)
-        
+
         self._move_scraped_headers = ui_button("Move Headers", self._move_scraped_headers_row)
         self._remove_scraped_headers = ui_button("Remove Headers", self._remove_scraped_headers_row)
 
@@ -208,8 +209,8 @@ class HeadersEditor(WindowAdapter):
 
         self._custom_headers_label = JLabel("Custom Headers")
         self._custom_headers_label.setHorizontalAlignment(JLabel.CENTER)
-        
-    
+
+
         self._scraped_headers_label = JLabel("Scraped Headers")
         self._scraped_headers_label.setHorizontalAlignment(JLabel.CENTER)
 
@@ -221,7 +222,7 @@ class HeadersEditor(WindowAdapter):
 
         self.this.setLocation(HeadersEditor.NEW_WINDOW_OFFSET, HeadersEditor.NEW_WINDOW_OFFSET)
 
-        
+
         self.this.setLayout(BorderLayout())
         self.this.add(self._domain_table_panel, BorderLayout.WEST)
         self.this.add(self._main_headers_panel, BorderLayout.CENTER)
@@ -234,7 +235,7 @@ class HeadersEditor(WindowAdapter):
         self._custom_headers_dtm.addRow(self._empty)
         self._custom_headers_dtm.addRow(self._empty)
         self._custom_headers_dtm.addRow(self._empty)
-    
+
     def _augmenting_scraped_headers_data(self):
         for k in self._scraped_headers.keys():
             new_row = [k, self._scraped_headers[k]]
@@ -246,10 +247,10 @@ class HeadersEditor(WindowAdapter):
             if name in self._custom_headers:
                 log.info("You can't add the same domain twice")
                 return
-            
+
             self._domain_dtm.addRow([name])
             self._custom_headers[name.encode('utf-8')] = [] # TODO check if it should be a dict or if a list is fine
-            
+
 
     def _domain_selection_listener(self):
         log.info("Domain selection listener")
@@ -274,7 +275,7 @@ class HeadersEditor(WindowAdapter):
                 header = header.split(":")
                 for elem in header:
                     new_header.append(elem)
-                    
+
                 log.debug("New header to add is: ")
                 log.debug(new_header)
                 self._custom_headers_dtm.addRow(new_header)
@@ -291,7 +292,7 @@ class HeadersEditor(WindowAdapter):
                 # header = header.split(":")
                 # for elem in header:
                 #     new_header.append(elem)
-                    
+
                 log.debug("New header to add is: ")
                 log.debug(new_header)
                 self._scraped_headers_dtm.addRow(new_header)
@@ -320,9 +321,9 @@ class HeadersEditor(WindowAdapter):
         rows = self._custom_headers_table.getSelectedRows()
         for i in range(0, len(rows)):
             self._custom_headers_dtm.removeRow(rows[i] - i)
-        
+
         self._custom_headers_update()
-    
+
     def _remove_scraped_headers_row(self, _):
         """
         Remove all the selected rows from the selection
@@ -331,7 +332,7 @@ class HeadersEditor(WindowAdapter):
         rows = self._scraped_headers_table.getSelectedRows()
         for i in range(0, len(rows)):
             self._scraped_headers_dtm.removeRow(rows[i] - i)
-        
+
         # TODO add scraped header modifier
         nRow = self._scraped_headers_dtm.getRowCount()
         log.debug("Removing all the scraped headers associated to this domain")
@@ -341,9 +342,9 @@ class HeadersEditor(WindowAdapter):
             name = str(self._scraped_headers_dtm.getValueAt(i, 0)).lower()
             value = str(self._scraped_headers_dtm.getValueAt(i, 1)).lower()
             self._scraped_headers[self._current_domain][name] = value
-            
 
-    
+
+
     def _move_scraped_headers_row(self, _):
         """
         Remove all the selected rows from the selection
@@ -359,12 +360,12 @@ class HeadersEditor(WindowAdapter):
             row_to_move = [False]
             for j in range(cols):
                 row_to_move.append(self._scraped_headers_dtm.getValueAt(rows[i] - i, j))
-            
+
             log.debug("Adding new row: %s" % row_to_move)
             self._custom_headers_dtm.addRow(row_to_move)
             self._scraped_headers_dtm.removeRow(rows[i] - i)
         self._custom_headers_update()
-    
+
     def _update_domains(self):
         """
         Checks the content of the Domains table and adds all the domains that are in the scraped headers but not in the
@@ -377,7 +378,7 @@ class HeadersEditor(WindowAdapter):
                 if domain in self._custom_headers:
                     log.debug("Domain already present")
                     continue
-            
+
             self._domain_dtm.addRow([domain])
             self._custom_headers[domain] = [] # TODO check if it should be a dict or if a list is fine
 
@@ -388,7 +389,7 @@ class HeadersEditor(WindowAdapter):
 
         :param evt: unused
         :return: None
-        """        
+        """
 
         HeadersEditor.locations[self._text] = self.this.getLocation()
         HeadersEditor.sizes[self._text] = self.this.getSize()
@@ -412,8 +413,8 @@ class HeadersEditor(WindowAdapter):
         """
         Update the data content with the updated rows
 
-        The old state, stored in self._private_data, is updated. 
-        Depending on the presence or not of the dest_data structure, 
+        The old state, stored in self._private_data, is updated.
+        Depending on the presence or not of the dest_data structure,
         the updates are stored either there or in the self._src_data
 
         :return: None
@@ -421,9 +422,9 @@ class HeadersEditor(WindowAdapter):
         if(self._current_domain == None):
             log.debug("You can't add a new line without having selected a domain")
             return
-        
+
         del self._custom_headers[self._current_domain][:]
-        
+
         nRow = self._custom_headers_dtm.getRowCount()
         nCol = self._custom_headers_dtm.getColumnCount()
         log.debug("Removing all the custom private data associated to this domain")
@@ -444,22 +445,22 @@ class HeadersEditor(WindowAdapter):
                         new_row[j] = int(self._custom_headers_dtm.getValueAt(i, j))
                     except ValueError:
                         new_row[j] = self._custom_headers_dtm.getValueAt(i, j)
-            
+
             idx = "%s:%s" % (new_row[1], new_row[2])
             log.debug("The idx is: %s" % idx)
             self._custom_private_data[self._current_domain][idx] = new_row[0]
             log.debug("self._private_data[%s] = %s" % (new_row[1:], new_row[0]))
-            
+
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:
                 self._custom_headers[self._current_domain].append(new_row[1:])
-    
+
     def _scraped_headers_update(self):
         """
         Update the data content with the updated rows
 
-        The old state, stored in self._private_data, is updated. 
-        Depending on the presence or not of the dest_data structure, 
+        The old state, stored in self._private_data, is updated.
+        Depending on the presence or not of the dest_data structure,
         the updates are stored either there or in the self._src_data
 
         :return: None
@@ -469,11 +470,11 @@ class HeadersEditor(WindowAdapter):
         #     del self._dest_data[:]
         # else:
         #     del self._src_data[:]
-        
+
         if(self._current_domain == None):
             log.debug("You can't add a new line without having selected a domain")
             return
-        
+
         nRow = self._scraped_headers_dtm.getRowCount()
         nCol = self._scraped_headers_dtm.getColumnCount()
         for i in range(0, nRow):
@@ -492,12 +493,12 @@ class HeadersEditor(WindowAdapter):
                         new_row[j] = int(self._scraped_headers_dtm.getValueAt(i, j))
                     except ValueError:
                         new_row[j] = self._scraped_headers_dtm.getValueAt(i, j)
-            
+
             idx = "%s:%s" % (new_row[1], new_row[2])
             log.debug("The idx is: %s" % idx)
             self._private_data[idx] = new_row[0]
             log.debug("self._private_data[%s] = %s" % (new_row[1:], new_row[0]))
-            
+
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:
                 if self._dest_data:
@@ -508,4 +509,3 @@ class HeadersEditor(WindowAdapter):
                 # remove from data in case dest_data is false
                 if self._dest_data == None:
                     self._src_data.pop(new_row[1])
-                

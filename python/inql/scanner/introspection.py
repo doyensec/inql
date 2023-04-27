@@ -162,26 +162,30 @@ def _analyze(url, filename=None, explicit_headers=None):
     # Write mutations, if any
     if parsed_schema.mutation is None:
         log.debug("No mutations found for the url: '%s'.", url)
-        return
+    else:
+        log.debug("Writing mutations for the url: '%s'.", url)
+        for mutation in parsed_schema.mutation.fields:
+            if not mutation.name:
+                log.error("Mutation without a name detected.")
+                continue
 
-    log.debug("Writing mutations for the url: '%s'.", url)
-    for mutation in parsed_schema.mutation.fields:
-        if not mutation.name:
-            log.error("Mutation without a name detected.")
-            continue
+            if not is_valid_graphql_name(mutation.name):
+                log.error("Mutation with invalid GraphQL name detected: '%s'.", mutation.name)
+                continue
 
-        if not is_valid_graphql_name(mutation.name):
-            log.error("Mutation with invalid GraphQL name detected: '%s'.", mutation.name)
-            continue
+            filename = os.path.join(
+                mutations_dir,
+                "{}.graphql".format(mutation.name)
+            )
 
-        filename = os.path.join(
-            mutations_dir,
-            "{}.graphql".format(mutation.name)
-        )
+            log.debug("Writing mutation " + mutation.name + '.graphql to ' + filename)
+            with open(filename, "w") as mutation_file:
+                mutation_file.write(
+                    parsed_schema.generate_mutation(mutation, depth=config.get('codegen.depth'))
+                    .to_string(pad=config.get('codegen.pad')))
+            log.debug("Wrote mutation '%s'.", mutation.name + '.graphql')
 
-        log.debug("Writing mutation " + mutation.name + '.graphql to ' + filename)
-        with open(filename, "w") as mutation_file:
-            mutation_file.write(
-                parsed_schema.generate_mutation(mutation, depth=config.get('codegen.depth'))
-                .to_string(pad=config.get('codegen.pad')))
-        log.debug("Wrote mutation '%s'.", mutation.name + '.graphql')
+    # Write the 'Points of Interest' report
+    log.debug("Writing the 'Points of Interest' report for the url: '%s'.", url)
+    with open(os.path.join(report_dir, "poi.txt"), "w") as poi_file:
+        poi_file.write(parsed_schema._print_points_of_interest())
