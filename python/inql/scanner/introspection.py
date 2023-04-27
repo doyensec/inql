@@ -5,6 +5,8 @@ from collections import OrderedDict
 from datetime import datetime
 from urlparse import urlparse
 
+from java.awt import Cursor
+
 from gqlspection import GQLSchema
 from gqlspection.utils import query_introspection
 
@@ -61,12 +63,15 @@ def analyze(url, filename=None, headers=None):
     'url' must be provided, schema_filename could be None.
     """
     try:
+        app.omnibar.set_busy(True)
         _analyze(url, filename, headers)
         app.omnibar.file = ''
     except Exception as e:
+        app.omnibar.file = filename
         visual_error(str(e))
     finally:
         app.fileview.refresh()
+        app.omnibar.set_busy(False)
 
 
 # TODO: The exception handling here is all over the place. Improvements are welcome.

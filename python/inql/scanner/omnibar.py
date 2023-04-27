@@ -58,6 +58,9 @@ class ScannerUrlField(FocusListener, KeyAdapter):
         log.debug("Setting text value of the url field to '%s'", url)
         self.component.setText(url)
 
+    def setEnabled(self, enabled):
+        self.component.setEnabled(enabled)
+
 
 class ScannerFileField(object):
     """Text field showing the name of currently selected text."""
@@ -88,6 +91,9 @@ class ScannerFileField(object):
         log.debug("Setting text value of the file field to '%s'", val)
         self.component.setText(val)
         log.debug("Tried changing the text value, did it work?")
+
+    def setEnabled(self, enabled):
+        self.component.setEnabled(enabled)
 
 
 class ScannerFileHandler(ActionListener, FocusListener):
@@ -187,7 +193,7 @@ class ScannerOmnibar(ActionListener):
         label = ui_label("1. Provide URL of the GraphQL endpoint")
 
         #  1.1.1 First line, right - the main scanner button
-        self.main_button = ui_button('Run Scanner', self, main=True)
+        self.main_button = ui_button('Analyze', self, main=True)
 
         self.custom_headers_button = ui_button('Custom Headers', self.custom_header_button_handler, main=False)
 
@@ -343,3 +349,17 @@ class ScannerOmnibar(ActionListener):
     def custom_header_button_handler(self, _):
         HeadersEditor.get_instance(app.session_name)
         log.debug("Working")
+
+    def set_busy(self, busy):
+        """Set the busy state of the UI."""
+        if busy:
+            log.debug("Setting scanner UI to busy state")
+            self.main_button.setText("Loading ...")
+        else:
+            log.debug("Setting scanner UI to idle state")
+            self.main_button.setText("Analyze")
+
+        self.custom_headers_button.setEnabled(not busy)
+        self.main_button.setEnabled(not busy)
+        self.url_field.setEnabled(not busy)
+        self.file_field.setEnabled(not busy)
