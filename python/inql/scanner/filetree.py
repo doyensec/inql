@@ -102,11 +102,13 @@ class ScannerFileTree(TreeSelectionListener):
         model = ScannerFileTreeModel(cwd)
 
         self.tree = JTree(model)
-        self.tree.setRootVisible(False)
+        self.tree.setRootVisible(True)
         self.tree.addTreeSelectionListener(self)
 
+        nested_panel = ui_panel()
+        nested_panel.add(BorderLayout.CENTER, self.tree)
         scrollpane = JScrollPane()
-        scrollpane.getViewport().add(self.tree)
+        scrollpane.getViewport().add(nested_panel)
 
         self.component = ui_panel()
 

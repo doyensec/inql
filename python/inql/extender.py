@@ -82,7 +82,9 @@ class BurpExtenderPython(IExtensionStateListener):
 
         # creating temp dir
         self._tmpdir = tempfile.mkdtemp()
-        os.chdir(self._tmpdir)
+        inql_dir = (os.path.join(self._tmpdir, "InQL"))
+        os.mkdir(inql_dir)
+        os.chdir(inql_dir)
 
     def registerExtenderCallbacks(self):
         """Overrides IBurpExtender method, which registers all the elements that compose this extension."""
