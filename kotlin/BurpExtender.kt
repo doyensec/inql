@@ -43,17 +43,16 @@ class BurpExtender: IBurpExtender, IExtensionStateListener, BurpExtension {
         if ((year < 2023) or ((year == 2023) and (major == 1) and (minor < 2))) {
             val stdout = PrintWriter(callbacks.stdout, true)
 
-            stdout.println("InQL v5 depends on Montoya API which requires Burp version 2023.1.2 or higher.")
-            stdout.println("Your Burp version is older and isn't supported: ${version_array[1]}.${version_array[2]}")
+            stdout.println("InQL v5 relies on the Montoya API, which is only supported in Burp versions 2023.1.2 or higher.")
+            stdout.println("Unfortunately, your current Burp version (${version_array[1]}.${version_array[2]}) is outdated and incompatible.")
             stdout.println("")
-            stdout.println("If InQL stopped working suddenly, it probably was installed from the BApp Store and")
-            stdout.println("received an automatic update to v5.")
+            stdout.println("If InQL has stopped functioning unexpectedly, it's likely that an automatic update to v5 was installed via the BApp Store.")
             stdout.println("")
-            stdout.println("Update your Burp installation or revert to InQL v4 by installing it manually from:")
+            stdout.println("To resolve this issue, please update your Burp installation or revert to InQL v4 by manually installing it from:")
             stdout.println("https://github.com/doyensec/inql/releases")
 
             callbacks.unloadExtension()
-            throw Exception("Burp version is too low for InQL v5.")
+            throw Exception("InQL v5 is not compatible with your current Burp version.")
         }
 
         // Save legacy API for the functionality that still relies on it
