@@ -4,7 +4,7 @@ from collections import namedtuple
 
 from java.awt import BorderLayout
 from java.io import File
-from javax.swing import JScrollPane, JTree
+from javax.swing import JScrollPane, JTree, UIManager
 from javax.swing.event import TreeSelectionListener
 from javax.swing.tree import TreeModel
 
@@ -100,6 +100,13 @@ class ScannerFileTree(TreeSelectionListener):
 
         cwd = File(os.getcwd())
         model = ScannerFileTreeModel(cwd)
+
+        # https://www.formdev.com/flatlaf/components/tree/
+        UIManager.put("Tree.showDefaultIcons", True)
+        UIManager.put("Tree.paintLines", True)
+        UIManager.put("Tree.lineTypeDashed", True)
+        UIManager.put("Tree.showsRootHandles", True)
+        UIManager.put("Tree.rendererFillBackground", False)
 
         self.tree = JTree(model)
         self.tree.setRootVisible(True)
