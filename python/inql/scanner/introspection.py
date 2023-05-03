@@ -44,6 +44,7 @@ def _normalize_headers(host, explicit_headers):
 
     content_type_present = False
     for k, v in explicit_headers:
+        log.debug("Custom header: %s: %s", k, v)
         headers[k] = v
 
         if (k.lower() == 'content-type' and
@@ -53,6 +54,7 @@ def _normalize_headers(host, explicit_headers):
     if not content_type_present:
         headers['Content-Type'] = 'application/json'
 
+    log.debug("Normalized headers: %s", headers)
     return headers
 
 
@@ -80,6 +82,7 @@ def analyze(url, filename=None, headers=None):
 def _analyze(url, filename=None, explicit_headers=None):
     host = urlparse(url).netloc
     headers = _normalize_headers(host, explicit_headers)
+    log.debug("Headers: %s", headers)
 
     if filename:
         # TODO: This needs to be tested with CRLF linebreaks and maybe other oddities

@@ -312,6 +312,8 @@ class ScannerOmnibar(ActionListener):
         """Action handler that gets executed when request is sent to InQL Scanner through context menu."""
 
         log.debug("Received introspection analysis request from context menu.")
+        log.debug("URL to be scanned: %s" % url)
+        log.debug("Headers: %s" % headers)
 
         self.url = url
         # self.file = None
