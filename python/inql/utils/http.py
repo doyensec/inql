@@ -75,9 +75,13 @@ class Response(object):
         return json.loads(self.text)
 
 def parse_cookies(cookie_string):
+    log.debug("Parsing cookies from string: {0}".format(cookie_string))
     cookies = {}
     if cookie_string:
         for cookie in cookie_string.split(";"):
-            name, value = cookie.strip().split("=")
-            cookies[name] = value
+            # cookie is in the format: name=value; ...; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; HttpOnly
+            if "=" in cookie:
+                name, value = cookie.split("=", 1)
+                cookies[name.strip()] = value.strip()
+    log.debug("Parsed cookies: {0}".format(cookies))
     return cookies

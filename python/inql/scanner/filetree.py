@@ -35,13 +35,11 @@ class ScannerFileTreeModel(TreeModel):
     def getChild(self, parent, index):
         files = sorted(parent.listFiles())
         if files:
-            log.debug("return %s", files[index])
             return NoPathPlease(files[index])
         return None
 
     def getChildCount(self, parent):
         if not parent.isDirectory():
-            log.debug("'%s' is not a directory -> 0", parent)
             return 0
         files = parent.list()
         if files:
