@@ -1,8 +1,9 @@
 # coding: utf-8
 import json
 import re
-from BaseHTTPServer import BaseHTTPRequestHandler
 from io import BytesIO
+
+from BaseHTTPServer import BaseHTTPRequestHandler
 from urlparse import urlparse
 
 from ..logger import log

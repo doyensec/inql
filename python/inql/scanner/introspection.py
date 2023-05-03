@@ -3,6 +3,7 @@ import json
 import os
 from collections import OrderedDict
 from datetime import datetime
+
 from urlparse import urlparse
 
 from java.awt import Cursor
@@ -100,7 +101,7 @@ def _analyze(url, filename=None, explicit_headers=None):
             # Expected to fail, always
             pass
     else:
-        log.debug("GraphQL schema wil be queried from the server.")
+        log.debug("GraphQL schema will be queried from the server.")
         try:
             request = Request()
             schema = query_introspection(url, headers, request_fn=request)

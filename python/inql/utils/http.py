@@ -44,6 +44,7 @@ class Request(object):
         # Set request body
         if data is not None:
             request = request.withBody(data)
+        log.debug("The request is: {0}".format(request.toString()))
 
         # Send request and get response
         response = montoya.http().sendRequest(request).response()
@@ -51,6 +52,7 @@ class Request(object):
         # Parse response
         response_headers = {}
         for header in response.headers():
+            log.debug("Header is -> {0}: {1}".format(header.name(), header.value()))
             response_headers[header.name()] = header.value()
         response_cookies = parse_cookies(response_headers.get("Set-Cookie", ""))
         response_body = response.bodyToString()

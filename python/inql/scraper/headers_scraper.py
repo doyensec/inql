@@ -1,5 +1,6 @@
 # coding: utf-8
 from threading import Lock
+
 from urlparse import urlparse
 
 from burp.api.montoya.proxy.http import ProxyRequestHandler, ProxyRequestReceivedAction, ProxyRequestToBeSentAction
@@ -61,7 +62,7 @@ class CustomProxyListener(ProxyRequestHandler):
         log.debug(self._scraped_headers[domain])
 
         # continue with the request
-        return ProxyRequestReceivedAction.intercept(interceptedRequest.withDefaultHeaders())
+        return ProxyRequestReceivedAction.continueWith(interceptedRequest.withDefaultHeaders())
 
 
     def handleRequestToBeSent(self, interceptedRequest):

@@ -1,5 +1,6 @@
 # coding: utf-8
 from threading import Lock
+
 from urlparse import urlparse
 
 from java.awt import BorderLayout, Dimension, FlowLayout
