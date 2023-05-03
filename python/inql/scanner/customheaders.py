@@ -227,6 +227,7 @@ class HeadersEditor(WindowAdapter):
         self.this.add(self._main_headers_panel, BorderLayout.CENTER)
 
         self.this.pack()
+        self.this.setLocationRelativeTo(None)
         self.this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE)
         self.this.setVisible(True)
 
