@@ -14,7 +14,8 @@ from javax.swing import JLabel, JPanel, JTextField
 from ..globals import app, callbacks, helpers
 from ..logger import log
 from ..menu.contextual import SendMenuItem
-from ..utils.ui import raw_editor_obsolete, ui_button, ui_panel, ui_textarea
+from ..utils.pyswing import button, multiline_label, panel
+from ..utils.ui import raw_editor_obsolete
 
 
 class RequestData(object):
@@ -176,18 +177,18 @@ class RequestEditorComponent(IMessageEditorController):
         self.url_component.requestFocusInWindow()
 
     def render(self):
-        urlpane = ui_panel()
+        urlpane = panel()
         urlpane.add(JLabel("Target: "), BorderLayout.WEST)
         urlpane.add(self.url_component, BorderLayout.CENTER)
 
-        send_button = ui_button("Send", self.send_handler)
+        send_button = button("Send", self.send_handler)
         urlpane.add(send_button, BorderLayout.EAST)
 
-        panel = ui_panel()
-        panel.add(urlpane, BorderLayout.NORTH)
-        panel.add(self.request_editor.component, BorderLayout.CENTER)
+        top_panel = panel()
+        top_panel.add(urlpane, BorderLayout.NORTH)
+        top_panel.add(self.request_editor.component, BorderLayout.CENTER)
 
-        return panel
+        return top_panel
 
     def getHttpService(self):
         return None
@@ -212,7 +213,7 @@ class AttackerRequest(object):
 
     def render(self):
         # Payloads
-        doc = ui_textarea("""
+        doc = multiline_label("""
 Supported placeholders:
 
     $[INT:first:last] - first and last are integers, both are included in the range

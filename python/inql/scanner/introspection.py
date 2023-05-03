@@ -10,7 +10,7 @@ from java.awt import Cursor
 from gqlspection import GQLSchema
 from gqlspection.utils import query_introspection
 
-from ..config import config
+from ..config import config, enabled_categories
 from ..globals import app
 from ..logger import log
 from ..utils.decorators import threaded
@@ -130,9 +130,10 @@ def _analyze(url, filename=None, explicit_headers=None):
         f.write(request.template)
 
     # Dump JSON schema
-    with open(os.path.join(report_dir, "schema.json"), "w") as schema_file:
-        log.debug("Dumping JSON schema")
-        schema_file.write(json.dumps(schema, indent=4, sort_keys=True))
+    if config.get('report.introspection'):
+        with open(os.path.join(report_dir, "schema.json"), "w") as schema_file:
+            log.debug("Dumping JSON schema")
+            schema_file.write(json.dumps(schema, indent=4, sort_keys=True))
 
     log.debug("About to parse the schema received from '%s'.", url)
     try:
@@ -191,6 +192,24 @@ def _analyze(url, filename=None, explicit_headers=None):
             log.debug("Wrote mutation '%s'.", mutation.name + '.graphql')
 
     # Write the 'Points of Interest' report
-    log.debug("Writing the 'Points of Interest' report for the url: '%s'.", url)
-    with open(os.path.join(report_dir, "poi.txt"), "w") as poi_file:
-        poi_file.write(parsed_schema._print_points_of_interest())
+    if config.get('report.poi'):
+        log.debug("Writing the 'Points of Interest' report for the url: '%s'.", url)
+
+        # Get the points of interest (JSON)
+        poi_json = parsed_schema.points_of_interest(
+            depth=config.get('report.poi.depth'),
+            categories=enabled_categories(),
+            keywords=config.get('report.poi.custom_keywords').split('\n')
+        )
+
+        format = config.get('report.poi.format')
+
+        # Write the points of interest (JSON)
+        if format == 'json' or format == 'both':
+            with open(os.path.join(report_dir, "poi.json"), "w") as poi_file:
+                json.dump(poi_json, poi_file, indent=4, sort_keys=True)
+
+        if format == 'text' or format == 'both':
+            # Write the points of interest (text)
+            with open(os.path.join(report_dir, "poi.txt"), "w") as poi_file:
+                poi_file.write(parsed_schema._parse_points_of_interest(poi_json))

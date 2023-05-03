@@ -5,7 +5,7 @@ from java.awt import BorderLayout
 
 from ..globals import montoya
 from ..logger import log
-from ..utils.ui import ui_panel
+from ..utils.pyswing import panel
 from .fileview import ScannerFileView
 from .omnibar import ScannerOmnibar
 
@@ -19,7 +19,7 @@ class ScannerTab(ITab):
     def getUiComponent(self):
         """Burp callback, should return the Java UI component to be displayed in the tab."""
         log.debug("Collecting ScannerTab UI components...")
-        ui = ui_panel(0)
+        ui = panel(0)
 
         omnibar  = ScannerOmnibar()
         fileview = ScannerFileView()

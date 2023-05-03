@@ -10,7 +10,8 @@ from gqlspection.utils import minimize_query
 
 from ..logger import log
 from ..menu.context_menu import SendFromInQL
-from ..utils.ui import add_recursive_mouse_listener, byte_array, raw_editor, ui_panel
+from ..utils.pyswing import panel
+from ..utils.ui import add_recursive_mouse_listener, byte_array, raw_editor
 
 
 class ScannerPayloadView(object):
@@ -19,7 +20,7 @@ class ScannerPayloadView(object):
     def __init__(self):
         """Displays the selected query / mutation."""
         log.debug("ScannerPayloadView initiated")
-        self.component = ui_panel(0)
+        self.component = panel(0)
 
         self._editor = raw_editor(read_only=True)
         self.component.add(self._editor.uiComponent(), BorderLayout.CENTER)

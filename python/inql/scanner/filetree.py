@@ -9,7 +9,7 @@ from javax.swing.event import TreeSelectionListener
 from javax.swing.tree import TreeModel
 
 from ..logger import log
-from ..utils.ui import ui_panel
+from ..utils.pyswing import panel
 
 
 # TODO: A "correct" approach would be employing tree cell renderer: https://docs.oracle.com/javase/7/docs/api/javax/swing/tree/TreeCellRenderer.html
@@ -112,12 +112,12 @@ class ScannerFileTree(TreeSelectionListener):
         self.tree.setRootVisible(True)
         self.tree.addTreeSelectionListener(self)
 
-        nested_panel = ui_panel()
+        nested_panel = panel()
         nested_panel.add(BorderLayout.CENTER, self.tree)
         scrollpane = JScrollPane()
         scrollpane.getViewport().add(nested_panel)
 
-        self.component = ui_panel()
+        self.component = panel()
 
         self.component.add(BorderLayout.CENTER, scrollpane)
 

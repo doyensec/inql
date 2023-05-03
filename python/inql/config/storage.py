@@ -1,4 +1,8 @@
 # coding: utf-8
+
+from ..logger import log
+
+
 class ConfigStore(dict):
     """Dict-like wrapper around Burp's per-session/global key-value storage.
 
@@ -22,6 +26,7 @@ class ConfigStore(dict):
 
         Unlike normal dictionary, never raises KeyError and returns None if the key is not present in key-value store.
         """
+        log.debug("Looking for config value: %s", key)
         value = self.store.getBoolean(key)
         if value is None:
             value = self.store.getInteger(key)
@@ -37,13 +42,19 @@ class ConfigStore(dict):
         # Make sure we only ever have one value for a given key
         del self[key]
 
+        log.debug("Setting config value in global settings: %s=%s (type: %s)", key, value, type(value))
         if isinstance(value, bool):
+            log.debug("bool value: %s", value)
             self.store.setBoolean(key, value)
         elif isinstance(value, int):
+            log.debug("int value: %s", value)
             self.store.setInteger(key, value)
-        elif isinstance(value, str):
+        elif isinstance(value, str) or isinstance(value, unicode):
+            log.debug("str value: %s", value)
             self.store.setString(key, value)
         else:
+            log.error("Invalid value type: %s" % type(value))
+            log.error("Received value: %s" % value)
             raise ValueError("Value must be a bool, int, or str")
 
     def __delitem__(self, key):

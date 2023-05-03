@@ -1,14 +1,13 @@
 # coding: utf-8
-from java.awt import BorderLayout, Color, Dimension, FlowLayout
+from java.awt import BorderLayout, Dimension, FlowLayout
 from java.awt.event import WindowAdapter
 from java.lang import Boolean
-from javax.swing import (JButton, JFrame, JLabel, JList, JOptionPane, JPanel, JPopupMenu,
-                         JScrollPane, JTabbedPane, JTable, ListSelectionModel)
-from javax.swing.table import DefaultTableCellRenderer, DefaultTableModel
+from javax.swing import JFrame, JLabel, JOptionPane, JPanel, JScrollPane, JTabbedPane, JTable, ListSelectionModel
+from javax.swing.table import DefaultTableModel
 
 from ..globals import app
 from ..logger import log
-from ..utils.ui import inherits_popup_menu, ui_button, ui_label, ui_panel, ui_textarea
+from ..utils.pyswing import button
 
 # from inql.actions.executor import ExecutorAction
 
@@ -150,7 +149,7 @@ class HeadersEditor(WindowAdapter):
 
         self._domain_table.getSelectionModel().addListSelectionListener(lambda _: self._domain_selection_listener())
 
-        self._add_domain_button = ui_button("Add Domain", self._add_domain_listener, True)
+        self._add_domain_button = button("Add Domain", self._add_domain_listener, True)
         self._domain_table_panel = JPanel(BorderLayout())
         self._domain_table_panel.add(self._domain_scroll_pane, BorderLayout.CENTER)
         self._domain_table_panel.add(self._add_domain_button, BorderLayout.SOUTH)
@@ -165,9 +164,9 @@ class HeadersEditor(WindowAdapter):
         self._custom_headers_dtm.addTableModelListener(lambda _: self._custom_headers_update())
 
         # Create the "Add Row" button for the second table
-        self._add_custom_header = ui_button("Add Header", self._add_custom_headers_row)
+        self._add_custom_header = button("Add Header", self._add_custom_headers_row)
         # Create the "Remove Row" button for the second table
-        self._remove_custom_header = ui_button("Remove Headers", self._remove_custom_headers_row)
+        self._remove_custom_header = button("Remove Headers", self._remove_custom_headers_row)
 
         # create the panel to hold the buttons
         self._custom_headers_button_panel = JPanel(FlowLayout())
@@ -186,8 +185,8 @@ class HeadersEditor(WindowAdapter):
         self._scraped_headers_dtm.setColumnIdentifiers(scraped_headers_columns)
         self._scraped_headers_table.setModel(self._scraped_headers_dtm)
 
-        self._move_scraped_headers = ui_button("Move Headers", self._move_scraped_headers_row)
-        self._remove_scraped_headers = ui_button("Remove Headers", self._remove_scraped_headers_row)
+        self._move_scraped_headers = button("Move Headers", self._move_scraped_headers_row)
+        self._remove_scraped_headers = button("Remove Headers", self._remove_scraped_headers_row)
 
         self._scraped_headers_button_panel = JPanel(FlowLayout())
         self._scraped_headers_button_panel.add(self._move_scraped_headers)

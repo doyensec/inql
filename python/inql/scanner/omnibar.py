@@ -6,13 +6,14 @@ from java.awt import BorderLayout, Dimension, FlowLayout
 from java.awt.event import ActionListener, FocusListener, KeyAdapter, KeyEvent
 from java.io import File
 from java.lang import System
-from javax.swing import Box, BoxLayout, JFileChooser, JPanel, JSeparator, JTextField, SwingConstants
+from javax.swing import Box, BoxLayout, JFileChooser, JPanel, JSeparator, JTextField, SwingConstants, SwingUtilities
 
 from ..editors.propertyeditor import SettingsEditor
 from ..globals import app
 from ..logger import log
+from ..settings.window import InQLSettingsWindow
 from ..utils.decorators import single, single_with_error_handling
-from ..utils.ui import ui_button, ui_label, ui_panel, ui_textarea
+from ..utils.pyswing import button, label, multiline_label, panel
 from .customheaders import HeadersEditor
 from .introspection import analyze
 
@@ -139,17 +140,18 @@ class ScannerFileHandler(ActionListener, FocusListener):
 
 class SettingsButtonHandler(ActionListener):
     """"Action handler for the settings menu."""
-    def __init__(self):
-        log.debug("SettingsButtonHandler initiated")
-        self.lock = Lock()
-        log.debug("Lock created")
-        self.window = SettingsEditor()
-        log.debug("Settings editor added")
+#    def __init__(self):
+#        log.debug("SettingsButtonHandler initiated")
+#        self.lock = Lock()
+#        log.debug("Lock created")
+#        self.window = SettingsEditor()
+#        log.debug("Settings editor added")
 
     @single_with_error_handling
     def actionPerformed(self, _):
         log.debug("Settings opened")
-        self.window.show()
+        #self.window.show()
+        SwingUtilities.invokeLater(lambda: InQLSettingsWindow().setVisible(True))
 
 
 class HeadersButtonHandler(ActionListener):
@@ -190,18 +192,20 @@ class ScannerOmnibar(ActionListener):
 
         ## 1. First block concerning URL
         #  1.1.1 First line, left - a big text label
-        label = ui_label("1. Provide URL of the GraphQL endpoint")
+        first_label = label("1. Provide URL of the GraphQL endpoint", big=True)
 
         #  1.1.1 First line, right - the main scanner button
-        self.main_button = ui_button('Analyze', self, main=True)
+        self.main_button = button('Analyze', self, main=True)
 
-        self.custom_headers_button = ui_button('Custom Headers', self.custom_header_button_handler, main=False)
+        self.custom_headers_button = button('Custom Headers', self.custom_header_button_handler, main=False)
+        self.settings_button = button('Settings', self.settings_button_handler)
 
-        first_line = ui_panel()
-        first_line.add(BorderLayout.WEST, label)
+        first_line = panel()
+        first_line.add(BorderLayout.WEST, first_label)
 
         button_pane = JPanel(FlowLayout())
         button_pane.add(self.custom_headers_button)
+        button_pane.add(self.settings_button)
         button_pane.add(self.main_button)
 
         first_line.add(BorderLayout.EAST, button_pane)
@@ -211,28 +215,31 @@ class ScannerOmnibar(ActionListener):
         # TODO add a dropdown menu to allow the user to specify which "session" to use
         self.url_field  = ScannerUrlField(self)
 
-        url_panel = ui_panel(10)
+        url_panel = panel(10)
         url_panel.add(BorderLayout.CENTER, self.url_field.render())
 
 
         ## 2. Second block concerning file input
 
         #  2.1 First line - a big text label
-        file_label = ui_label("2. (Optional) Provide an introspection schema as a file (JSON)")
+        file_label = label("2. (Optional) Provide an introspection schema as a file (JSON)", big=True)
 
-        file_label_panel = ui_panel()
+        file_label_panel = panel()
         file_label_panel.add(file_label)
 
         #  2.2 Second line - a help line / explainer in a smaller text
-        file_explainer = ui_textarea("InQL can query schema directly from GraphQL server. If a server does not allow introspection functionality, provide schema as a file (in JSON format). URL still needs to be provied to generate sample queries.")
+        file_explainer = multiline_label(
+            "InQL can query schema directly from GraphQL server. "
+            "If a server does not allow introspection functionality, provide schema as a file (in JSON format). "
+            "URL still needs to be provied to generate sample queries.")
 
         #  2.3.1 File field on the left
-        file_button = ui_button("Select file ...", file_action_handler)
+        file_button = button("Select file ...", file_action_handler)
 
         #  2.3.2 Text field showing the selected file path (near the file field)
         self.file_field = ScannerFileField(file_action_handler)
 
-        file_panel = ui_panel(0)
+        file_panel = panel(0)
         file_panel.setLayout(BoxLayout(file_panel, BoxLayout.LINE_AXIS))
         file_panel.add(Box.createRigidArea(Dimension(10, 0)))
         file_panel.add(file_button)
@@ -247,12 +254,12 @@ class ScannerOmnibar(ActionListener):
 
         separator = JSeparator()
         separator.setOrientation(SwingConstants.HORIZONTAL)
-        separator_panel = ui_panel(3)
+        separator_panel = panel(3)
         separator_panel.add(separator)
 
         #  3.2 Combine all elements side to side with Box layout
 
-        self.component = ui_panel(0)
+        self.component = panel(0)
         self.component.setLayout(BoxLayout(self.component, BoxLayout.PAGE_AXIS))
 
         self.component.add(first_line)
@@ -262,9 +269,9 @@ class ScannerOmnibar(ActionListener):
         self.component.add(file_explainer)
         self.component.add(file_panel)
 
-        panel = ui_panel(10)
-        panel.add(self.component)
-        return panel
+        combined_panel = panel(10)
+        combined_panel.add(self.component)
+        return combined_panel
 
 
     @single_with_error_handling
@@ -349,6 +356,10 @@ class ScannerOmnibar(ActionListener):
     def custom_header_button_handler(self, _):
         HeadersEditor.get_instance(app.session_name)
         log.debug("Working")
+
+    def settings_button_handler(self, _):
+        log.debug("Opening settings window")
+        SwingUtilities.invokeLater(lambda: InQLSettingsWindow().setVisible(True))
 
     def set_busy(self, busy):
         """Set the busy state of the UI."""
