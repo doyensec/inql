@@ -296,9 +296,12 @@ class ScannerOmnibar(ActionListener):
             domain = urlparse(self.url).netloc
             log.debug("The domain is: %s" % domain)
 
-            if domain in app.custom_headers[app.session_name]:
+            log.error("Current custom headers:")
+            log.error(app.custom_headers)
+
+            if domain in app.custom_headers:
                 log.debug("The URL has some custom headers set")
-                analyze(self.url, self.file, headers=app.custom_headers[app.session_name][domain])
+                analyze(self.url, self.file, headers=app.custom_headers[domain])
             else:
                 log.debug("The URL has not set any custom headers, setting headers=none")
                 analyze(self.url, self.file)
@@ -357,7 +360,7 @@ class ScannerOmnibar(ActionListener):
         self.file_field.value = filename
 
     def custom_header_button_handler(self, _):
-        HeadersEditor.get_instance(app.session_name)
+        HeadersEditor.get_instance()
         log.debug("Working")
 
     def settings_button_handler(self, _):

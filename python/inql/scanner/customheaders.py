@@ -399,7 +399,7 @@ class HeadersEditor(WindowAdapter):
         self.this.setVisible(False)
 
         # DEBUG
-        log.debug("Printing the headers at the moment of the custom headers widnows closing:")
+        log.debug("Printing the headers at the moment of the custom headers window closing:")
         log.debug(self._custom_headers)
         for domain in self._custom_headers:
             log.debug(self._custom_headers[domain])
@@ -424,6 +424,11 @@ class HeadersEditor(WindowAdapter):
             return
 
         del self._custom_headers[self._current_domain][:]
+
+
+        # Create a global custom headers dictionary for the current domain
+        if self._current_domain not in app.custom_headers:
+            app.custom_headers[self._current_domain] = []
 
         nRow = self._custom_headers_dtm.getRowCount()
         nCol = self._custom_headers_dtm.getColumnCount()
@@ -450,6 +455,11 @@ class HeadersEditor(WindowAdapter):
             log.debug("The idx is: %s" % idx)
             self._custom_private_data[self._current_domain][idx] = new_row[0]
             log.debug("self._private_data[%s] = %s" % (new_row[1:], new_row[0]))
+
+            # Save the selected header in the global custom headers dictionary
+            app.custom_headers[self._current_domain].append(new_row[1:3])
+            log.error("Saved the selected header in the global custom headers dictionary")
+            log.error("app.custom_headers[%s][%s] = %s" % (self._current_domain, new_row[1], new_row[2]))
 
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:
