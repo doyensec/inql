@@ -9,7 +9,7 @@ from javax.swing.table import DefaultTableCellRenderer, DefaultTableModel
 from ..globals import app
 from ..logger import log
 from ..utils.ui import inherits_popup_menu, ui_button, ui_label, ui_panel, ui_textarea
-
+from ..scraper.headers_scraper import HistoryScraper
 # from inql.actions.executor import ExecutorAction
 
 
@@ -112,8 +112,12 @@ class HeadersEditor(WindowAdapter):
         # Create the set of custom headers associated to the session name
         app.custom_headers[text] = {}
         self._custom_headers = app.custom_headers[text]
-        self._scraped_headers = app.scraped_headers
 
+
+        # FIXME Scraped headers does not need to be global anymore.
+        # self._scraped_headers = app.scraped_headers
+        self._scraped_headers = {}
+        
         # Data to store the state of the custom and scraped headers.
         # Inside the private data will be stored all the headers while in the
         # Data structures we will only store the selected ones (for the custom)
@@ -131,6 +135,13 @@ class HeadersEditor(WindowAdapter):
 
         # Adding custom headers with object boolean
         self._augmenting_scraped_headers_data()
+
+        # Creting object to get the scraped headers (on demand)
+        self._header_scraper = HistoryScraper()
+
+        # Data structure to hold removed/moved headers.
+        # For each domain it will hold the list of composed headers.
+        self._removed_scraped_headers = {}
 
         return self
 
@@ -280,25 +291,25 @@ class HeadersEditor(WindowAdapter):
                 log.debug(new_header)
                 self._custom_headers_dtm.addRow(new_header)
 
-        # get scraped domain
+        # get scraped headers
         self._scraped_headers_dtm.setRowCount(0)
-        if selected_domain in self._scraped_headers.keys():
-            log.debug("Selected domain is in scraped headers")
-            for header in self._scraped_headers[selected_domain]:
-                log.debug("Scraped header to add is: %s: %s" % (header, self._scraped_headers[selected_domain][header]))
-                new_header = []
-                new_header.append(header)
-                new_header.append(self._scraped_headers[selected_domain][header])
-                # header = header.split(":")
-                # for elem in header:
-                #     new_header.append(elem)
 
-                log.debug("New header to add is: ")
-                log.debug(new_header)
-                self._scraped_headers_dtm.addRow(new_header)
+        scraped_headers = self._header_scraper.get_scraped_headers(selected_domain)
+        if scraped_headers == None:
+            scraped_headers = []
+
+        if selected_domain not in self._removed_scraped_headers:
+            self._removed_scraped_headers[selected_domain] = set()
+        # removing all the "removed" headers from the list
+        for header in scraped_headers:
+            scraped_header = "{}: {}".format(header[0], header[1])
+            log.debug("Header is: {}".format(scraped_header))
+
+            if scraped_header not in self._removed_scraped_headers[selected_domain]:
+                self._scraped_headers_dtm.addRow(header)
+
 
         self._current_domain = selected_domain
-
 
 
     def _add_custom_headers_row(self, _):
@@ -331,17 +342,24 @@ class HeadersEditor(WindowAdapter):
         """
         rows = self._scraped_headers_table.getSelectedRows()
         for i in range(0, len(rows)):
+            name = str(self._scraped_headers_dtm.getValueAt(rows[i] - i, 0))
+            value = str(self._scraped_headers_dtm.getValueAt(rows[i] - i, 1))
+            scraped_header = "{}: {}".format(name, value)
+
+            log.debug("The haders that has been removed is: ")
+            log.debug(scraped_header)
+            self._removed_scraped_headers[self._current_domain].add(scraped_header)
             self._scraped_headers_dtm.removeRow(rows[i] - i)
 
-        # TODO add scraped header modifier
-        nRow = self._scraped_headers_dtm.getRowCount()
-        log.debug("Removing all the scraped headers associated to this domain")
-        self._scraped_headers[self._current_domain] = {}
+        # # TODO add scraped header modifier
+        # nRow = self._scraped_headers_dtm.getRowCount()
+        # log.debug("Removing all the scraped headers associated to this domain")
+        # self._scraped_headers[self._current_domain] = {}
 
-        for i in range(0, nRow):
-            name = str(self._scraped_headers_dtm.getValueAt(i, 0)).lower()
-            value = str(self._scraped_headers_dtm.getValueAt(i, 1)).lower()
-            self._scraped_headers[self._current_domain][name] = value
+        # for i in range(0, nRow):
+        #     name = str(self._scraped_headers_dtm.getValueAt(i, 0)).lower()
+        #     value = str(self._scraped_headers_dtm.getValueAt(i, 1)).lower()
+        #     self._scraped_headers[self._current_domain][name] = value
 
 
 
@@ -354,15 +372,17 @@ class HeadersEditor(WindowAdapter):
         log.debug("The selected rows are:")
         log.debug(rows)
 
-        cols = self._scraped_headers_table.getColumnCount()
-
         for i in range(0, len(rows)):
-            row_to_move = [False]
-            for j in range(cols):
-                row_to_move.append(self._scraped_headers_dtm.getValueAt(rows[i] - i, j))
+            
+            name = str(self._scraped_headers_dtm.getValueAt(rows[i] - i, 0))
+            value = str(self._scraped_headers_dtm.getValueAt(rows[i] - i, 1))
+            scraped_header = "{}: {}".format(name, value)
 
-            log.debug("Adding new row: %s" % row_to_move)
-            self._custom_headers_dtm.addRow(row_to_move)
+            log.debug("The haders that has been moved is: ")
+            log.debug(scraped_header)
+            self._removed_scraped_headers[self._current_domain].add(scraped_header)
+
+            self._custom_headers_dtm.addRow([name, value])
             self._scraped_headers_dtm.removeRow(rows[i] - i)
         self._custom_headers_update()
 
@@ -372,7 +392,7 @@ class HeadersEditor(WindowAdapter):
         domain table
         """
 
-        for domain in self._scraped_headers:
+        for domain in self._header_scraper.get_scraped_domains():
             log.debug("Considered domain: %s" % domain)
             if(domain != None and len(domain)>0):
                 if domain in self._custom_headers:
@@ -509,3 +529,5 @@ class HeadersEditor(WindowAdapter):
                 # remove from data in case dest_data is false
                 if self._dest_data == None:
                     self._src_data.pop(new_row[1])
+
+        

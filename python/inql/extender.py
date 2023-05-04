@@ -97,7 +97,9 @@ class BurpExtenderPython(IExtensionStateListener):
             # Register ourselves as a custom scanner check
             callbacks.registerScannerCheck(BurpScannerCheck())
             # Register the proxy listener
-            montoya.proxy().registerRequestHandler(CustomProxyListener(app.scraped_headers))
+            
+            # FIXME 
+            # montoya.proxy().registerRequestHandler(CustomProxyListener(app.scraped_headers))
 
 
             try:
