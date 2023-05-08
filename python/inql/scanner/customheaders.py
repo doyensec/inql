@@ -1,15 +1,15 @@
 # coding: utf-8
-from java.awt import BorderLayout, Color, Dimension, FlowLayout
+from java.awt import BorderLayout, Dimension, FlowLayout
 from java.awt.event import WindowAdapter
 from java.lang import Boolean
-from javax.swing import (JButton, JFrame, JLabel, JList, JOptionPane, JPanel, JPopupMenu,
-                         JScrollPane, JTabbedPane, JTable, ListSelectionModel)
-from javax.swing.table import DefaultTableCellRenderer, DefaultTableModel
+from javax.swing import JFrame, JLabel, JOptionPane, JPanel, JScrollPane, JTabbedPane, JTable, ListSelectionModel
+from javax.swing.table import DefaultTableModel
 
 from ..globals import app
 from ..logger import log
-from ..utils.ui import inherits_popup_menu, ui_button, ui_label, ui_panel, ui_textarea
 from ..scraper.headers_scraper import HistoryScraper
+from ..utils.pyswing import button
+
 # from inql.actions.executor import ExecutorAction
 
 
@@ -161,7 +161,7 @@ class HeadersEditor(WindowAdapter):
 
         self._domain_table.getSelectionModel().addListSelectionListener(lambda _: self._domain_selection_listener())
 
-        self._add_domain_button = ui_button("Add Domain", self._add_domain_listener, True)
+        self._add_domain_button = button("Add Domain", self._add_domain_listener, True)
         self._domain_table_panel = JPanel(BorderLayout())
         self._domain_table_panel.add(self._domain_scroll_pane, BorderLayout.CENTER)
         self._domain_table_panel.add(self._add_domain_button, BorderLayout.SOUTH)
@@ -176,9 +176,9 @@ class HeadersEditor(WindowAdapter):
         self._custom_headers_dtm.addTableModelListener(lambda _: self._custom_headers_update())
 
         # Create the "Add Row" button for the second table
-        self._add_custom_header = ui_button("Add Header", self._add_custom_headers_row)
+        self._add_custom_header = button("Add Header", self._add_custom_headers_row)
         # Create the "Remove Row" button for the second table
-        self._remove_custom_header = ui_button("Remove Headers", self._remove_custom_headers_row)
+        self._remove_custom_header = button("Remove Headers", self._remove_custom_headers_row)
 
         # create the panel to hold the buttons
         self._custom_headers_button_panel = JPanel(FlowLayout())
@@ -197,8 +197,8 @@ class HeadersEditor(WindowAdapter):
         self._scraped_headers_dtm.setColumnIdentifiers(scraped_headers_columns)
         self._scraped_headers_table.setModel(self._scraped_headers_dtm)
 
-        self._move_scraped_headers = ui_button("Move Headers", self._move_scraped_headers_row)
-        self._remove_scraped_headers = ui_button("Remove Headers", self._remove_scraped_headers_row)
+        self._move_scraped_headers = button("Move Headers", self._move_scraped_headers_row)
+        self._remove_scraped_headers = button("Remove Headers", self._remove_scraped_headers_row)
 
         self._scraped_headers_button_panel = JPanel(FlowLayout())
         self._scraped_headers_button_panel.add(self._move_scraped_headers)
@@ -239,6 +239,7 @@ class HeadersEditor(WindowAdapter):
         self.this.add(self._main_headers_panel, BorderLayout.CENTER)
 
         self.this.pack()
+        self.this.setLocationRelativeTo(None)
         self.this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE)
         self.this.setVisible(True)
 
@@ -419,7 +420,7 @@ class HeadersEditor(WindowAdapter):
         self.this.setVisible(False)
 
         # DEBUG
-        log.debug("Printing the headers at the moment of the custom headers widnows closing:")
+        log.debug("Printing the headers at the moment of the custom headers window closing:")
         log.debug(self._custom_headers)
         for domain in self._custom_headers:
             log.debug(self._custom_headers[domain])
@@ -444,6 +445,11 @@ class HeadersEditor(WindowAdapter):
             return
 
         del self._custom_headers[self._current_domain][:]
+
+
+        # Create a global custom headers dictionary for the current domain
+        if self._current_domain not in app.custom_headers:
+            app.custom_headers[self._current_domain] = []
 
         nRow = self._custom_headers_dtm.getRowCount()
         nCol = self._custom_headers_dtm.getColumnCount()
@@ -470,6 +476,11 @@ class HeadersEditor(WindowAdapter):
             log.debug("The idx is: %s" % idx)
             self._custom_private_data[self._current_domain][idx] = new_row[0]
             log.debug("self._private_data[%s] = %s" % (new_row[1:], new_row[0]))
+
+            # Save the selected header in the global custom headers dictionary
+            app.custom_headers[self._current_domain].append(new_row[1:3])
+            log.error("Saved the selected header in the global custom headers dictionary")
+            log.error("app.custom_headers[%s][%s] = %s" % (self._current_domain, new_row[1], new_row[2]))
 
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:

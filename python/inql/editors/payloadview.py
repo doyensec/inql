@@ -32,7 +32,6 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
     request = None
 
     def __init__(self, read_only):
-        log.debug("montoya editor payload test - init")
         if read_only:
             self.query_editor = montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
             self.vars_editor = montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
@@ -64,7 +63,6 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
             log.debug("GraphQL request detected, attaching GraphQL tab to the message editor")
             return True
 
-        log.debug("The request isn't GraphQL, skipping")
         return False
 
     def isModified(self):

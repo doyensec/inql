@@ -22,7 +22,7 @@ from .scraper.headers_scraper import CustomProxyListener
 from .timer.tab import TimerTab
 from .traffic_scan.scan_handler import BurpScannerCheck
 from .utils.decorators import unroll_exceptions
-from .utils.ui import ui_panel
+from .utils.pyswing import panel
 
 DEBUG = True
 
@@ -40,7 +40,7 @@ class MainTab(ITab):
         return "InQL"
 
     def getUiComponent(self):
-        self.panel = ui_panel()
+        self.panel = panel()
 
         self.pane = JTabbedPane()
         for tab in self.tabs:
@@ -66,10 +66,9 @@ class BurpExtenderPython(IExtensionStateListener):
         sys.stderr = callbacks.getStderr()
 
         # FIXME: Remove this once this is exposed through Settings UI
-        config.set('logging.level', 'DEBUG', scope='global')
-
-        config.delete('codegen.depth', 'global')
-        config.delete('codegen.pad', 'global')
+        config.delete('logging.level', 'project')
+        config.delete('codegen.depth', 'project')
+        config.delete('codegen.pad', 'project')
 
         set_log_level(log, config.get('logging.level'))
         set_log_level(gql_log, config.get('logging.level'))

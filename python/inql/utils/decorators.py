@@ -29,7 +29,7 @@ def _unroll_exceptions(f, name):
             return f(*args, **kwargs)
         except:
             log.error("An exception in class {} (it won't be re-raised!)".format(name))
-            traceback.print_exc(file=callbacks.getStderr())
+            log.error(traceback.format_exc())
             callbacks.getStderr().flush()
     return wrapper
 

@@ -4,7 +4,8 @@ from burp import ITab
 from javax.swing import JSplitPane
 
 from ..globals import app
-from ..utils.ui import raw_editor_obsolete, ui_panel
+from ..utils.pyswing import panel
+from ..utils.ui import raw_editor_obsolete
 from .history_log import AttackerHistoryLog
 from .history_viewer import AttackerHistoryViewer
 from .request import AttackerRequest
@@ -34,7 +35,7 @@ class AttackerTab(ITab):
         self.history_log = AttackerHistoryLog(self.history_viewer, self.request_pane)
 
         # Top level pane
-        panel = ui_panel()
+        top_panel = panel()
         splitpane = JSplitPane(
             # Split between left and right
             JSplitPane.HORIZONTAL_SPLIT,
@@ -47,8 +48,8 @@ class AttackerTab(ITab):
             )
         )
         splitpane.setResizeWeight(0.4)
-        panel.add(splitpane)
-        return panel
+        top_panel.add(splitpane)
+        return top_panel
 
     def send_to(self, url, request):
         """Handler to send attacker request through Burp context menu."""
