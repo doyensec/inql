@@ -116,7 +116,7 @@ def _analyze(url, filename=None, explicit_headers=None):
 
     # Create report directory (example: api.example.com/2023-02-15_102254)
     date = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    report_dir = "{}/{}".format(host, date)
+    report_dir = "{}/{}/{}".format(app.session_name, host, date)
     queries_dir = os.path.join(report_dir, 'queries')
     mutations_dir = os.path.join(report_dir, 'mutations')
     try:

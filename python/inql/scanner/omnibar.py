@@ -7,7 +7,7 @@ from java.awt import BorderLayout, Dimension, FlowLayout
 from java.awt.event import ActionListener, FocusListener, KeyAdapter, KeyEvent
 from java.io import File
 from java.lang import System
-from javax.swing import Box, BoxLayout, JFileChooser, JPanel, JSeparator, JTextField, SwingConstants, SwingUtilities
+from javax.swing import Box, BoxLayout, JFileChooser, JOptionPane, JPanel, JSeparator, JTextField, SwingConstants, SwingUtilities, JComboBox, JButton, JMenuBar, JMenu, JMenuItem
 
 from ..editors.propertyeditor import SettingsEditor
 from ..globals import app
@@ -18,6 +18,22 @@ from ..utils.pyswing import button, label, multiline_label, panel
 from .customheaders import HeadersEditor
 from .introspection import analyze
 
+class MenuActionListener(ActionListener):
+    """
+    Custom Action Listener used to update the session selection.
+    """
+
+    def __init__(self, sessionmenu, item, name):
+        self.item = item
+        self.name = name
+        self.sessionmenu = sessionmenu
+    
+    def actionPerformed(self, event):
+        self.item.setSelected(True)
+        self.sessionmenu.setText(self.name + "  " +u"\u25BC")
+
+        # Change the global session identifier.
+        app.session_name = self.name
 
 class ScannerUrlField(FocusListener, KeyAdapter):
     """Textfield for the URL input. Shows a helpful hint when url is empty."""
@@ -29,16 +45,59 @@ class ScannerUrlField(FocusListener, KeyAdapter):
         log.debug("ScannerUrlField initiated")
         self.lock = Lock()
         self._omnibar = omnibar
+        self.session_names = set()
         super(ScannerUrlField, self).__init__()
 
+
     def render(self):
+
+        # Menu creation.
+        self.jmenu_bar= JMenuBar()
+        self.session_menu = JMenu("Sessions")
+
+        self.default_menu_item = JMenuItem(app.session_name)
+        self.session_menu.add(self.default_menu_item, 0)
+        self.default_menu_item.addActionListener(MenuActionListener(self.session_menu, self.default_menu_item, app.session_name))
+
+        self.default_menu_item.setSelected(True)
+        self.session_menu.setText(app.session_name + "  " + u'\u25BC')
+
+        self.add_session_item = JMenuItem(" + Add Session")
+        self.add_session_item.addActionListener(self.addSessionActionListener)
+
+        self.session_menu.add(self.add_session_item)
+        self.jmenu_bar.add(self.session_menu)
+
+        # Omnibar creation.
         self.component = JTextField()
         self.component.setFocusable(True)
         self.component.putClientProperty("JTextField.placeholderText", self.hint)
         self.component.putClientProperty("JTextField.showClearButton", True)
 
-        self.component.addKeyListener(self)
-        return self.component
+        # Packing all together.
+        self.panel = JPanel(BorderLayout())
+        self.panel.add(self.jmenu_bar, BorderLayout.WEST)
+        self.panel.add(self.component, BorderLayout.CENTER)
+
+        return self.panel
+
+    def addSessionActionListener(self, evnt):
+        """
+        Action listener triggered when a new session needs to be created
+        """
+        session_name = JOptionPane.showInputDialog(None, "Enter session Name", "New Session", JOptionPane.INFORMATION_MESSAGE)
+        if(session_name != None and len(session_name)>0):
+            if session_name in self.session_names:
+                log.info("You can't add the same domain twice")
+                return
+            self.session_names.add(session_name)
+
+            new_session_item = JMenuItem(session_name)
+            self.session_menu.add(new_session_item, 0)
+            new_session_item.addActionListener(MenuActionListener(self.session_menu, new_session_item, session_name))
+
+            if session_name not in app.custom_headers:
+                app.custom_headers[session_name] = {}
 
     @single
     def keyPressed(self, e):
@@ -299,9 +358,9 @@ class ScannerOmnibar(ActionListener):
             log.error("Current custom headers:")
             log.error(app.custom_headers)
 
-            if domain in app.custom_headers:
+            if domain in app.custom_headers[app.session_name]:
                 log.debug("The URL has some custom headers set")
-                analyze(self.url, self.file, headers=app.custom_headers[domain])
+                analyze(self.url, self.file, headers=app.custom_headers[app.session_name][domain])
             else:
                 log.debug("The URL has not set any custom headers, setting headers=none")
                 analyze(self.url, self.file)
@@ -360,7 +419,7 @@ class ScannerOmnibar(ActionListener):
         self.file_field.value = filename
 
     def custom_header_button_handler(self, _):
-        HeadersEditor.get_instance()
+        HeadersEditor.get_instance(app.session_name)
         log.debug("Working")
 
     def settings_button_handler(self, _):

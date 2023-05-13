@@ -110,7 +110,9 @@ class HeadersEditor(WindowAdapter):
         self._current_domain = None
 
         # Create the set of custom headers associated to the session name
-        app.custom_headers[text] = {}
+        if text not in app.custom_headers:
+            app.custom_headers[text] = {}
+        
         self._custom_headers = app.custom_headers[text]
 
 
@@ -254,7 +256,7 @@ class HeadersEditor(WindowAdapter):
             self._scraped_headers_dtm.addRow(new_row)
 
     def _add_domain_listener(self, _):
-        name = JOptionPane.showInputDialog(self, "Enter domain name: ")
+        name = JOptionPane.showInputDialog(None, "Enter domain name: ", "New Domain", JOptionPane.INFORMATION_MESSAGE)
         if(name != None and len(name)>0):
             if name in self._custom_headers:
                 log.info("You can't add the same domain twice")
@@ -447,10 +449,6 @@ class HeadersEditor(WindowAdapter):
         del self._custom_headers[self._current_domain][:]
 
 
-        # Create a global custom headers dictionary for the current domain
-        if self._current_domain not in app.custom_headers:
-            app.custom_headers[self._current_domain] = []
-
         nRow = self._custom_headers_dtm.getRowCount()
         nCol = self._custom_headers_dtm.getColumnCount()
         log.debug("Removing all the custom private data associated to this domain")
@@ -476,11 +474,6 @@ class HeadersEditor(WindowAdapter):
             log.debug("The idx is: %s" % idx)
             self._custom_private_data[self._current_domain][idx] = new_row[0]
             log.debug("self._private_data[%s] = %s" % (new_row[1:], new_row[0]))
-
-            # Save the selected header in the global custom headers dictionary
-            app.custom_headers[self._current_domain].append(new_row[1:3])
-            log.error("Saved the selected header in the global custom headers dictionary")
-            log.error("app.custom_headers[%s][%s] = %s" % (self._current_domain, new_row[1], new_row[2]))
 
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:
