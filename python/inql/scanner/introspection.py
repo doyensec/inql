@@ -3,7 +3,6 @@ import json
 import os
 from collections import OrderedDict
 from datetime import datetime
-
 from urlparse import urlparse
 
 from java.awt import Cursor
