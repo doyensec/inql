@@ -7,6 +7,8 @@ from urlparse import urlparse
 
 from java.awt import Cursor
 
+from java.lang import RuntimeException
+
 from gqlspection import GQLSchema
 from gqlspection.utils import query_introspection
 
@@ -111,6 +113,10 @@ def _analyze(url, filename=None, explicit_headers=None):
             # TODO: show some visual feedback here as well
             log.error("No JSON schema provided and server '%s' did not return results for the introspection query (exception: %s).", host, e)
             raise Exception("Introspection schema does not seem to be enabled on the server! Provide schema as a JSON file.")
+        except RuntimeException as e:
+            log.error(e)
+            raise Exception("Domain does not exist.")
+    
     log.debug("GraphQL schema acquired successfully.")
 
     # Create report directory (example: api.example.com/2023-02-15_102254)

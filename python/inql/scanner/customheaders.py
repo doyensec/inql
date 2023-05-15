@@ -242,7 +242,7 @@ class HeadersEditor(WindowAdapter):
             self._scraped_headers_dtm.addRow(new_row)
 
     def _add_domain_listener(self, _):
-        name = JOptionPane.showInputDialog(self, "Enter domain name: ")
+        name = JOptionPane.showInputDialog(None, "Enter domain name: ")
         if(name != None and len(name)>0):
             if name in self._custom_headers:
                 log.info("You can't add the same domain twice")
@@ -458,8 +458,8 @@ class HeadersEditor(WindowAdapter):
 
             # Save the selected header in the global custom headers dictionary
             app.custom_headers[self._current_domain].append(new_row[1:3])
-            log.error("Saved the selected header in the global custom headers dictionary")
-            log.error("app.custom_headers[%s][%s] = %s" % (self._current_domain, new_row[1], new_row[2]))
+            log.debug("Saved the selected header in the global custom headers dictionary")
+            log.debug("app.custom_headers[%s][%s] = %s" % (self._current_domain, new_row[1], new_row[2]))
 
             # Adding the new row to the private headers to be displayed
             if new_row[0] == True:

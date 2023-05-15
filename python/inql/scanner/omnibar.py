@@ -295,8 +295,8 @@ class ScannerOmnibar(ActionListener):
             domain = urlparse(self.url).netloc
             log.debug("The domain is: %s" % domain)
 
-            log.error("Current custom headers:")
-            log.error(app.custom_headers)
+            log.debug("Current custom headers:")
+            log.debug(app.custom_headers)
 
             if domain in app.custom_headers:
                 log.debug("The URL has some custom headers set")
