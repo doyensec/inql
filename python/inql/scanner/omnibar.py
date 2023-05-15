@@ -239,9 +239,8 @@ class ScannerOmnibar(ActionListener):
         #  2.3.2 Text field showing the selected file path (near the file field)
         self.file_field = ScannerFileField(file_action_handler)
 
-        file_panel = panel(0)
+        file_panel = panel(5)
         file_panel.setLayout(BoxLayout(file_panel, BoxLayout.LINE_AXIS))
-        file_panel.add(Box.createRigidArea(Dimension(10, 0)))
         file_panel.add(file_button)
         file_panel.add(Box.createRigidArea(Dimension(10, 0)))
         file_panel.add(self.file_field.render())

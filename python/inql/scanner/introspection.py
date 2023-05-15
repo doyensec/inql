@@ -6,7 +6,6 @@ from datetime import datetime
 from urlparse import urlparse
 
 from java.awt import Cursor
-
 from java.lang import RuntimeException
 
 from gqlspection import GQLSchema
@@ -116,7 +115,7 @@ def _analyze(url, filename=None, explicit_headers=None):
         except RuntimeException as e:
             log.error(e)
             raise Exception("Domain does not exist.")
-    
+
     log.debug("GraphQL schema acquired successfully.")
 
     # Create report directory (example: api.example.com/2023-02-15_102254)
