@@ -8,6 +8,7 @@ from javax.swing import JScrollPane, JTree, UIManager
 from javax.swing.event import TreeSelectionListener, TreeWillExpandListener
 from javax.swing.tree import DefaultMutableTreeNode, DefaultTreeModel
 
+from ..config.howto import howto
 from ..logger import log
 from ..utils.pyswing import panel
 
@@ -49,15 +50,6 @@ SelectedNode = namedtuple('SelectedNode',
                             'template',
                             'url'
                           ])
-
-
-howto = """
-Welcome to InQL!
-
-A short summary of usage patterns and helpful tips is meant to go here.
-
-Have fun,
-"""
 
 
 class ScannerFileTree(TreeSelectionListener, TreeWillExpandListener):

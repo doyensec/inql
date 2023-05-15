@@ -19,7 +19,6 @@ from .logger import log, set_log_level
 from .menu.context_menu import ContextMenu
 from .scanner.tab import ScannerTab
 from .scraper.headers_scraper import CustomProxyListener
-from .timer.tab import TimerTab
 from .traffic_scan.scan_handler import BurpScannerCheck
 from .utils.decorators import unroll_exceptions
 from .utils.pyswing import panel
@@ -55,7 +54,6 @@ class BurpExtenderPython(IExtensionStateListener):
     """Class used to register extension in Burp Suite."""
 
     _scanner_tab  = None
-    _timer_tab    = None
     _attacker_tab = None
 
     def __init__(self, burp_callbacks, upstream_montoya):
@@ -102,16 +100,13 @@ class BurpExtenderPython(IExtensionStateListener):
             try:
                 # Register Suite Tab(s)
                 self._scanner_tab  = ScannerTab()
-                self._timer_tab    = TimerTab()
                 self._attacker_tab = AttackerTab()
 
                 app.scanner_tab = self._scanner_tab.getUiComponent()
-                app.timer_tab = self._timer_tab.getUiComponent()
                 app.attacker_tab = self._attacker_tab.getUiComponent()
 
                 app.main_tab = MainTab(
                     ("Scanner", app.scanner_tab),
-                    ("Timer", app.timer_tab),
                     ("Attacker", app.attacker_tab)
                     # TODO add the settings here probably
                 )
