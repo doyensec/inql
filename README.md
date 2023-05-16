@@ -4,7 +4,7 @@
 ![GitHub](https://img.shields.io/github/license/doyensec/inql?logo=github&color=darkgreen)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/doyensec/inql?label=latest%20release&logo=github)
 ![GitHub Release Date](https://img.shields.io/github/release-date/doyensec/inql?display_date=published_at&logo=github)
-![GitHub milestone](https://img.shields.io/github/milestones/progress/doyensec/inql/2?logo=github&label=progress+towards+next+release)
+![GitHub milestone](https://img.shields.io/github/milestones/progress/doyensec/inql/3?logo=github&label=progress+towards+next+release)
 [![dev branch ahead by](https://img.shields.io/github/commits-difference/doyensec/inql?base=master&head=dev&label=dev+branch+ahead+by&color=bright&logo=github)](https://github.com/doyensec/inql/tree/dev)
 [![GitHub contributors](https://img.shields.io/github/contributors/doyensec/inql?logo=github&color=black)](AUTHORS)
 [![GitHub issues by-label](https://img.shields.io/github/issues/doyensec/inql/Help%20Wanted?color=red&logo=github)](https://github.com/doyensec/inql/issues?q=is%3Aissue+is%3Aopen+label%3A%22Help+Wanted%22)
