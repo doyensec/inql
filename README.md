@@ -51,6 +51,8 @@ The InQL user interface is equipped with two primary components: the *Scanner* a
 
 ### :mag_right: Scanner
 
+https://github.com/doyensec/inql/assets/105389353/77ac7f1f-1aba-415e-8566-07cefa8a5075
+
 The *Scanner* is the core of InQL v5.0, where you can analyze a GraphQL endpoint or a local introspection schema file. It auto-generates all possible queries and mutations, organizing them into a structured view for your analysis.
 
 **:white_check_mark: Customizable Scans**
@@ -71,12 +73,15 @@ You have the ability to set custom headers per domain, with the domain list auto
 
 ### :crossed_swords: Attacker
 
+https://github.com/doyensec/inql/assets/105389353/c7a89be3-dad8-4db6-b4a5-b8fefe043394
+
 The *Attacker* component lets you run batch GraphQL attacks, which can be useful for circumventing poorly implemented rate limits.
 
 ### :memo: Burp's Native Message Editors
 
 Burp's native message editors now come with an additional 'GraphQL' tab, providing an efficient way to view and modify GraphQL requests.
 
+<img width="1209" alt="image" src="https://github.com/doyensec/inql/assets/105389353/45d2cdcd-9bfb-4ad9-b469-0126437b3e66">
 
 # :arrow_down: Installation
 
