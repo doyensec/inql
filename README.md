@@ -10,7 +10,7 @@
 [![GitHub issues by-label](https://img.shields.io/github/issues/doyensec/inql/Help%20Wanted?color=red&logo=github)](https://github.com/doyensec/inql/issues?q=is%3Aissue+is%3Aopen+label%3A%22Help+Wanted%22)
 [![GitHub issues by-label](https://img.shields.io/github/issues/doyensec/inql/Good%20First%20Issue?color=f0a&logo=github)](https://github.com/doyensec/inql/issues?q=is%3Aissue+is%3Aopen+label%3A%22Good+First+Issue%22)
 
-<img align="right" width="200" src="docs/inql.jpg">
+<img align="right" width="200" src="docs/inql.png">
 
 ## :rocket: Introduction
 
