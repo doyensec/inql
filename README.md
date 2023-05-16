@@ -178,6 +178,7 @@ Interactions are best carried out through the Github issue tracker, but you can 
 
 A special thanks to our contributors. Your dedication and commitment have been instrumental in making InQL what it is today.
 
+Current:
 - **Maintainer:** Andrew Konstantinov [@execveat (Twitter)](https://twitter.com/execveat) / [@execveat (Mastodon)](https://infosec.exchange/@execveat)
 - **Contributor:** Matteo Oldani [@matteoldani (Github)](https://github.com/matteoldani)
 
@@ -185,7 +186,6 @@ Historical:
 - **Author:** Andrea Brancaleoni [@nJoyneer (Twitter)](https://twitter.com/nJoyneer) / [thypon (Github)](https://github.com/thypon)
 - List of other contributors: [AUTHORS](AUTHORS)
 
-Current:
 This project was made with support of [Doyensec](https://doyensec.com/research.html).
 
 ![Doyensec Research](docs/doyensec_logo.svg)
