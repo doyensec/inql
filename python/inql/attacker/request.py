@@ -30,6 +30,10 @@ class InitiateAttack(ActionListener):
     def __init__(self, editor):
         self.editor = editor
 
+    def stripComments(self, code):
+        code = str(code)
+        return re.sub(r'(?m)^ *#.*\n?', '', code)
+
     def generate_attack_request(self):
         info = helpers.analyzeRequest(self.editor.request)
         headers = info.getHeaders()
@@ -40,12 +44,15 @@ class InitiateAttack(ActionListener):
             parsed = parsed[0]
         query = parsed['query']
 
-        prefix, suffix = "", ""
+        actionMatch = re.search('([^{]*?){(.+)}([^}]*?)', query, re.DOTALL)
+        action, query, tmp = actionMatch.groups()
+        query = self.stripComments(query)
+        prefix, suffix, exploit = "", "", ""
         while True:
             # FIXME: whitespace inbetween will break the regex!
 
             # look until first {
-            match = re.match('([^{]*?){(.+)}([^}]*?)', query)
+            match = re.search('([^{]*?){(.+)}([^}]*?)', query, re.DOTALL)
             if not match:
                 break
             pfx, query, sfx = match.groups()
@@ -53,9 +60,9 @@ class InitiateAttack(ActionListener):
             # look for a placeholder
             match = (
                 # $[INT:first:last]
-                re.match(r'(.*?)\$\[(INT):(\d+:\d+)\](.*)', pfx) or
+                re.search(r'(.*?)\$\[(INT):(\d+:\d+)\](.*)', pfx, re.DOTALL) or
                 # $[FILE:path] and $[FILE:path:first:last]
-                re.match(r'(.*?)\$\[(FILE):([^:]+(?::\d+:\d+)?)\](.*)', pfx)
+                re.search(r'(.*?)\$\[(FILE):([^:]+(?::\d+:\d+)?)\](.*)', pfx, re.DOTALL)
             )
             if not match:
                 prefix = prefix + pfx + '{'
@@ -72,7 +79,7 @@ class InitiateAttack(ActionListener):
                 # $[INT:first:last]
                 start, end = args
                 for n, item in enumerate(range(int(start), int(end)+1)):
-                    exploit += 'op%s: %s%s%s{%s}%s' % (n+1, lead, item, rest, query, sfx)
+                    exploit +='op%s: %s%s%s%s{%s}%s\n' % (n+1, prefix, lead, item, rest, query, suffix)
             if verb == 'FILE':
                 # $[FILE:path] and $[FILE:path:first:last]
                 path = args[0]
@@ -84,10 +91,11 @@ class InitiateAttack(ActionListener):
                     start, end = 1, len(items)
 
                 for n, item in enumerate(items[start-1: end]):
-                    exploit += 'op%s: %s%s%s{%s}%s' % (n+1, lead, item, rest, query, sfx)
+                    exploit +='op%s: %s%s%s%s{%s}%s\n' % (n+1, prefix, lead, item, rest, query, suffix)
 
             #build the query
-            attack = prefix + exploit + suffix
+            # attack = prefix + exploit + suffix\
+            attack = action + "{\n" + exploit + "}"
 
             log.debug("attack query: %s" % attack)
             body = json.dumps({'query': attack})
