@@ -1,21 +1,22 @@
-<p>A security testing tool to facilitate GraphQL technology security auditing efforts.</p>
+<p>This Burp extension is designed to assist in your GraphQL security testing efforts.</p>
 
-<p>This extension will issue an Introspection query to the target GraphQL endpoint in order fetch metadata information for:</p>
+<p>The main tool provided by InQL v5.0 is a customizable scanner to analyze a GraphQL endpoint or a local
+introspection schema file. It generates all possible queries and mutations, presenting them in an organized view
+for thorough analysis. Scanner results can be sent to Burp's Repeater or Intruder tools for further testing.</p>
 
-<ul>
-	<li>Queries, mutations, subscriptions</li>
-	<li>Its fields and arguments</li>
-	<li>Objects and custom object types</li>
-	<li>Find GraphQL Cycles</li>
-</ul>
-
-<p>Using the inql extension for Burp Suite, you can:</p>
+<p>Here are some other features that make InQL v5.0 an indispensable tool for your auditing needs:</p>
 
 <ul>
-	<li>Search for known GraphQL URL paths; the tool will grep and match known values to detect GraphQL endpoints within the target website</li>
-	<li>Search for exposed GraphQL development consoles (GraphiQL, GraphQL Playground, and other common consoles)</li>
-	<li>Use a custom GraphQL tab displayed on each HTTP request/response containing GraphQL</li>
-	<li>Leverage the templates generation by sending those requests to Burp's Repeater tool ("Send to Repeater")</li>
-	<li>Leverage the templates generation and editor support by sending those requests to embedded GraphIQL ("Send to GraphiQL")</li>
-	<li>Configure the tool by using a custom settings tab</li>
+	<li>Points of interest analysis for identification of PII, authentication, authorization, and other sensitive data in GraphQL schema.</li>
+	<li>The new Attacker component for batch GraphQL attacks, handy for testing rate limit bypasses and DoS vectors.</li>
+	<li>Identification of GraphQL endpoints and development console such as GraphiQL, GraphQL Playground, etc.</li>
+	<li>Integration of a custom GraphQL tab in Burp's native HTTP message editor, visualizing GraphQL payload.</li>
+	<li>Configuration of the tool via a custom settings tab for more precise control.</li>
 </ul>
+
+<p>InQL v5.0 introduces GQLSpection, a powerful successor to the standalone and CLI modes found in previous versions.
+<a href="https://github.com/doyensec/gqlspection">GQLSpection</a> is a versatile CLI tool and a Python 2/3/Jython
+compatible library that sends introspection queries, parses results, generates queries and runs Points of Interest
+scans in a headless mode.</p>
+
+<p>Happy testing and stay tuned for more updates!</p>
