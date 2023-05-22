@@ -1,6 +1,5 @@
 # coding: utf-8
 from threading import Lock
-
 from urlparse import urlparse
 
 from java.awt import BorderLayout, Dimension, FlowLayout
@@ -299,9 +298,8 @@ class ScannerOmnibar(ActionListener):
         #  2.3.2 Text field showing the selected file path (near the file field)
         self.file_field = ScannerFileField(file_action_handler)
 
-        file_panel = panel(0)
+        file_panel = panel(5)
         file_panel.setLayout(BoxLayout(file_panel, BoxLayout.LINE_AXIS))
-        file_panel.add(Box.createRigidArea(Dimension(10, 0)))
         file_panel.add(file_button)
         file_panel.add(Box.createRigidArea(Dimension(10, 0)))
         file_panel.add(self.file_field.render())
@@ -355,8 +353,8 @@ class ScannerOmnibar(ActionListener):
             domain = urlparse(self.url).netloc
             log.debug("The domain is: %s" % domain)
 
-            log.error("Current custom headers:")
-            log.error(app.custom_headers)
+            log.debug("Current custom headers:")
+            log.debug(app.custom_headers)
 
             if domain in app.custom_headers[app.session_name]:
                 log.debug("The URL has some custom headers set")

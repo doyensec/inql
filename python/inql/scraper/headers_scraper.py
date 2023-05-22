@@ -1,6 +1,5 @@
 # coding: utf-8
 from threading import Lock
-
 from urlparse import urlparse
 
 from burp.api.montoya.proxy.http import ProxyRequestHandler, ProxyRequestReceivedAction, ProxyRequestToBeSentAction

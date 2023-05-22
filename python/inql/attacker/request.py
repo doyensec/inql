@@ -3,7 +3,6 @@ import datetime
 import json
 import re
 from threading import Thread
-
 from urlparse import urlparse
 
 from burp import IMessageEditorController

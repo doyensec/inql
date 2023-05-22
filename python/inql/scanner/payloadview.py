@@ -6,8 +6,6 @@ from burp.api.montoya.http.message.requests.HttpRequest import httpRequest
 
 from java.awt import BorderLayout
 
-from gqlspection.utils import minimize_query
-
 from ..logger import log
 from ..menu.context_menu import SendFromInQL
 from ..utils.pyswing import panel
@@ -48,7 +46,7 @@ class ScannerPayloadView(object):
 
         log.debug("Generating request body for context menu handlers")
         body = json.dumps({
-            "query": minimize_query(data)
+            "query": data
             })
 
         http_service = httpService(node.url)

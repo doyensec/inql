@@ -8,7 +8,7 @@ from burp.api.montoya.ui.editor.extension import EditorMode, ExtensionProvidedHt
 
 from javax.swing import JSplitPane
 
-from gqlspection.utils import minimize_query, pretty_print_graphql
+from gqlspection.utils.format import PrettyPrinter
 
 from ..globals import montoya
 from ..logger import log
@@ -50,6 +50,8 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
         self.hash = {'query': None, 'vars': None}
         self.errors = {'query': False, 'vars': False}
         self.backup = {'query': None, 'vars': None}
+
+        self._pretty_printer = PrettyPrinter()
 
     def uiComponent(self):
         return self.component
@@ -195,7 +197,7 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
     @property
     def query(self):
         try:
-            return minimize_query(self.query_editor.getContents().toString())
+            return self.query_editor.getContents().toString()
         except:
             log.error("Failed to parse GraphQL query read from the editor tab")
             return ""
@@ -203,7 +205,7 @@ class EditorPayload(ExtensionProvidedHttpRequestEditor):
     @query.setter
     def query(self, msg):
         log.debug("Setting new GraphQL query in the editor tab")
-        pretty = pretty_print_graphql(msg)
+        pretty = self._pretty_printer.format(msg)
         log.debug("Successfully parsed GraphQL query")
         self.query_editor.setContents(byte_array(pretty))
 

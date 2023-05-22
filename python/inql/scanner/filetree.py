@@ -5,65 +5,40 @@ from collections import namedtuple
 from java.awt import BorderLayout
 from java.io import File
 from javax.swing import JScrollPane, JTree, UIManager
-from javax.swing.event import TreeSelectionListener
-from javax.swing.tree import TreeModel
+from javax.swing.event import TreeSelectionListener, TreeWillExpandListener
+from javax.swing.tree import DefaultMutableTreeNode, DefaultTreeModel
 
+from ..config.howto import howto
 from ..logger import log
 from ..utils.pyswing import panel
 
 
-# TODO: A "correct" approach would be employing tree cell renderer: https://docs.oracle.com/javase/7/docs/api/javax/swing/tree/TreeCellRenderer.html
-# it doesn't work for me though. All examples are in Java, so I'm probably missing something during Python translation.
-# TODO: This code asks to be rewritten in Kotlin.
-class NoPathPlease(File):
-    """A java.io.File subclass to show basenames instead of full path names in the file tree view."""
-    def __init__(self, f):
-        super(NoPathPlease, self).__init__(f.toURI())
+class FileTreeNode(DefaultMutableTreeNode):
+
+    def __init__(self, node):
+        self._node = node
+        self._name = os.path.basename(node.getPath())
+
+        self.is_file = node.isFile()
+        self.is_directory = not self.is_file
+
+        DefaultMutableTreeNode.__init__(self, (node, self._name))
+
+    def isLeaf(self):
+        return self.is_file
 
     def toString(self):
-        return self.getName()
+        return self._name
 
-# Tree model interface: https://docs.oracle.com/javase/7/docs/api/javax/swing/tree/TreeModel.html
-class ScannerFileTreeModel(TreeModel):
-    def __init__(self, fileobj):
-        log.debug("ScannerFileTreeModel initialization")
-        self.root_element = fileobj
+    def listFiles(self):
+        files = self._node.listFiles()
+        return sorted(files, key=lambda f: (f.getName()))
 
-    def getRoot(self):
-        return NoPathPlease(self.root_element)
+    def getCanonicalPath(self):
+        return self._node.getCanonicalPath()
 
-    def getChild(self, parent, index):
-        files = sorted(parent.listFiles())
-        if files:
-            return NoPathPlease(files[index])
-        return None
-
-    def getChildCount(self, parent):
-        if not parent.isDirectory():
-            return 0
-        files = parent.list()
-        if files:
-            return len(files)
-        return 0
-
-    def isLeaf(self, node):
-        return not node.isDirectory()
-
-    def getIndexOfChild(self, parent, child):
-        for n, el in enumerate(sorted(parent.list())):
-            if child.getName() == el:
-                return n
-        return -1
-
-    # TODO: do we even need to define these?
-    def valueForPathChanged(self, path, newValue):
-        log.debug("valueForPathChanged(%s, %s)", path, newValue)
-
-    def addTreeModelListener(self, listener):
-        log.debug("addTreeModelListener(%s)", listener)
-
-    def removeTreeModelListener(self, listener):
-        log.debug("removeTreeModelListener(%s)", listener)
+    def getParentFile(self):
+        return self._node.getParentFile()
 
 
 SelectedNode = namedtuple('SelectedNode',
@@ -77,16 +52,7 @@ SelectedNode = namedtuple('SelectedNode',
                           ])
 
 
-howto = """
-Welcome to InQL!
-
-A short summary of usage patterns and helpful tips is meant to go here.
-
-Have fun,
-"""
-
-
-class ScannerFileTree(TreeSelectionListener):
+class ScannerFileTree(TreeSelectionListener, TreeWillExpandListener):
     """File tree with a list of identified queries & mutations."""
 
     def __init__(self, fileview):
@@ -97,7 +63,6 @@ class ScannerFileTree(TreeSelectionListener):
         self.create_howto()
 
         cwd = File(os.getcwd())
-        model = ScannerFileTreeModel(cwd)
 
         # https://www.formdev.com/flatlaf/components/tree/
         UIManager.put("Tree.showDefaultIcons", True)
@@ -106,9 +71,10 @@ class ScannerFileTree(TreeSelectionListener):
         UIManager.put("Tree.showsRootHandles", True)
         UIManager.put("Tree.rendererFillBackground", False)
 
-        self.tree = JTree(model)
+        self.tree = JTree(DefaultMutableTreeNode())
         self.tree.setRootVisible(True)
         self.tree.addTreeSelectionListener(self)
+        self.tree.addTreeWillExpandListener(self)
 
         nested_panel = panel()
         nested_panel.add(BorderLayout.CENTER, self.tree)
@@ -116,7 +82,6 @@ class ScannerFileTree(TreeSelectionListener):
         scrollpane.getViewport().add(nested_panel)
 
         self.component = panel()
-
         self.component.add(BorderLayout.CENTER, scrollpane)
 
         # On a first load open the InQL howto document
@@ -139,14 +104,54 @@ class ScannerFileTree(TreeSelectionListener):
             template=None,
             url=None)
         self.fileview.payloadview.load(initial_node)
+        self.refresh()
 
     def refresh(self):
         """Refresh TreeModel when the directory is updated"""
         log.debug("Refreshing tree model")
         cwd = File(os.getcwd())
-        model = ScannerFileTreeModel(cwd)
-        # TODO: Do we need to do something with the old model after replacing it? Will it still occupy memory after that?
-        self.tree.setModel(model)
+
+        root = FileTreeNode(cwd)
+        self.model = DefaultTreeModel(root)
+        self.addNodes(root, True)
+        self.tree.setModel(self.model)
+
+    def addNodes(self, root, addChildNodes):
+        if root.is_file:
+            return
+
+        files = root.listFiles()
+        if files is None:
+            return
+
+        directoryInsert = 0
+        for i in range(len(files)):
+            file = files[i]
+            node = FileTreeNode(file)
+
+            if file.isDirectory():
+                root.insert(node, directoryInsert)
+                directoryInsert += 1
+            else:
+                root.insert(node, i)
+
+            if addChildNodes:
+                self.addNodes(node, False)
+
+    def treeWillExpand(self, e):
+        if self.tree.hasBeenExpanded(e.getPath()):
+            return
+
+        path = e.getPath()
+
+        if path.getPathCount() == 2:
+            return
+
+        node = path.getPathComponent(path.getPathCount() - 1)
+        self.addNodes(node, False)
+
+    def treeWillCollapse(self, e):
+        pass
 
     def _build_url(self, template_path):
         with open(template_path, "r") as f:
@@ -157,6 +162,7 @@ class ScannerFileTree(TreeSelectionListener):
     def selected(self):
         """Returns a convenient named tuple (SelectedNode) with info on selected item."""
         log.debug("Determining selected nodes in the file tree.")
+
         tree_path = self.tree.getSelectionPath()
         if not tree_path:
             log.debug("Asked to get selection, but I don't think anything has been selected.")
@@ -171,8 +177,8 @@ class ScannerFileTree(TreeSelectionListener):
 
         item = tree_path.getLastPathComponent()
 
-        if item.isDirectory():
-            log.debug("The selected item is a directory - skip it (%s)", item.getPath())
+        if item.is_directory:
+            log.debug("The selected item is a directory - skip it (%s)", item.toString())
             return None
 
         path = item.getCanonicalPath()
