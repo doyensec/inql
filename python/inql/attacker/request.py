@@ -5,6 +5,8 @@ import re
 from threading import Thread
 from urlparse import urlparse
 
+from graphql.parser import GraphQLParser
+
 from burp import IMessageEditorController
 
 from java.awt import BorderLayout
@@ -44,10 +46,13 @@ class InitiateAttack(ActionListener):
             parsed = parsed[0]
         query = parsed['query']
 
+        ast = parser.parse(query)
+        print('ast: ', ast)
+
         actionMatch = re.search('([^{]*?){(.+)}([^}]*?)', query, re.DOTALL)
         action, query, tmp = actionMatch.groups()
         query = self.stripComments(query)
-        query = re.sub(r'\n|\r|\t', '', query)
+        query = "{" + re.sub(r'\n|\r|\t', '', query) + "}"
         prefix, suffix, exploit = "", "", ""
         while True:
             # FIXME: whitespace inbetween will break the regex!
@@ -57,6 +62,8 @@ class InitiateAttack(ActionListener):
             if not match:
                 break
             pfx, query, sfx = match.groups()
+            print('match pfx ', pfx)
+            print('match query ', query)
 
             # look for a placeholder
             match = (
@@ -74,6 +81,7 @@ class InitiateAttack(ActionListener):
             lead, verb, args, rest = match.groups()
             args = args.split(':')
             log.debug("lead: %s, verb: %s, args: %s, rest: %s" % (lead, verb, args, rest))
+            print("lead: %s, verb: %s, args: %s, rest: %s" % (lead, verb, args, rest))
 
             exploit = ""
             if verb == 'INT':
