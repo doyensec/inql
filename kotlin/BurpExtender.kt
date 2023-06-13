@@ -1,6 +1,5 @@
 package burp
 
-import java.io.File
 import java.io.PrintWriter
 
 import org.python.util.PythonInterpreter
@@ -38,8 +37,10 @@ class BurpExtender: IBurpExtender, IExtensionStateListener, BurpExtension {
         // show helpful error message if version is below 2023.1.2 (version_array[1] is year, version_array[2] is major and minor style like '1.2')
         // split version_array[2] before comparing
         val year = version_array[1].toInt()
-        val major = version_array[2].split(".")[0].toInt()
-        val minor = version_array[2].split(".")[1].toInt()
+        val splitVersion = version_array[2].split(".")
+        val major = splitVersion[0].toInt()
+        val minor = if (splitVersion.size == 1) 0 else splitVersion[1].toInt()
+
         if ((year < 2023) or ((year == 2023) and (major == 1) and (minor < 2))) {
             val stdout = PrintWriter(callbacks.stdout, true)
 
