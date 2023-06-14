@@ -1,4 +1,4 @@
 [submodule "lib/GQLSpection"]
 	path = lib/GQLSpection
-	url = ../../doyensec/inql
+	url = ../../doyensec/GQLSpection
 	branch = dev
