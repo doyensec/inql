@@ -36,13 +36,16 @@ class BurpExtender: IBurpExtender, IExtensionStateListener, BurpExtension {
         val version_array = callbacks.getBurpVersion()
 
         // show helpful error message if version is below 2023.1.2 (version_array[1] is year, version_array[2] is major and minor style like '1.2')
-        // split version_array[2] before comparing
         val year = version_array[1].toInt()
-        val major = version_array[2].split(".")[0].toInt()
-        val minor = version_array[2].split(".")[1].toInt()
+
+        // split version_array[2] and check if it has major and minor
+        val versionParts = version_array[2].split(".")
+        val major = versionParts[0].toInt()
+        // if minor version is not present, consider it as '0'
+        val minor = if (versionParts.size > 1) versionParts[1].toInt() else 0
+
         if ((year < 2023) or ((year == 2023) and (major == 1) and (minor < 2))) {
             val stdout = PrintWriter(callbacks.stdout, true)
-
             stdout.println("InQL v5 relies on the Montoya API, which is only supported in Burp versions 2023.1.2 or higher.")
             stdout.println("Unfortunately, your current Burp version (${version_array[1]}.${version_array[2]}) is outdated and incompatible.")
             stdout.println("")
