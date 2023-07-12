@@ -61,8 +61,8 @@ class CustomProxyListener(ProxyRequestHandler):
         log.debug(self._scraped_headers[domain])
 
         # continue with the request
-        return ProxyRequestReceivedAction.continueWith(interceptedRequest.withDefaultHeaders())
+        return ProxyRequestReceivedAction.continueWith(interceptedRequest)
 
 
     def handleRequestToBeSent(self, interceptedRequest):
-        return ProxyRequestToBeSentAction.continueWith(interceptedRequest.withDefaultHeaders())
+        return ProxyRequestToBeSentAction.continueWith(interceptedRequest)
