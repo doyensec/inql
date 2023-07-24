@@ -52,7 +52,8 @@ class ContextMenuItem(ActionListener, JMenuItem):
         log.debug("Request: %s", self.request)
         log.debug("Headers: %s", self.request.headers())
         log.debug("[Headers] %s", [(header.name(), header.value()) for header in self.request.headers()])
-        return [(header.name(), header.value()) for header in self.request.headers()]
+        return [(header.name(), header.value()) for header in self.request.headers()
+                    if header.name()[0] != ":"]
 
     @property
     def httpservice(self):
