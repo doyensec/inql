@@ -32,13 +32,13 @@ class InitiateAttack(ActionListener):
 
     def stripComments(self, code):
         code = str(code)
-        return re.sub(r'(?m)^ *#.*\n?', '', code)
+        return re.sub(r'(?m) *#.*\n?', '', code)
 
     def generate_attack_request(self):
         info = helpers.analyzeRequest(self.editor.request)
         headers = info.getHeaders()
         raw = helpers.bytesToString(self.editor.request[info.getBodyOffset():])
-        body = str(raw) #.replace('\\r', '').replace('\\n', ' ').replace('\\t', '')
+        body = str(raw)
         parsed = json.loads(body)
         if isinstance(parsed, list):
             parsed = parsed[0]
@@ -95,7 +95,6 @@ class InitiateAttack(ActionListener):
                     exploit +='op%s: %s%s%s%s{%s}%s' % (n+1, prefix, lead, item, rest, query, suffix)
 
             #build the query
-            # attack = prefix + exploit + suffix\
             attack = action + "{" + exploit + "}"
 
             log.debug("attack query: %s" % attack)
