@@ -131,7 +131,7 @@ After building InQL as described above, you can prepare your development environ
 Begin by setting up a virtual environment with Python 2.7 for Jython compatibility. Note that necessary headers are required to build libraries with pip. For instance, using virtualenv:
 
 ```bash
-$ sudo apt install -y python2.7 python2.7-dev python2-setuptools-whl python2-pip-whl python3-virtualenv
+$ sudo apt install -y python2.7 python2.7-dev python2-setuptools-whl python2-pip-whl python3-virtualenv libssl-dev
 $ virtualenv -p python2.7 ./venv/
 ```
 
