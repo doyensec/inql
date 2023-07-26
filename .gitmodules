@@ -2,6 +2,3 @@
 	path = lib/GQLSpection
 	url = ../GQLSpection.git
 	branch = dev
-[submodule "lib/graphql-py"]
-	path = lib/graphql-py
-	url = https://github.com/ivelum/graphql-py

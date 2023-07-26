@@ -31,7 +31,7 @@ sourceSets {
             srcDir 'kotlin'
         }
         resources {
-            srcDirs = ['python', 'lib/GQLSpection/src', 'lib/graphql-py/graphql']
+            srcDirs = ['python', 'lib/GQLSpection/src']
         }
     }
 }
