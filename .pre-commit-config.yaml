@@ -21,18 +21,3 @@ repos:
         args: [--branch, master]
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
-
--   repo: local
-    hooks:
-    -   id: isort
-        name: isort
-        entry: isort --atomic --jobs=10 --recursive ./python/inql/
-        language: system
-        types: [python]
-
-#    -   id: pylint
-#        name: pylint
-#        entry: pylint -j2 --output-format=parseable python/inql
-#        language: system
-#        types: [python]
-#        require_serial: true
