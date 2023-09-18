@@ -61,12 +61,10 @@ class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
     // Montoya API gets instantiated second
     override fun initialize(montoyaApi: MontoyaApi) {
         // The new Montoya API should be used for all the new functionality in InQL
-        Burp.initialize(callbacks, montoyaApi)
+        Burp.initialize(montoyaApi)
 
         // Set the name of the extension
         montoyaApi.extension().setName(if (version.isNotEmpty()) "InQL $version" else "InQL")
-        // The legacy API:
-        //callbacks.setExtensionName("InQL $version")
 
         inql = InQL()
         montoyaApi.extension().registerUnloadingHandler(this)
