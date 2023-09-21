@@ -21,8 +21,8 @@ import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import java.net.MalformedURLException
-import java.net.URL
+import java.net.URISyntaxException
+import java.net.URI
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
@@ -369,7 +369,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         }
     }
 
-    fun verifyAndReturnUrl(): URL? {
+    fun verifyAndReturnUrl(): URI? {
         try {
             var textUrl = this.urlField.text
             if (textUrl.trim().isBlank()) return null
@@ -377,8 +377,8 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
                 textUrl = "https://$textUrl"
                 this.urlField.text = textUrl
             }
-            return URL(textUrl)
-        } catch (_: MalformedURLException) {
+            return URI.create(textUrl)
+        } catch (_: URISyntaxException) {
             JOptionPane.showMessageDialog(
                 Burp.Montoya.userInterface().swingUtils().suiteFrame(),
                 "Error parsing the target URL, make sure it's correctly formatted",

@@ -10,8 +10,8 @@ import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.ui.EditableTabTitle
 import inql.ui.EditableTabbedPane
-import java.net.MalformedURLException
-import java.net.URL
+import java.net.URISyntaxException
+import java.net.URI
 import javax.swing.BorderFactory
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
@@ -24,10 +24,10 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
             headersFilter: Map<String, String>? = null
         ): Map<String, String>? {
             val reqList = Burp.Montoya.proxy().history {
-                val reqUrl: URL
+                val reqUrl: URI
                 try {
-                    reqUrl = URL(it.finalRequest().url())
-                } catch (_: MalformedURLException) {
+                    reqUrl = URI.create(it.finalRequest().url())
+                } catch (_: URISyntaxException) {
                     return@history false
                 }
                 if (host.lowercase() != reqUrl.host) return@history false

@@ -1,6 +1,6 @@
 package inql.attacker
 
-import java.net.URL
+import java.net.URI
 import javax.swing.JTable
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.TableModel
@@ -34,7 +34,7 @@ class HistoryLog(private val attacks: ArrayList<Attack>, tableSelectionListener:
         val entry = this.attacks[rowIndex]
         return when (columnIndex) {
             0 -> entry.ts
-            1 -> URL(entry.req.url()).host
+            1 -> URI.create(entry.req.url()).host
             2 -> entry.req.path()
             3 -> entry.resp?.statusCode()
             4 -> entry.resp?.body()?.length()

@@ -21,8 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.awt.CardLayout
 import java.io.File
-import java.net.MalformedURLException
-import java.net.URL
+import java.net.URISyntaxException
+import java.net.URI
 import javax.swing.JPanel
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
@@ -83,8 +83,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     val host: String?
         get() {
             return try {
-                URL(this.url).host
-            } catch (_: MalformedURLException) {
+                URI.create(this.url).host
+            } catch (_: URISyntaxException) {
                 null
             }
         }

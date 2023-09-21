@@ -24,8 +24,10 @@ dependencies {
     implementation 'org.python:jython-standalone:2.7.3'
 }
 
-sourceCompatibility = 17
-targetCompatibility = 17
+java {
+    sourceCompatibility = 17
+    targetCompatibility = 17
+}
 
 tasks.withType(KotlinCompile).configureEach {
     compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
