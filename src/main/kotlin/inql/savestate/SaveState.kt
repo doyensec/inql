@@ -147,5 +147,4 @@ abstract class DeserializerFactory<T>(val key: String) : LoadsDataFromProject {
 
     override val saveStateKey: String
         get() = this.key
-
 }

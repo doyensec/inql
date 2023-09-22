@@ -74,7 +74,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
     }
 
     fun unload() = runBlocking {
-        //this@InQL.saveToProjectFile()
+        // this@InQL.saveToProjectFile()
         this@InQL.gqlspection.unload()
     }
 

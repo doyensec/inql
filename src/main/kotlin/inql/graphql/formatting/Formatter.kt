@@ -5,7 +5,7 @@ class Formatter(
     val spaces: Short = 4,
     val stripComments: Boolean = false,
     val asHTML: Boolean = false,
-    val isIntrospection: Boolean = false
+    val isIntrospection: Boolean = false,
 ) {
     companion object {
         fun format(query: String, minimized: Boolean = false, spaces: Short = 4, asHTML: Boolean = false): String {
@@ -68,9 +68,9 @@ class Formatter(
                             result.append(
                                 "${token.print(this.asHTML)} ${tokens[index + 1].print(this.asHTML)} ${
                                     tokens[index + 2].print(
-                                        this.asHTML
+                                        this.asHTML,
                                     )
-                                } ${tokens[index + 3].print(this.asHTML)}"
+                                } ${tokens[index + 3].print(this.asHTML)}",
                             )
                             index += 3
                             newline = false

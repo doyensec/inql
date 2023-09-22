@@ -21,8 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.awt.CardLayout
 import java.io.File
-import java.net.URISyntaxException
 import java.net.URI
+import java.net.URISyntaxException
 import javax.swing.JPanel
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
@@ -35,7 +35,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             "host",
             "content-type",
             "content-length",
-            "content-encoding"
+            "content-encoding",
         )
     }
 
@@ -97,9 +97,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     private fun showView(card: String) {
         if (!setOf<String>(
                 SCAN_CONFIG_VIEW,
-                SCAN_RESULT_VIEW
+                SCAN_RESULT_VIEW,
             ).contains(card)
-        ) throw Exception("Card ID not recognized: $card")
+        ) {
+            throw Exception("Card ID not recognized: $card")
+        }
         (this.layout as CardLayout).show(this, card)
     }
 
@@ -174,7 +176,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         if (contentTypeIdx == -1) {
             headers.add(HttpHeader.httpHeader("Content-Type", "application/json"))
         } else if (!setOf("application/json", "application/graphql").contains(
-                headers[contentTypeIdx].value().lowercase()
+                headers[contentTypeIdx].value().lowercase(),
             )
         ) {
             headers[contentTypeIdx] = HttpHeader.httpHeader("Content-Type", "application/json")
@@ -308,4 +310,3 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 }
-

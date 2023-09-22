@@ -7,7 +7,7 @@ import inql.savestate.BurpDeserializableToObject
 class GQLSchemaMemoryBackedImpl private constructor(
     queries: List<IGQLElement>,
     mutations: List<IGQLElement>,
-    val jsonPointsOfInterest: String?
+    val jsonPointsOfInterest: String?,
 ) : IGQLSchema() {
 
     private val queries: HashMap<String, IGQLElement> = HashMap()
@@ -40,8 +40,8 @@ class GQLSchemaMemoryBackedImpl private constructor(
                     GQLElement(
                         GQLElementType.QUERY,
                         qObj.getString("name"),
-                        qObj.getString("content")
-                    )
+                        qObj.getString("content"),
+                    ),
                 )
             }
 
@@ -52,15 +52,15 @@ class GQLSchemaMemoryBackedImpl private constructor(
                     GQLElement(
                         GQLElementType.MUTATION,
                         mObj.getString("name"),
-                        mObj.getString("content")
-                    )
+                        mObj.getString("content"),
+                    ),
                 )
             }
 
             return GQLSchemaMemoryBackedImpl(
                 queries,
                 mutations,
-                jsonPointsOfInterest
+                jsonPointsOfInterest,
             )
         }
     }
@@ -68,7 +68,7 @@ class GQLSchemaMemoryBackedImpl private constructor(
     constructor(queries: Map<String, String>, mutations: Map<String, String>, jsonPointsOfInterest: String?) : this(
         queries.map { GQLElement(GQLElementType.QUERY, it.key, it.value) },
         mutations.map { GQLElement(GQLElementType.MUTATION, it.key, it.value) },
-        jsonPointsOfInterest
+        jsonPointsOfInterest,
     )
 
     class GQLElement(val _type: GQLElementType, val _name: String, val _content: String) : IGQLElement {

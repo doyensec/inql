@@ -10,8 +10,8 @@ import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.ui.EditableTabTitle
 import inql.ui.EditableTabbedPane
-import java.net.URISyntaxException
 import java.net.URI
+import java.net.URISyntaxException
 import javax.swing.BorderFactory
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
@@ -21,7 +21,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         fun fetchHeadersForHost(
             host: String,
             pathFilter: String? = null,
-            headersFilter: Map<String, String>? = null
+            headersFilter: Map<String, String>? = null,
         ): Map<String, String>? {
             val reqList = Burp.Montoya.proxy().history {
                 val reqUrl: URI
@@ -37,7 +37,9 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
                     for (reqHeader in it.finalRequest().headers()) {
                         if (headersFilter.containsKey(reqHeader.name()) && reqHeader.value()
                                 .contains(headersFilter[reqHeader.name()] as String)
-                        ) return@history false
+                        ) {
+                            return@history false
+                        }
                     }
                 }
                 return@history true

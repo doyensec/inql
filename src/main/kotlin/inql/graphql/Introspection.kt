@@ -10,7 +10,7 @@ import inql.utils.withUpsertedHeader
 class Introspection {
     companion object {
         fun sendIntrospectionQuery(url: String, headers: Map<String, String>): String? {
-            //val request = IntrospectionHttpRequest(method = "POST", url, headers)
+            // val request = IntrospectionHttpRequest(method = "POST", url, headers)
             var request = HttpRequest.httpRequest()
                 .withService(HttpService.httpService(url))
                 .withMethod("POST")

@@ -15,13 +15,13 @@ class ScanResult private constructor(
     val parsedSchema: GQLSchemaMemoryBackedImpl,
     val rawSchema: String? = null,
     val ts: LocalDateTime,
-    val uuid: String
+    val uuid: String,
 ) : SavesDataToProject {
     constructor(
         host: String,
         requestTemplate: HttpRequest,
         parsedSchema: GQLSchemaMemoryBackedImpl,
-        rawSchema: String? = null
+        rawSchema: String? = null,
     ) : this(host, requestTemplate, parsedSchema, rawSchema, LocalDateTime.now(), UUID.randomUUID().toString())
 
     class Deserializer(key: String) : DeserializerFactory<ScanResult>(key) {
@@ -32,7 +32,7 @@ class ScanResult private constructor(
                 GQLSchemaMemoryBackedImpl.burpDeserialize(obj.getChildObject("schema")),
                 obj.getString("rawSchema"),
                 LocalDateTime.parse(obj.getString("ts"), DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                obj.getString("uuid")
+                obj.getString("uuid"),
             )
         }
     }

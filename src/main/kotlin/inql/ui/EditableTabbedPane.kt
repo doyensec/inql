@@ -62,7 +62,6 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
         override fun changedUpdate(e: DocumentEvent?) {
             // Do nothing
         }
-
     }
 
     class FocusHandler : FocusAdapter() {
@@ -127,8 +126,9 @@ class EditableTab(val tabTitle: EditableTabTitle, showClose: Boolean = true) : F
     constructor(title: String, component: Component, showClose: Boolean = true) : this(
         EditableTabTitle(
             title,
-            component
-        ), showClose
+            component,
+        ),
+        showClose,
     )
 
     val closeButton = JButton("⨉")

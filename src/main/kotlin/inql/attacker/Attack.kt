@@ -16,7 +16,7 @@ class Attack private constructor(
     val start: Int,
     val end: Int,
     val ts: LocalDateTime,
-    val uuid: String
+    val uuid: String,
 ) :
     SavesDataToProject {
     constructor(url: String, req: HttpRequest, resp: HttpResponse?, start: Int, end: Int) : this(
@@ -26,7 +26,7 @@ class Attack private constructor(
         start,
         end,
         LocalDateTime.now(),
-        "Attack.${UUID.randomUUID()}"
+        "Attack.${UUID.randomUUID()}",
     )
 
     override val saveStateKey: String
@@ -57,7 +57,7 @@ class Attack private constructor(
                 obj.getInteger("start"),
                 obj.getInteger("end"),
                 LocalDateTime.parse(obj.getString("ts"), DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                obj.getString("id")
+                obj.getString("id"),
             )
         }
     }

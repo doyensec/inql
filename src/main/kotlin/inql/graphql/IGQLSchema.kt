@@ -17,7 +17,7 @@ abstract class IGQLSchema : BurpSerializable {
                     val gqlPoi = GQLSchemaMemoryBackedImpl.GQLElement(
                         GQLElementType.POI,
                         poi.get("path").asString,
-                        if (poi.has("description")) poi.get("description").asString else ""
+                        if (poi.has("description")) poi.get("description").asString else "",
                     )
                     catList.add(gqlPoi)
                 }
@@ -30,7 +30,7 @@ abstract class IGQLSchema : BurpSerializable {
     enum class GQLElementType {
         QUERY,
         MUTATION,
-        POI
+        POI,
     }
 
     interface IGQLElement : BurpSerializable {

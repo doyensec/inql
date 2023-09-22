@@ -21,8 +21,8 @@ import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import java.net.URISyntaxException
 import java.net.URI
+import java.net.URISyntaxException
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
@@ -163,9 +163,9 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(
                 MultilineLabel(
                     "InQL can query schema directly from GraphQL server. " +
-                            "If a server does not allow introspection functionality, provide schema as a file (in JSON format). " +
-                            "URL still needs to be provided to generate sample queries."
-                )
+                        "If a server does not allow introspection functionality, provide schema as a file (in JSON format). " +
+                        "URL still needs to be provided to generate sample queries.",
+                ),
             )
         }
 
@@ -333,7 +333,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
                 Burp.Montoya.userInterface().swingUtils().suiteFrame(),
                 "The url field does not contain a valid URL.\nPlease enter a valid URL before creating a Profile.",
                 "Incorrect URL",
-                JOptionPane.ERROR_MESSAGE
+                JOptionPane.ERROR_MESSAGE,
             )
             return null
         }
@@ -347,7 +347,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
                 JOptionPane.QUESTION_MESSAGE,
                 null,
                 null,
-                placeholder
+                placeholder,
             ) as String?
             if (name == null) return null
         } while (name == "")
@@ -384,7 +384,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
                 "Error parsing the target URL, make sure it's correctly formatted",
                 "URL Error",
                 JOptionPane.ERROR_MESSAGE,
-                null
+                null,
             )
             return null
         }
@@ -442,4 +442,3 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         }
     }
 }
-

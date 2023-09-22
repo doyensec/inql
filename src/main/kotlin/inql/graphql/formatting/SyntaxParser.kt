@@ -231,7 +231,7 @@ class SyntaxParser private constructor(val tokens: LinkedList<Token>, val fixInt
             // Named Type
             this.current.subtype = Token.Subtype.TYPE
             if (next.type == Token.Type.PUNCTUATOR && next.text == "!") {
-                //NotNullType
+                // NotNullType
                 this.current.text = "${this.current.text}!"
                 this.consume()
                 this.delete()

@@ -63,11 +63,16 @@ class BoxPanel(val axis: Int, val gap: Int = 5, vararg components: Component) : 
         if (axis < BoxLayout.X_AXIS || axis > BoxLayout.PAGE_AXIS) throw Exception("BoxPanel called with wrong axis value: $axis")
         this.layout = BoxLayout(this, axis)
         components.forEach { c ->
-            this.add(c); this.add(
-            if (axis == BoxLayout.X_AXIS) Box.createHorizontalStrut(gap) else Box.createVerticalStrut(
-                gap
+            this.add(c)
+            this.add(
+                if (axis == BoxLayout.X_AXIS) {
+                    Box.createHorizontalStrut(gap)
+                } else {
+                    Box.createVerticalStrut(
+                        gap,
+                    )
+                },
             )
-        )
         }
     }
 }

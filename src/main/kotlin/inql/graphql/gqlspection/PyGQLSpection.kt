@@ -71,7 +71,7 @@ class PyGQLSpection private constructor() : IGQLSpection {
             interpreter.exec("name_regex = re.compile('^[_A-Za-z][_0-9A-Za-z]*\$')")
             interpreter.exec(
                 "def is_valid_graphql_name(name):\n" +
-                        "    return name_regex.match(name) is not None"
+                    "    return name_regex.match(name) is not None",
             )
 
             // set the schema as a python object
@@ -94,7 +94,7 @@ class PyGQLSpection private constructor() : IGQLSpection {
                     if not query.name: continue
                     if not is_valid_graphql_name(query.name): continue
                     queries[query.name] = parsed.generate_query(query, depth=$depth).to_string(pad=$pad)
-            """.trimIndent()
+                """.trimIndent(),
             )
 
             Logger.debug("Extracting mutations...")
@@ -104,7 +104,7 @@ class PyGQLSpection private constructor() : IGQLSpection {
                     if not mutation.name: continue
                     if not is_valid_graphql_name(mutation.name): continue
                     mutations[mutation.name] = parsed.generate_mutation(mutation, depth=$depth).to_string(pad=$pad)
-            """.trimIndent()
+                """.trimIndent(),
             )
 
             // convert to json for easy transfer to Java
@@ -154,7 +154,6 @@ class PyGQLSpection private constructor() : IGQLSpection {
                 Logger.debug("Fetching JSON POIs")
                 poisJson = interpreter.get("poi_json").asString()
 
-
                 // POI Cleanup
                 try {
                     interpreter.exec("del categories, keywords, cat, kw, poi_json")
@@ -168,7 +167,6 @@ class PyGQLSpection private constructor() : IGQLSpection {
             interpreter.exec("del schema, parsed, queries, mutations, json_queries, json_mutations")
 
             return GQLSchemaMemoryBackedImpl(queries, mutations, poisJson)
-
         } catch (e: Exception) {
             Logger.info("GQLSpection failed to parse the JSON")
             Logger.info("Error: $e")
@@ -186,22 +184,22 @@ class PyGQLSpection private constructor() : IGQLSpection {
         interpreter.set("log_level", level)
         interpreter.exec(
             "class DebugOrInfo(logging.Filter):\n" +
-                    "    def filter(self, record):\n" +
-                    "        return record.levelno in (logging.DEBUG, logging.INFO)"
+                "    def filter(self, record):\n" +
+                "        return record.levelno in (logging.DEBUG, logging.INFO)",
         )
         interpreter.exec(
             "gql_log.setLevel(log_level)\n" +
-                    "formatter = logging.Formatter('[thread#%(thread)d %(filename)s:%(lineno)d :: %(funcName)s()]    %(message)s')\n" +
-                    "handler_stdout = logging.StreamHandler(sys.stdout)\n" +
-                    "handler_stdout.setFormatter(formatter)\n" +
-                    "handler_stdout.setLevel(logging.DEBUG)\n" +
-                    "handler_stdout.addFilter(DebugOrInfo())\n" +
-                    "handler_stderr = logging.StreamHandler(sys.stderr)\n" +
-                    "handler_stderr.setFormatter(formatter)\n" +
-                    "handler_stderr.setLevel(logging.WARNING)\n" +
-                    "del gql_log.handlers[:]\n" +
-                    "gql_log.addHandler(handler_stdout)\n" +
-                    "gql_log.addHandler(handler_stderr)"
+                "formatter = logging.Formatter('[thread#%(thread)d %(filename)s:%(lineno)d :: %(funcName)s()]    %(message)s')\n" +
+                "handler_stdout = logging.StreamHandler(sys.stdout)\n" +
+                "handler_stdout.setFormatter(formatter)\n" +
+                "handler_stdout.setLevel(logging.DEBUG)\n" +
+                "handler_stdout.addFilter(DebugOrInfo())\n" +
+                "handler_stderr = logging.StreamHandler(sys.stderr)\n" +
+                "handler_stderr.setFormatter(formatter)\n" +
+                "handler_stderr.setLevel(logging.WARNING)\n" +
+                "del gql_log.handlers[:]\n" +
+                "gql_log.addHandler(handler_stdout)\n" +
+                "gql_log.addHandler(handler_stderr)",
         )
         interpreter.exec("del log_level")
     }

@@ -26,13 +26,13 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     // Actions
     protected val sendToIntruderAction = MenuAction(
         "Send to Intruder",
-        KeyStroke.getKeyStroke(KeyEvent.VK_I, Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx)
+        KeyStroke.getKeyStroke(KeyEvent.VK_I, Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx),
     ) {
         this.sendRequestToIntruder()
     }
     protected val sendToRepeaterAction = MenuAction(
         "Send to Repeater",
-        KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx)
+        KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx),
     ) {
         this.sendRequestToRepeater()
     }
@@ -50,7 +50,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendToRepeaterAction,
         sendToInqlScannerAction,
         sendToInqlAttackerAction,
-        sendToGraphiqlAction
+        sendToGraphiqlAction,
     )
 
     abstract fun getRequest(): HttpRequest?

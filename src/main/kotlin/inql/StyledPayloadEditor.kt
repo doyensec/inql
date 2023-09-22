@@ -31,7 +31,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, private val readOn
             override fun provideHttpRequestEditor(creationContext: EditorCreationContext?): ExtensionProvidedHttpRequestEditor {
                 return StyledPayloadEditor(
                     inql,
-                    (creationContext?.editorMode() ?: EditorMode.DEFAULT) == EditorMode.READ_ONLY
+                    (creationContext?.editorMode() ?: EditorMode.DEFAULT) == EditorMode.READ_ONLY,
                 )
             }
         }

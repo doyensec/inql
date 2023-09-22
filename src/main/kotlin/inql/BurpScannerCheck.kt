@@ -15,13 +15,13 @@ class BurpScannerCheck : ScanCheck {
     companion object {
         val TECH_CHECKS = arrayOf(
             """{"data":{"__schema":{""",
-            "graphql-ws"
+            "graphql-ws",
         )
         val CONSOLE_CHECKS = arrayOf(
             "GraphiQL",
             "GraphQL Playground",
             "GraphQL Console",
-            "graphql-playground"
+            "graphql-playground",
         )
         val URLS = arrayOf(
             "/graphql.php",
@@ -31,7 +31,7 @@ class BurpScannerCheck : ScanCheck {
             "/swapi-graphql/",
             "/gql",
             "/graphql/subscriptions",
-            "/graphql/subscription"
+            "/graphql/subscription",
         )
     }
 
@@ -58,7 +58,7 @@ class BurpScannerCheck : ScanCheck {
 
     override fun activeAudit(
         baseRequestResponse: HttpRequestResponse,
-        auditInsertionPoint: AuditInsertionPoint
+        auditInsertionPoint: AuditInsertionPoint,
     ): AuditResult {
         val issues = ArrayList<AuditIssue>()
 
@@ -90,7 +90,7 @@ class BurpScannerCheck : ScanCheck {
                         GraphQL is an open-source data query and manipulation language for APIs, and a runtime for fulfilling queries with existing data. GraphQL was developed internally by Facebook in 2012 before being publicly released in 2015.<br><br>
                         It provides an efficient, powerful and flexible approach to developing web APIs, and has been compared and contrasted with REST and other web service architectures. It allows clients to define the structure of the data required, and exactly the same structure of the data is returned from the server, therefore preventing excessively large amounts of data from being returned, but this has implications for how effective web caching of query results can be. The flexibility and richness of the query language also adds complexity that may not be worthwhile for simple APIs. It consists of a type system, query language and execution semantics, static validation, and type introspection.<br><br>
                         GraphQL supports reading, writing (mutating) and subscribing to changes to data (realtime updates).
-                    """.trimIndent(),
+                        """.trimIndent(),
                         "<ul><li><a href='https://graphql.org/'>GraphQL</a></li></ul>",
                         baseRequestResponse.url(),
                         AuditIssueSeverity.INFORMATION,
@@ -98,8 +98,8 @@ class BurpScannerCheck : ScanCheck {
                         "Not posing any imminent security risk.",
                         "<ul><li><a href='https://graphql.org/'>GraphQL</a></li></ul>",
                         AuditIssueSeverity.INFORMATION,
-                        listOf(baseRequestResponse.withResponseMarkers(matches))
-                    )
+                        listOf(baseRequestResponse.withResponseMarkers(matches)),
+                    ),
                 )
             }
         }
@@ -107,7 +107,6 @@ class BurpScannerCheck : ScanCheck {
             // look for matches of our passive check grep string
             val matches = getMatches(baseRequestResponse.response().bodyToString(), check)
             if (matches.isNotEmpty()) {
-
                 issues.add(
                     AuditIssue.auditIssue(
                         "Exposed GraphQL Development Console",
@@ -115,7 +114,7 @@ class BurpScannerCheck : ScanCheck {
                         GraphQL is a query language for APIs and a runtime for fulfilling queries with existing data.<br><br>
                         <b>GraphiQL/GraphQL Playground</b> are in-browser tools for writing, validating, and testing GraphQL queries.<br><br>
                         The response contains the following string: <b>$check</b>
-                    """.trimIndent(),
+                        """.trimIndent(),
                         """
                         Remove the GraphQL development console from web-application in a production stage.<br><br>
                         Disable GraphiQL<br>
@@ -127,7 +126,7 @@ class BurpScannerCheck : ScanCheck {
                         <pre>    }),</pre></br>
                         <pre>  );</pre></br>
                         <pre>}</pre>
-                    """.trimIndent(),
+                        """.trimIndent(),
                         baseRequestResponse.url(),
                         AuditIssueSeverity.LOW,
                         AuditIssueConfidence.FIRM,
@@ -138,10 +137,10 @@ class BurpScannerCheck : ScanCheck {
                         <li><a href='https://github.com/graphql/graphiql'>GraphiQL</a></li>
                         <li><a href='https://github.com/prisma/graphql-playground'>GraphQL Playground</a></li>
                         </ul>
-                    """.trimIndent(),
+                        """.trimIndent(),
                         AuditIssueSeverity.LOW,
-                        listOf(baseRequestResponse.withResponseMarkers(matches))
-                    )
+                        listOf(baseRequestResponse.withResponseMarkers(matches)),
+                    ),
                 )
             }
         }

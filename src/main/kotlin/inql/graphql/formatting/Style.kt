@@ -38,7 +38,7 @@ class Style {
             CLASS_OPNAME,
             CLASS_OPERATION,
             CLASS_ALIAS,
-            CLASS_DIRECTIVE
+            CLASS_DIRECTIVE,
         )
 
         fun getClass(t: Token): String {
@@ -86,7 +86,7 @@ class Style {
                 "operation" to "white",
                 "alias" to "#24d6c7",
                 "directive" to "#FFEF9F",
-            )
+            ),
         )
 
         val lightThemeStyle = Style().setColors(
@@ -107,7 +107,7 @@ class Style {
                 "operation" to "#202020",
                 "alias" to "#1CA89D",
                 "directive" to "#a5b125",
-            )
+            ),
         )
 
         fun getStyleCSS(): String {

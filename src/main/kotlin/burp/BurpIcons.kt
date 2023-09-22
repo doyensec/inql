@@ -11,7 +11,7 @@ import javax.imageio.ImageIO
 class BurpIcons private constructor() {
     enum class BurpIcon {
         CLOSE,
-        CONFIG
+        CONFIG,
     }
 
     companion object {
@@ -63,7 +63,6 @@ class BurpIcons private constructor() {
 
                 if (burpJar == null) return null
                 return burpJar
-
             } catch (e: Exception) {
                 Logger.warning("Cannot find burp jar file for resource loading:")
                 Logger.warning(e.toString())

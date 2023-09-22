@@ -30,7 +30,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         val splitPane = JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             this.treeView,
-            this.payloadView
+            this.payloadView,
         )
 
         splitPane.isOneTouchExpandable = true

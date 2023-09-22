@@ -69,16 +69,17 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
             it.add(
                 MultilineLabel(
                     """
-                        
+
                 Supported placeholders:
 
                     ${'$'}[INT:first:last] - first and last are integers, both are included in the range
                     ${'$'}[FILE:path:first:last] - absolute path and the (optional) range of lines (first line is 1 not 0)
 
                 Current limitations: only one placeholder, no variables.
-                
-            """.trimIndent()
-                ), BorderLayout.NORTH
+
+                    """.trimIndent(),
+                ),
+                BorderLayout.NORTH,
             )
             it.add(reqEditorPanel, BorderLayout.CENTER)
         }
@@ -88,14 +89,14 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
         val rightSection = JSplitPane(
             JSplitPane.VERTICAL_SPLIT,
             JScrollPane(historyLog.table),
-            historyRequestViewer
+            historyRequestViewer,
         )
 
         // Main layout
         val horizontalSplit = JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             leftSection,
-            rightSection
+            rightSection,
         )
         horizontalSplit.resizeWeight = 0.4
         this.add(horizontalSplit)
@@ -173,7 +174,7 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
                         end = max(args[2].toInt() - 1, lines.size)
                     }
                     for (n in start..end) {
-                        exploit.append("op${n}: $leading${lines[n - 1]}$trailing{$query}$sfx")
+                        exploit.append("op$n: $leading${lines[n - 1]}$trailing{$query}$sfx")
                     }
                 }
 

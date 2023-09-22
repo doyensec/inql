@@ -12,7 +12,7 @@ class Token(val type: Type, var text: String) {
         NUMBER,
         PUNCTUATOR,
         NAME,
-        EMPTY
+        EMPTY,
     }
 
     enum class Subtype {
@@ -28,7 +28,7 @@ class Token(val type: Type, var text: String) {
         TYPE,
         KEYWORD, // "on", "fragment", ecc
         VALUE,
-        NONE
+        NONE,
     }
 
     override fun toString(): String {
@@ -46,5 +46,4 @@ class Token(val type: Type, var text: String) {
             this.toString()
         }
     }
-
 }

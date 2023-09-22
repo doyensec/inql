@@ -14,7 +14,7 @@ class HistoryLog(private val attacks: ArrayList<Attack>, tableSelectionListener:
         "Status",
         "Length",
         "From",
-        "To"
+        "To",
     )
 
     val table = HistoryLogTable(this, tableSelectionListener)
@@ -50,5 +50,4 @@ class HistoryLog(private val attacks: ArrayList<Attack>, tableSelectionListener:
             super.changeSelection(rowIndex, columnIndex, toggle, extend)
         }
     }
-
 }

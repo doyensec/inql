@@ -36,9 +36,13 @@ class Tokenizer(val query: String) {
                 '-', '+' -> readNumber()
                 '_' -> readName()
                 else -> {
-                    if (chr.isDigit()) readNumber()
-                    else if (chr.isLetter()) readName()
-                    else throw Exception("Unexpected character $chr at position ${this.index}")
+                    if (chr.isDigit()) {
+                        readNumber()
+                    } else if (chr.isLetter()) {
+                        readName()
+                    } else {
+                        throw Exception("Unexpected character $chr at position ${this.index}")
+                    }
                 }
             }
             tokens.add(token)
@@ -153,14 +157,16 @@ class Tokenizer(val query: String) {
         var index = this.index
 
         // Read until the end of the number
-        while (index < this.length && (this.query[index].isDigit() || setOf(
-                '.',
-                'e',
-                'E',
-                '+',
-                '-'
-            ).contains(this.query[index]))
-        ) index++
+        while (index < this.length && (
+                this.query[index].isDigit() || setOf(
+                    '.',
+                    'e',
+                    'E',
+                    '+',
+                    '-',
+                ).contains(this.query[index])
+                )
+            ) index++
         this.index = index
         return Token(Token.Type.NUMBER, this.query.substring(start, index))
     }

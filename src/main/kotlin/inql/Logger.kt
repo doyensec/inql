@@ -22,7 +22,7 @@ class Logger {
         INFO,
         WARNING,
         ERROR,
-        CRITICAL
+        CRITICAL,
     }
 
     private var level = Level.DEBUG
@@ -37,7 +37,7 @@ class Logger {
                 "INFO" -> Level.INFO
                 "WARN" -> Level.WARNING
                 else -> Level.DEBUG
-            }
+            },
         )
     }
 
@@ -50,8 +50,11 @@ class Logger {
     private fun log(msg: String, level: Level) {
         if (level < this.level) return
 
-        if (level < Level.WARNING) println(format(msg, level))
-        else System.err.println(format(msg, level))
+        if (level < Level.WARNING) {
+            println(format(msg, level))
+        } else {
+            System.err.println(format(msg, level))
+        }
     }
 
     fun debug(msg: String) = log(msg, Level.DEBUG)

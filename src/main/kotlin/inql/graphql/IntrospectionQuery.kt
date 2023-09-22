@@ -4,7 +4,7 @@ class IntrospectionQuery {
     enum class Version {
         JUN2018,
         OCT2021,
-        DRAFT
+        DRAFT,
     }
 
     companion object {
@@ -68,14 +68,14 @@ class IntrospectionQuery {
                     }
                 }
             }
-    
+
             fragment InputValue on __InputValue {
               name
               description
               type { ...TypeRef }
               defaultValue
             }
-    
+
             # TODO: generate this query dynamically and make the depth adjustable
             fragment TypeRef on __Type {
               kind
@@ -119,7 +119,7 @@ class IntrospectionQuery {
             return query.format(
                 includeDeprecatedArgsAndInputFields,
                 includeDeprecatedArgsAndInputFields,
-                specifiedByURL
+                specifiedByURL,
             )
         }
     }

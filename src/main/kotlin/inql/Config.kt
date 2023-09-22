@@ -16,7 +16,7 @@ class Config private constructor() {
         GLOBAL,
         EFFECTIVE_GLOBAL,
         PROJECT,
-        EFFECTIVE
+        EFFECTIVE,
     }
 
     private val globalStore = Burp.Montoya.persistence().preferences()
@@ -41,11 +41,11 @@ class Config private constructor() {
         "report.poi.deprecated" to true,
         "report.poi.custom_scalars" to true,
         "report.poi.custom_keywords" to "",
-        "logging.level" to "WARN"
+        "logging.level" to "WARN",
     )
 
     private val hooks = hashMapOf<String, (Any) -> Unit>(
-        "logging.level" to { level -> Logger.setLevel(level.toString()) }
+        "logging.level" to { level -> Logger.setLevel(level.toString()) },
     )
 
     fun getBoolean(key: String, scope: Scope = Scope.EFFECTIVE): Boolean? {
@@ -206,7 +206,7 @@ class Config private constructor() {
             Scope.GLOBAL -> listOf(
                 globalStore.booleanKeys(),
                 globalStore.integerKeys(),
-                globalStore.stringKeys()
+                globalStore.stringKeys(),
             ).flatten()
 
             Scope.PROJECT -> listOf(
@@ -229,15 +229,15 @@ class Config private constructor() {
     fun dumpContents() {
         Logger.info("PROJECT SETTINGS:")
         this.items(Scope.PROJECT).forEach {
-            Logger.info("${it.key} -> ${it.value.toString()}")
+            Logger.info("${it.key} -> ${it.value}")
         }
         Logger.info("GLOBAL SETTINGS:")
         this.items(Scope.GLOBAL).forEach {
-            Logger.info("${it.key} -> ${it.value.toString()}")
+            Logger.info("${it.key} -> ${it.value}")
         }
         Logger.info("DEFAULT SETTINGS:")
         this.items(Scope.DEFAULT).forEach {
-            Logger.info("${it.key} -> ${it.value.toString()}")
+            Logger.info("${it.key} -> ${it.value}")
         }
     }
 }
