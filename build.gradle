@@ -76,36 +76,50 @@ tasks.register('generateVersionProperties') {
 
 processResources.dependsOn generateVersionProperties
 
-task rebuildReactApp(type: Exec) {
-    workingDir = project.file('lib/graphiql')
-    commandLine 'npm', 'run', 'build'
+
+// Define a function to create a Copy task for a React app
+def createReactAppCopyTask(String appName) {
+    def appPath = "lib/${appName.toLowerCase()}"
+    def resourcesPath = "resources/static/${appName.toLowerCase()}"
+
+    def rebuildTask = task("rebuild${appName}", type: Exec) {
+        workingDir = project.file(appPath)
+        commandLine 'npm', 'run', 'build'
+    }
+
+    def cleanBuildDirTask = task("clean${appName}BuildDir", type: Delete) {
+        delete "${appPath}/build"
+    }
+
+    rebuildTask.dependsOn cleanBuildDirTask
+
+    def copyResourcesTask = task("copy${appName}Resources", type: Copy) {
+        from "${appPath}/build"
+        into "${resourcesPath}"
+    }
+
+    def cleanResourcesTask = task("clean${appName}Resources", type: Delete) {
+        delete "${resourcesPath}"
+    }
+
+    copyResourcesTask.dependsOn(cleanResourcesTask, rebuildTask)
+
+    return copyResourcesTask
 }
 
-task cleanReactAppBuildDir(type: Delete) {
-    delete 'lib/graphiql/build'
-}
+// Call the function for each React app you want to build
+def graphiqlCopyTask = createReactAppCopyTask("GraphiQL")
+def playgroundCopyTask = createReactAppCopyTask("Playground")
+def voyagerCopyTask = createReactAppCopyTask("Voyager")
 
-rebuildReactApp.dependsOn cleanReactAppBuildDir
-
-task copyReactAppResources(type: Copy) {
-    from 'lib/graphiql/build'
-    into 'resources/static/graphiql'
-}
-
-task cleanReactAppResources(type: Delete) {
-    delete 'resources/static/graphiql'
-}
-
-copyReactAppResources {
-    dependsOn(cleanReactAppResources, rebuildReactApp)
-}
-
+// Add the Copy tasks to the processResources task
 processResources {
-    dependsOn copyReactAppResources
+    dependsOn(graphiqlCopyTask, playgroundCopyTask, voyagerCopyTask)
 }
 
+// Add the Copy tasks to the build task
 build {
-    dependsOn(clean, rebuildReactApp, copyReactAppResources)
+    dependsOn(processResources)
 }
 
 defaultTasks "build"

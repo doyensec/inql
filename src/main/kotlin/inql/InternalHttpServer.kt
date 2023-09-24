@@ -72,6 +72,20 @@ class InternalHttpServer : ProxyRequestHandler {
                     }
                 }
 
+                // GraphQL Playground: https://github.com/graphql/graphql-playground
+                // Example: https://inql.burp/playground?server=https://graphql.anilist.co/graphql&session=anilist
+                get("/playground") {
+                    val server = call.request.queryParameters["server"]
+                    val session = call.request.queryParameters["session"]
+
+                    if (server == null || session == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                    } else {
+                        val indexHtml = this::class.java.getResource("/static/playground/index.html")?.readText(Charsets.UTF_8)
+                        call.respondText(indexHtml ?: "", ContentType.Text.Html)
+                    }
+                }
+
                 // OPTIONS handler for handling pre-flight requests
                 options("/handle-preflight") {
                     val origin = call.request.header("Origin")
