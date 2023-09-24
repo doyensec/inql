@@ -395,3 +395,7 @@ inql/__version__.py
 # Gradle
 .gradle
 bin/
+
+# Ignore compiled JavaScript files from React app
+lib/graphiql/build/
+resources/static/graphiql/

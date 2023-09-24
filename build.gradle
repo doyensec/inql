@@ -22,6 +22,11 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
     implementation 'org.apache.commons:commons-text:1.9'
     implementation 'org.python:jython-standalone:2.7.3'
+    implementation 'com.sparkjava:spark-core:2.9.4'
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
+
+    implementation 'io.ktor:ktor-server-core:2.3.4'
+    implementation 'io.ktor:ktor-server-netty:2.3.4'
 }
 
 java {
@@ -31,6 +36,13 @@ java {
 
 tasks.withType(KotlinCompile).configureEach {
     compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+}
+
+compileKotlin {
+    kotlinOptions {
+        // Configure the Kotlin compiler options
+        allWarningsAsErrors = true
+    }
 }
 
 repositories {
@@ -45,7 +57,7 @@ sourceSets {
             srcDir 'kotlin'
         }
         resources {
-            srcDirs = ['lib/GQLSpection/src']
+            srcDirs = ['resources', 'lib/GQLSpection/src']
         }
         output.dir(generatedVersionDir, builtBy: 'generateVersionProperties')
     }
@@ -64,6 +76,38 @@ tasks.register('generateVersionProperties') {
 
 processResources.dependsOn generateVersionProperties
 
+task rebuildReactApp(type: Exec) {
+    workingDir = project.file('lib/graphiql')
+    commandLine 'npm', 'run', 'build'
+}
+
+task cleanReactAppBuildDir(type: Delete) {
+    delete 'lib/graphiql/build'
+}
+
+rebuildReactApp.dependsOn cleanReactAppBuildDir
+
+task copyReactAppResources(type: Copy) {
+    from 'lib/graphiql/build'
+    into 'resources/static/graphiql'
+}
+
+task cleanReactAppResources(type: Delete) {
+    delete 'resources/static/graphiql'
+}
+
+copyReactAppResources {
+    dependsOn(cleanReactAppResources, rebuildReactApp)
+}
+
+processResources {
+    dependsOn copyReactAppResources
+}
+
+build {
+    dependsOn(clean, rebuildReactApp, copyReactAppResources)
+}
+
 defaultTasks "build"
 
 // build standalone jar with bundled dependencies
@@ -74,8 +118,4 @@ jar {
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     destinationDirectory = rootDir
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-build {
-    dependsOn(clean)
 }
