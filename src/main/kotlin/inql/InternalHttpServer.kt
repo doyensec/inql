@@ -10,6 +10,8 @@ import java.io.IOException
 import java.net.ServerSocket
 import java.util.Random
 import burp.api.montoya.http.message.requests.HttpRequest
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -19,6 +21,10 @@ import io.ktor.server.netty.*
 import io.ktor.http.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
+
+import java.awt.EventQueue
+import javax.swing.SwingUtilities
+import javax.swing.JFrame
 
 /*
     This file defines embedded HTTP server with the following functionality:
@@ -54,36 +60,23 @@ class InternalHttpServer : ProxyRequestHandler {
         listeningPort = findAvailablePort()
 
         embeddedServer(Netty, port = listeningPort, host = "127.0.0.1") {
+
             routing {
                 // Serve static files from /static/
                 staticResources("/", "static")
 
-                // GraphiQL: https://github.com/graphql/graphiql
-                // Example: https://inql.burp/graphiql?server=https://graphql.anilist.co/graphql&session=anilist
-                get("/graphiql") {
-                    val server = call.request.queryParameters["server"]
-                    val session = call.request.queryParameters["session"]
-
-                    if (server == null || session == null) {
-                        call.respond(HttpStatusCode.BadRequest)
-                    } else {
-                        val indexHtml = this::class.java.getResource("/static/graphiql/index.html")?.readText(Charsets.UTF_8)
-                        call.respondText(indexHtml ?: "", ContentType.Text.Html)
-                    }
+                post("/send-to-repeater") {
+                    val request = call.receiveText()
+                    val httpRequest = graphqlRequestToHttpRequest(request)
+                    Burp.Montoya.repeater().sendToRepeater(httpRequest)
+                    call.response.status(HttpStatusCode.OK)
                 }
 
-                // GraphQL Playground: https://github.com/graphql/graphql-playground
-                // Example: https://inql.burp/playground?server=https://graphql.anilist.co/graphql&session=anilist
-                get("/playground") {
-                    val server = call.request.queryParameters["server"]
-                    val session = call.request.queryParameters["session"]
-
-                    if (server == null || session == null) {
-                        call.respond(HttpStatusCode.BadRequest)
-                    } else {
-                        val indexHtml = this::class.java.getResource("/static/playground/index.html")?.readText(Charsets.UTF_8)
-                        call.respondText(indexHtml ?: "", ContentType.Text.Html)
-                    }
+                post("/send-to-intruder") {
+                    val request = call.receiveText()
+                    val httpRequest = graphqlRequestToHttpRequest(request)
+                    Burp.Montoya.intruder().sendToIntruder(httpRequest)
+                    call.response.status(HttpStatusCode.OK)
                 }
 
                 // OPTIONS handler for handling pre-flight requests
@@ -106,6 +99,70 @@ class InternalHttpServer : ProxyRequestHandler {
                 }
             }
         }.start()
+    }
+
+    // Converts a GraphQL request sent via 'Send to Repeater/Intruder' from GraphiQL to a Burp's HTTP request
+    // An example body:
+    //
+    //   {
+    //      "server": "https://graphql.anilist.co/graphql",
+    //      "query": "query MyQuery {\n  Studio(id: 10) {\n    name\n  }\n}",
+    //      "variables": {
+    //         "test": 123,
+    //         "other": {"one":"two"}
+    //      },
+    //      "headers": {
+    //        "Authorization": "bearer JWT-onetwothree",
+    //        "InQL":"anilist"
+    //      }
+    //   }
+    //
+    // variables and headers are optional (can be null, not present or {})
+    private fun graphqlRequestToHttpRequest(request: String): HttpRequest {
+        val json = Gson().fromJson(request, JsonObject::class.java)
+        val server = json.get("server").asString
+        val path = java.net.URI(server).path
+        val query = json.get("query").asString
+        val variables = json.get("variables").asJsonObject
+        val headers = json.get("headers").asJsonObject
+
+        // The body of HttpRequest is a JSON object with the following structure:
+        //
+        //   {
+        //     "query": "query MyQuery {\n  Studio(id: 10) {\n    name\n  }\n}",
+        //     "variables": {
+        //       "test": 123,
+        //       "other": {"one":"two"}
+        //     }
+        //   }
+        val body = JsonObject()
+        body.addProperty("query", query)
+        if (variables != null) {
+            body.add("variables", variables)
+        }
+
+        // Create HttpRequest object for Burp
+        val service = HttpService.httpService(server)
+        var httpRequest = HttpRequest.httpRequest()
+            .withService(service)
+            .withPath(path)
+            .withMethod("POST")
+            .withBody(Gson().toJson(body))
+
+        // Add 'Host' header at the very least
+        httpRequest = httpRequest.withAddedHeader("Host", service.host())
+
+        // Go through headers coming from json (`headers` variable) and add them to the request
+        for ((headerName, headerValue) in headers.entrySet()) {
+            httpRequest = httpRequest.withAddedHeader(headerName, headerValue.asString)
+        }
+
+        // Add Content-Type json if not present
+        if (!httpRequest.headers().any { it.name() == "Content-Type" }) {
+            httpRequest = httpRequest.withAddedHeader("Content-Type", "application/json")
+        }
+
+        return httpRequest
     }
 
     private fun isOriginWhitelisted(origin: String?): Boolean {
@@ -139,11 +196,9 @@ class InternalHttpServer : ProxyRequestHandler {
     // Part of ProxyRequestHandler interface, executed first on every request coming through Burp's Proxy tool
     override fun handleRequestReceived(interceptedRequest: InterceptedRequest): ProxyRequestReceivedAction {
         val request: HttpRequest
-        Logger.error("Handling request from Proxy tool")
 
         // Request to https://inql.burp
         if (isInternalRequest(interceptedRequest)) {
-            Logger.error("Request to https://inql.burp")
             val service = HttpService.httpService("127.0.0.1", listeningPort, false)
             return ProxyRequestReceivedAction.continueWith(interceptedRequest.withService(service))
             //request = redirectToInternalWebServer(interceptedRequest)

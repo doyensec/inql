@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "altair-static": "^5.2.2"
+  },
+  "scripts": {
+    "build": "mkdir -p build && cp -r node_modules/altair-static/build/dist/ build/ && cp -f index.html build/index.html"
+  }
+}

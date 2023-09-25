@@ -22,9 +22,6 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
     implementation 'org.apache.commons:commons-text:1.9'
     implementation 'org.python:jython-standalone:2.7.3'
-    implementation 'com.sparkjava:spark-core:2.9.4'
-    implementation 'org.slf4j:slf4j-simple:2.0.9'
-
     implementation 'io.ktor:ktor-server-core:2.3.4'
     implementation 'io.ktor:ktor-server-netty:2.3.4'
 }
@@ -87,11 +84,11 @@ def createReactAppCopyTask(String appName) {
         commandLine 'npm', 'run', 'build'
     }
 
-    def cleanBuildDirTask = task("clean${appName}BuildDir", type: Delete) {
-        delete "${appPath}/build"
-    }
+    //def cleanBuildDirTask = task("clean${appName}BuildDir", type: Delete) {
+    //    delete "${appPath}/build"
+    //}
 
-    rebuildTask.dependsOn cleanBuildDirTask
+    //rebuildTask.dependsOn cleanBuildDirTask
 
     def copyResourcesTask = task("copy${appName}Resources", type: Copy) {
         from "${appPath}/build"
@@ -111,10 +108,11 @@ def createReactAppCopyTask(String appName) {
 def graphiqlCopyTask = createReactAppCopyTask("GraphiQL")
 def playgroundCopyTask = createReactAppCopyTask("Playground")
 def voyagerCopyTask = createReactAppCopyTask("Voyager")
+def altairCopyTask = createReactAppCopyTask("Altair")
 
 // Add the Copy tasks to the processResources task
 processResources {
-    dependsOn(graphiqlCopyTask, playgroundCopyTask, voyagerCopyTask)
+    dependsOn(graphiqlCopyTask, playgroundCopyTask, voyagerCopyTask, altairCopyTask)
 }
 
 // Add the Copy tasks to the build task

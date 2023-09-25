@@ -400,4 +400,5 @@ bin/
 lib/graphiql/build/
 lib/playground/build/
 lib/voyager/build/
+lib/altair/build/
 resources/static/
