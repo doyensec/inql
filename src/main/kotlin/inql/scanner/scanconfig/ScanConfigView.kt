@@ -45,11 +45,9 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     val scanner = scannerTab.scanner
     val inql = this.scanner.inql
 
-    private var _file: String? = null
     var file: String?
-        get() = this._file
+        get() = this.fileField.text
         set(s) {
-            this._file = s
             this.fileField.text = s
         }
 
