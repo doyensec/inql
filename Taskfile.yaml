@@ -4,9 +4,9 @@ env:
   GENERATE_SOURCEMAP: false
   DISABLE_ESLINT_PLUGIN: true
 
-output:
-  group:
-    error_only: true
+#output:
+#  group:
+#    error_only: true
 
 tasks:
   init:
