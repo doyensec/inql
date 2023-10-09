@@ -41,6 +41,14 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                     }
                 }
 
+                is TextField -> {
+                    val tf = this.component as TextField
+                    tf.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    tf.changeListener = fun() {
+                        config.set(key, tf.getText(), scope = Config.Scope.GLOBAL)
+                    }
+                }
+
                 is TextArea -> {
                     val ta = this.component as TextArea
                     ta.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
@@ -104,6 +112,35 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             ),
         )
 
+        val integrationsSection = SettingsSection(
+            "InQL Integrations",
+            "Configure integrations with embedded tools.",
+            SettingsElement(
+                "integrations.graphiql",
+                CheckBox("Enable GraphiQL")
+            ),
+            SettingsElement(
+                "integrations.voyager",
+                CheckBox("Enable GraphQL Voyager")
+            ),
+            SettingsElement(
+                "integrations.playground",
+                CheckBox("Enable GraphQL Playground")
+            ),
+            SettingsElement(
+                "integrations.altair",
+                CheckBox("Enable Altair IDE")
+            ),
+            SettingsElement(
+                "integrations.browser.internal",
+                ComboBox("Use embedded Chromium or an external browser", "embedded", "external")
+            ),
+            SettingsElement(
+                "integrations.browser.external",
+                TextField("Command to launch external browser (if enabled above)"),
+            )
+        )
+
         val poiSection = SettingsSection(
             "Points of interest",
             "Use these settings to configure how InQL will handle points of interest.",
@@ -151,6 +188,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             BoxLayout.Y_AXIS,
             gap = 0,
             codeGenerationSection,
+            JSeparator(JSeparator.HORIZONTAL),
+            integrationsSection,
             JSeparator(JSeparator.HORIZONTAL),
             reportSection,
             JSeparator(JSeparator.HORIZONTAL),

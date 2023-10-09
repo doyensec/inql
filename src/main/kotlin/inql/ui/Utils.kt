@@ -133,6 +133,32 @@ class Spinner(description: String, min: Int, val max: Int, val step: Int = 1) :
     fun addChangeListener(cl: ChangeListener) = this.component.addChangeListener(cl)
 }
 
+class TextField(description: String, val columns: Int = 20) :
+    Input<JTextField>(JTextField(columns), description) {
+
+    var changeListener: (() -> Unit)? = null
+
+    init {
+        val listener = SimpleDocumentListener { this.changeHandler() }
+        this.component.document.addDocumentListener(listener)
+    }
+
+    fun getText(): String = this.component.text
+    fun setText(text: String) {
+        this.component.text = text
+    }
+
+    class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
+        override fun insertUpdate(e: DocumentEvent?) = this.callback()
+        override fun removeUpdate(e: DocumentEvent?) = this.callback()
+        override fun changedUpdate(e: DocumentEvent?) = this.callback()
+    }
+
+    private fun changeHandler() {
+        if (this.changeListener != null) this.changeListener!!()
+    }
+}
+
 class TextArea(description: String, val rows: Int, val cols: Int) :
     FlowPanel(FlowLayout.LEFT, gap = 5) {
 
