@@ -12,8 +12,6 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.*
-import java.awt.Desktop
-import java.net.URI
 import java.net.URLEncoder
 import inql.Config
 import inql.Logger
@@ -137,10 +135,30 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         while (tokenizer.hasMoreTokens()) {
             val token = tokenizer.nextToken()
 
+            // If the next word starts with a quote, we should concatenate upcoming words until the next quote
             if (token.startsWith("\"")) {
-                val builder = StringBuilder(token)
-                while (tokenizer.hasMoreTokens() && !token.endsWith("\"")) {
-                    builder.append(" ").append(tokenizer.nextToken())
+                // But what if it's just a single quoted word, without whitespace?
+                if (token.endsWith("\"")) {
+                    val length = token.length - 1
+                    commandArgs.add(token.substring(1, length))
+                    continue
+                }
+
+                // Otherwise, we have found the first word of a long argument that contains whitespace.
+                // Init the string builder with the first word (sans opening quote)
+                val builder = StringBuilder(token.substring(1))
+
+                // Keep appending words until we find a word ending with quote (or run out of words)
+                while (tokenizer.hasMoreTokens()) {
+                    val nextToken = tokenizer.nextToken()
+
+                    if (nextToken.endsWith("\"")) {
+                        val length = nextToken.length
+                        builder.append(" ").append(nextToken.substring(0, length-1))
+                        break
+                    } else {
+                        builder.append(" ").append(nextToken)
+                    }
                 }
                 commandArgs.add(builder.toString())
             } else {
