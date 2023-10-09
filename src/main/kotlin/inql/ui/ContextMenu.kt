@@ -54,6 +54,12 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL (GraphQL IDE)", null) {
         this.sendRequestToGraphiQL()
     }
+    protected val sendToPlaygroundAction = MenuAction("Open in GraphQL PlayGround", null) {
+        this.sendRequestToPlayground()
+    }
+    protected val sendToAltairAction = MenuAction("Open in Altair IDE", null) {
+        this.sendRequestToAltair()
+    }
     protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager (GraphQL schema visualizer)", null) {
         this.sendRequestToVoyager()
     }
@@ -69,20 +75,55 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         if (config.getBoolean("integrations.graphiql") == true) {
             actions.add(sendToGraphiqlAction)
         }
+        if (config.getBoolean("integrations.playground") == true) {
+            actions.add(sendToPlaygroundAction)
+        }
         if (config.getBoolean("integrations.voyager") == true) {
             actions.add(sendToVoyagerAction)
         }
+        if (config.getBoolean("integrations.altair") == true) {
+            actions.add(sendToAltairAction)
+        }
         actions
     }
+    // FIXME: Where exactly is this used? Commenting out does not seem to impact any functionality.
     protected val sendFromInqlActions = mutableListOf<MenuAction>(
-        sendToIntruderAction,
-        sendToRepeaterAction,
-        *sendToEmbeddedToolActions().toTypedArray(),
+        //sendToIntruderAction,
+        //sendToRepeaterAction,
+        //*sendToEmbeddedToolActions().toTypedArray(),
     )
     abstract fun getRequest(): HttpRequest?
     override fun mousePressed(e: MouseEvent) {
-        if (e.button != MouseEvent.BUTTON3) return // Right Click only
-        this.popup.show(e.component, e.x, e.y)
+        if (e.button == MouseEvent.BUTTON3) {    // Right Click only
+            this.setContextActions()
+            this.popup.show(e.component, e.x, e.y)
+        }
+    }
+
+
+    // Create right menu handlers in InQL views (InQL Scanner, GraphQL editor view)
+    // The context menus added by Burp itself **are not handled here** (e.g. Repeater - Raw editor - right click)
+    // In order to add elements to Burp's menu (Extensions - InQL - ...), modify sendToInqlComponents in SendToInqlHandler class
+    private fun setContextActions() {
+        this.popup.removeAll()
+
+        this.popup.add(this.sendToIntruderAction)
+        this.popup.add(this.sendToRepeaterAction)
+        this.popup.addSeparator()
+
+        if (this.includeInqlScanner) {
+            this.popup.add(this.sendToInqlScannerAction)
+        }
+        this.popup.add(this.sendToInqlAttackerAction)
+
+        val embeddedActions = this.sendToEmbeddedToolActions()
+        if (embeddedActions.isNotEmpty()) {
+            this.popup.addSeparator()
+
+            for (action in embeddedActions) {
+                this.popup.add(action)
+            }
+        }
     }
 
     private fun sendRequestToIntruder() {
@@ -184,7 +225,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         val server = request.url()
         val serverEncoded = URLEncoder.encode(server, "UTF-8")
 
-        // Session is InQL header value (headerValue API does not exist, manually go through headers)
+        // Session is InQL header value (headerValue API does not exist in Montoya API 1.0, manually go through headers)
         val session = request.headers().firstOrNull { it.name() == "InQL" }?.value() ?: "default"
         val sessionEncoded = URLEncoder.encode(session, "UTF-8")
 
@@ -213,6 +254,16 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendRequestToEmbeddedTool("graphiql")
     }
 
+    private fun sendRequestToPlayground() {
+        Logger.error("Send Request to Playground")
+        sendRequestToEmbeddedTool("playground")
+    }
+
+    private fun sendRequestToAltair() {
+        Logger.error("Send Request to Altair")
+        sendRequestToEmbeddedTool("altair")
+    }
+
     private fun sendRequestToVoyager() {
         Logger.error("Send Request to GraphQL Voyager")
         val request = this.getRequest() ?: return
@@ -224,20 +275,6 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         val sessionEncoded = URLEncoder.encode(session, "UTF-8")
 
         openURL("https://inql.burp/voyager?server=${serverEncoded}&session=${sessionEncoded}")
-    }
-
-    init {
-        // Popup
-        this.popup.add(this.sendToIntruderAction)
-        this.popup.add(this.sendToRepeaterAction)
-        this.popup.addSeparator()
-        if (this.includeInqlScanner) {
-            this.popup.add(this.sendToInqlScannerAction)
-        }
-        this.popup.add(this.sendToInqlAttackerAction)
-        for (action in this.sendToEmbeddedToolActions()) {
-            this.popup.add(action)
-        }
     }
 
     fun setEnabled(enabled: Boolean) {
@@ -270,12 +307,16 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     private var request: HttpRequest? = null
 
-    private val sendToInqlComponents = mutableListOf<JMenuItem>(
-        BurpMenuItem(super.sendToInqlScannerAction),
-        BurpMenuItem(super.sendToInqlAttackerAction),
-    ).apply {
-        for (action in super.sendToEmbeddedToolActions()) {
-            this.add(BurpMenuItem(action))
+    // This only sets Right Click handlers for the Burp's own menus. Menus added by InQL are handled
+    // in setContextActions()
+    private fun sendToInqlComponents(): MutableList<JMenuItem> {
+        return mutableListOf<JMenuItem>(
+            BurpMenuItem(super.sendToInqlScannerAction),
+            BurpMenuItem(super.sendToInqlAttackerAction)
+        ).apply {
+            for (action in super.sendToEmbeddedToolActions()) {
+                this.add(BurpMenuItem(action))
+            }
         }
     }
 
@@ -300,7 +341,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     override fun provideMenuItems(event: ContextMenuEvent): MutableList<JMenuItem>? {
         this.request = this.requestFromContext(event) ?: return null
-        return this.sendToInqlComponents
+        return this.sendToInqlComponents()
     }
 
     override fun getRequest(): HttpRequest? {
