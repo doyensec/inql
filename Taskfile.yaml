@@ -1,5 +1,9 @@
 version: '3'
 
+env:
+  GENERATE_SOURCEMAP: false
+  DISABLE_ESLINT_PLUGIN: true
+
 tasks:
   init:
     cmds:
