@@ -4,35 +4,128 @@ env:
   GENERATE_SOURCEMAP: false
   DISABLE_ESLINT_PLUGIN: true
 
+output:
+  group:
+    error_only: true
+
 tasks:
   init:
+    label: "Initializing git submodules"
     cmds:
       - git submodule init
-      - git submodule update
+      - git submodule update --checkout
+    sources:
+      - ./.gitmodules
+    generates:
+      - lib/GQLSpection/README.md
+
+  deps-item:
+    internal: true
+    label: "Installing dependencies for {{.APP}}"
+    dir: lib/{{.APP}}
+    cmds:
+      - yarn install
+    sources:
+      - package.json
+    generates:
+      - build/index.html
 
   deps:
-    cmds:
-      - cd lib/graphiql && yarn install
-      - cd lib/playground && yarn install
-      - cd lib/voyager && yarn install
-      - cd lib/altair && yarn install
-    concurrent: true
+    label: "Installing dependencies for web services"
+    deps:
+      - task: deps-item
+        vars: { APP: 'graphiql' }
+      - task: deps-item
+        vars: { APP: 'playground' }
+      - task: deps-item
+        vars: { APP: 'voyager' }
+      - task: deps-item
+        vars: { APP: 'altair' }
 
-  build:
+  web-build:
+    label: "Building web app: {{.APP}}"
+    internal: true
+    dir: 'lib/{{.APP}}'
     cmds:
-      - cd lib/graphiql && yarn build
-      - cd lib/playground && yarn build
-      - cd lib/voyager && yarn build
-      - cd lib/altair && yarn build
-    concurrent: true
+      - yarn build
+
+  web-copy:
+    label: "Copying web app resources: {{.APP}}"
+    internal: true
+    cmds:
+      - 'rm -rf resources/static/{{.APP}}'
+      - 'cp -r lib/{{.APP}}/build/ resources/static/{{.APP}}/'
+
+  web-item:
+    label: "Build and copy webapp: {{.APP}}"
+    internal: true
+    cmds:
+      - task: web-build
+        vars: { APP: '{{.APP}}' }
+      - task: web-copy
+        vars: { APP: '{{.APP}}' }
+    sources:
+      - 'lib/{{.APP}}/src/**/*.json'
+      - 'lib/{{.APP}}/src/**/*.js'
+      - 'lib/{{.APP}}/src/**/*.ts'
+      - 'lib/{{.APP}}/src/**/*.css'
+      - 'lib/{{.APP}}/src/**/*.html'
+      - 'lib/{{.APP}}/src/**/*.svg'
+      - 'lib/{{.APP}}/src/**/*.png'
+      - 'lib/{{.APP}}/src/**/*.ico'
+      - 'lib/{{.APP}}/src/**/*.txt'
+      - 'lib/{{.APP}}/src/**/*.md'
+      - 'lib/{{.APP}}/src/**/*.woff2'
+    generates:
+      - 'resources/static/{{.APP}}/index.html'
+
+  assure-resources:
+    label: "Make sure resources/static/ exists"
+    internal: true
+    cmds:
+      - mkdir -p resources/static/
+    sources:
+      - Taskfile.yaml
+    generates:
+      - resources/static/
+    method: timestamp
+
+  web:
+    label: "Rebuild web apps"
+    deps:
+      - assure-resources
+      - task: web-item
+        vars: { APP: 'graphiql' }
+      - task: web-item
+        vars: { APP: 'playground' }
+      - task: web-item
+        vars: { APP: 'voyager' }
+      - task: web-item
+        vars: { APP: 'altair' }
 
   kotlin:
+    label: "Rebuild kotlin app"
     cmds:
       - ./gradlew build
+    sources:
+      - ./src/**/*.kt
+      - ./resources/**/*.js
+      - ./resources/**/*.json
+      - ./resources/**/*.css
+      - ./resources/**/*.html
+      - ./resources/**/*.png
+      - ./resources/**/*.svg
+      - ./resources/**/*.ico
+      - ./resources/**/*.txt
+      - ./resources/**/*.md
+      - ./resources/**/*.woff2
+    generates:
+      - InQL-v*.jar
 
   all:
+    label: "Run all commands"
     cmds:
       - task init
       - task deps
-      - task build
+      - task web
       - task kotlin

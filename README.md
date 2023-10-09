@@ -106,23 +106,32 @@ $ java --version
 openjdk 17.0.6 2023-01-17
 ```
 
+2. Install our build tool - [Taskfile](https://taskfile.dev):
+
+```bash
+$ # Mac OS & Homebrew:
+$ brew install go-task
+$ # Debian
+$ sudo apt install -y task
+```
+
 2. Clone the repo and pull submodules:
 
 ```bash
 $ git clone https://github.com/doyensec/inql
 $ cd inql
+$ # Optionally, checkout dev branch (might be broken / unstable!)
 $ git checkout dev
-$ git submodule init
-$ git submodule update
 ```
 
 3. Build the InQL extension:
 
 ```bash
-$ ./gradlew
+$ task all
 ```
 
-Load the file `build/InQL.jar` into Burp as a Java extension.
+This should produce a file named `InQL-v5.0.2.jar` or similar in the root of the repo. Load it into Burp
+as a Java extension.
 
 ## :hammer_and_wrench: Setting up development environment
 
@@ -172,6 +181,15 @@ $ git submodule update
 ```
 
 (this can also be done automatically when needed by modifying `~/.gitconfig`)
+
+Oh, one last thing. While working on Kotlin code, you might want to auto-rebuild extension. Just run
+`kotlin` task with the `--watch` / `-w` flag:
+
+```bash
+$ task kotlin -w
+```
+
+By default this looks for changes every 5 seconds. In order to tune it add option `--interval=500ms`.
 
 # :handshake: Contributing
 

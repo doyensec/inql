@@ -402,3 +402,6 @@ lib/playground/build/
 lib/voyager/build/
 lib/altair/build/
 resources/static/
+
+# Taskfile
+.task/

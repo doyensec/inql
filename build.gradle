@@ -74,47 +74,6 @@ tasks.register('generateVersionProperties') {
 processResources.dependsOn generateVersionProperties
 
 
-// Define a function to create a Copy task for a React app
-def createReactAppCopyTask(String appName) {
-    def appPath = "lib/${appName.toLowerCase()}"
-    def resourcesPath = "resources/static/${appName.toLowerCase()}"
-
-    def rebuildTask = task("rebuild${appName}", type: Exec) {
-        workingDir = project.file(appPath)
-        commandLine 'npm', 'run', 'build'
-    }
-
-    //def cleanBuildDirTask = task("clean${appName}BuildDir", type: Delete) {
-    //    delete "${appPath}/build"
-    //}
-
-    //rebuildTask.dependsOn cleanBuildDirTask
-
-    def copyResourcesTask = task("copy${appName}Resources", type: Copy) {
-        from "${appPath}/build"
-        into "${resourcesPath}"
-    }
-
-    def cleanResourcesTask = task("clean${appName}Resources", type: Delete) {
-        delete "${resourcesPath}"
-    }
-
-    copyResourcesTask.dependsOn(cleanResourcesTask, rebuildTask)
-
-    return copyResourcesTask
-}
-
-// Call the function for each React app you want to build
-def graphiqlCopyTask = createReactAppCopyTask("GraphiQL")
-def playgroundCopyTask = createReactAppCopyTask("Playground")
-def voyagerCopyTask = createReactAppCopyTask("Voyager")
-def altairCopyTask = createReactAppCopyTask("Altair")
-
-// Add the Copy tasks to the processResources task
-processResources {
-    dependsOn(graphiqlCopyTask, playgroundCopyTask, voyagerCopyTask, altairCopyTask)
-}
-
 // Add the Copy tasks to the build task
 build {
     dependsOn(processResources)
