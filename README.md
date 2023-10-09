@@ -189,8 +189,6 @@ Oh, one last thing. While working on Kotlin code, you might want to auto-rebuild
 $ task kotlin -w
 ```
 
-By default this looks for changes every 5 seconds. In order to tune it add option `--interval=500ms`.
-
 # :handshake: Contributing
 
 InQL thrives on community contributions. Whether you're a developer, researcher, designer, or bug hunter, your expertise is invaluable to us. We welcome bug reports, feedback, and pull requests. Your participation helps us continue to improve InQL, making it a stronger tool for the community.
