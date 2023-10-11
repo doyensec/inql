@@ -51,7 +51,7 @@ import javax.swing.JFrame
 
  */
 
-class InternalHttpServer : ProxyRequestHandler {
+class InternalHttpServer(val inql: InQL) : ProxyRequestHandler {
     private val listeningPort: Int
 
     init {
@@ -84,7 +84,7 @@ class InternalHttpServer : ProxyRequestHandler {
                     val origin = call.request.header("Origin")
                     val allowedMethods = call.request.header("Access-Control-Request-Method") ?: "GET, PATCH, POST, OPTIONS"
                     val allowedHeaders = call.request.header("Access-Control-Request-Headers") ?: "Content-Type, InQL"
-                    Logger.error("Handling Preflight Request for: Origin: $origin; Methods: $allowedMethods; Headers: $allowedHeaders")
+                    Logger.debug("Handling Preflight Request for: Origin: $origin; Methods: $allowedMethods; Headers: $allowedHeaders")
 
                     // Check if the origin is whitelisted
                     if (isOriginWhitelisted(origin)) {
@@ -207,7 +207,7 @@ class InternalHttpServer : ProxyRequestHandler {
 
         // Pre-flight request from GraphiQL or similar tool, auto-accept to bypass target's CORS policy
         if (isPreflightFromInternalTool(interceptedRequest)) {
-            Logger.error("Pre-flight request from GraphiQL")
+            Logger.debug("Pre-flight request from GraphiQL")
             request = redirectToPreflightHandler(interceptedRequest)
             return internalAction(request)
         }
@@ -215,13 +215,80 @@ class InternalHttpServer : ProxyRequestHandler {
         // Has our proprietary `InQL` header holding the session identifier
         // TODO: This is the place to add session headers, inject variables, etc
         if (hasInqlHeader(interceptedRequest)) {
-            Logger.error("Request with InQL header")
+            Logger.debug("Request with InQL header")
+
+            // If it's a GraphQL introspection request, process it internally - based on the cached schema
+            if (isIntrospectionRequest(interceptedRequest)) {
+                Logger.debug("Potential introspection request detected")
+                val schema = getSchemaForRequest(interceptedRequest)
+                if (schema != null) {
+                    Logger.debug("Found cached schema for this request: $schema")
+                //    request = fulfillIntrospectionRequest(schema, interceptedRequest)
+                //    return internalAction(request)
+                }
+            }
+
             request = removeInqlHeader(interceptedRequest)
             return externalAction(request)
         }
 
-        Logger.error("Unrelated request, letting through")
+        Logger.debug("Unrelated request, letting through")
         return externalAction(interceptedRequest)
+    }
+
+    private fun getSchemaForRequest(request: InterceptedRequest): String? {
+        Logger.debug("tick tock: ${request.method()}")
+        val profile = getProfileForRequest(request) ?: return null
+        val endpoint = request.url()
+        return profile.cachedSchemas[endpoint]
+    }
+
+    private fun getProfileForRequest(request: InterceptedRequest): Profile? {
+        val profileName = getProfileName(request) ?: return null
+        return this.inql.getProfile(profileName)
+    }
+
+    private fun isIntrospectionRequest(request: InterceptedRequest): Boolean {
+        // Content-Type (header) is JSON or graphql
+        if (! contentTypeCompatibleWithGraphQL(request)) {
+            Logger.debug("Content-Type header does not match GraphQL headers")
+            return false
+        }
+
+        // The actual Content Type of the body (as detected by Burp) is JSON as well
+        val contentType = request.contentType().name
+        if (contentType != "JSON") {
+            Logger.debug("Content type of the body is not suitable for GraphQL: $contentType")
+            return false
+        }
+
+        // Body is a valid JSON
+        val json: JsonObject
+        try {
+            json = Gson().fromJson(request.bodyToString(), JsonObject::class.java)
+        } catch(e: Exception) {
+            Logger.debug("Body is not a valid JSON")
+            return false
+        }
+
+        // There is a "query" key
+        val query: String
+        try {
+            query = json.get("query").asString
+        } catch(e: Exception) {
+            Logger.debug("Query key not present in the body")
+            return false
+        }
+
+        // The value of "query" contains "__schema"
+        // TODO: Replace this with proper parsing of the GraphQL request
+        if (! query.contains("__schema")) {
+            Logger.debug("Query does not contain '__schema'")
+            return false
+        }
+
+        Logger.debug("Introspection query validated!")
+        return true
     }
 
     // Part of ProxyRequestHandler interface, leave it alone
@@ -249,7 +316,7 @@ class InternalHttpServer : ProxyRequestHandler {
         //
         // is not enough because Burp messes up open connections, so the most robust way of changing
         // the service seems to be creating a brand-new request from scratch
-        Logger.error("Redirecting to the internal web server")
+        Logger.debug("Redirecting to the internal web server")
 
         val service = HttpService.httpService("127.0.0.1", listeningPort, false)
         val path = request.path()
@@ -267,7 +334,7 @@ class InternalHttpServer : ProxyRequestHandler {
             newRequest = newRequest.withAddedHeader(header)
         }
 
-        Logger.error("Redirect request created")
+        Logger.debug("Redirect request created")
         return newRequest
     }
 
@@ -281,12 +348,35 @@ class InternalHttpServer : ProxyRequestHandler {
         return requestedHeaders?.split(',')?.any { it.trim().equals("inql", ignoreCase = true) } == true
     }
 
-    private fun redirectToPreflightHandler(request: HttpRequest): HttpRequest {
-        return redirectToInternalWebServer(request.withPath("/handle-preflight"))
+    // Check if an "InQL" header is present (it contains the InQL session name)
+    private fun hasInqlHeader(request: HttpRequest): Boolean {
+        return request.headers().any { it.name().trim().equals("inql", ignoreCase = true) }
     }
 
-    private fun hasInqlHeader(request: HttpRequest): Boolean {
-        return request.headers().any { it.name() == "InQL" }
+    private fun getProfileName(request: HttpRequest): String? {
+        for (header in request.headers()) {
+            if (header.name().trim().equals("inql", ignoreCase = true)) {
+                return header.value()
+            }
+        }
+        return null
+    }
+
+    // Content-Type header is suitable with GraphQL requests
+    private fun contentTypeCompatibleWithGraphQL(request: HttpRequest): Boolean {
+        for (header in request.headers()) {
+            if (header.name().equals("content-type", ignoreCase = true)) {
+                val value = header.value().trim()
+                Logger.debug("Looking at header $value")
+                return value.equals("application/json", ignoreCase = true) ||
+                        value.equals("application/graphql", ignoreCase = true)
+            }
+        }
+        return false
+    }
+
+    private fun redirectToPreflightHandler(request: HttpRequest): HttpRequest {
+        return redirectToInternalWebServer(request.withPath("/handle-preflight"))
     }
 
     private fun removeInqlHeader(request: HttpRequest): HttpRequest {

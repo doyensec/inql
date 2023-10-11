@@ -186,8 +186,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     private suspend fun analyze() {
         // Get the schema
         val jsonSchema: String?
-        if (this.fileSchema != null) {
-            Logger.info("GraphQL schema supplied as a file.")
+        if (this.fileSchema != null && this.fileSchema!!.isNotBlank()) {
+            Logger.info("GraphQL schema supplied as a file: ${this.fileSchema}")
             try {
                 // FIXME: This is not ideal for big files,
                 //  once GQLSpection is ported to Kotlin we can find a more suitable solution
@@ -232,6 +232,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         // Update this tab in burp's project file
         this.scanner.updateChildObjectAsync(this)
+
+        // Cache GraphQL schema
+        val url = this.requestTemplate.url()
+        this._linkedProfile?.upsertSchema(url, jsonSchema)
+        Logger.error("Caching schema for the endpoint $url")
 
         this.scanCompleted()
     }

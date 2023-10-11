@@ -73,7 +73,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
         }
 
         // Spawn an embedded web server and register Proxy listener to selectively redirect requests there
-        InternalHttpServer()
+        InternalHttpServer(this)
     }
 
     fun unload() = runBlocking {

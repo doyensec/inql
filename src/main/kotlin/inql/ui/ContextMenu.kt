@@ -143,29 +143,29 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     }
 
     private fun openURL(url: String) {
-        Logger.error("Open URL: $url")
+        Logger.info("Open URL: $url")
 
         val config = Config.getInstance()
         val useInternalBrowser = config.getString("integrations.browser.internal")?.equals("embedded") ?: false
-        Logger.error("Should use internal browser: $useInternalBrowser")
+        Logger.info("Should use internal browser: $useInternalBrowser")
 
         val browserCommandTemplate: String?
         if (useInternalBrowser) {
             browserCommandTemplate = config.getInternalBrowserCommand()
             if (browserCommandTemplate == null) {
-                Logger.error("Could not find internal browser command")
+                Logger.debug("Could not find internal browser command")
                 return
             }
         } else {
             browserCommandTemplate = config.getString("integrations.browser.external")
             if (browserCommandTemplate == null) {
-                Logger.error("Could not find external browser command")
+                Logger.debug("Could not find external browser command")
                 return
             }
         }
 
         val browserCommand = browserCommandTemplate.format(url)
-        Logger.error("Browser command: $browserCommand")
+        Logger.debug("Browser command: $browserCommand")
 
         // Java deprecated passing string to Runtime.getRuntime().exec() and requires an array of strings
         // but we want to support passing arguments with spaces in them, so we need to parse the command
@@ -207,9 +207,9 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
             }
         }
 
-        Logger.error("About to execute command: $commandArgs")
+        Logger.debug("About to execute command: $commandArgs")
         val commandArray = commandArgs.toTypedArray()
-        Logger.error("Executed command: $commandArray")
+        Logger.debug("Executed command: $commandArray")
 
         try {
             Runtime.getRuntime().exec(commandArray)
@@ -250,22 +250,22 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     }
 
     private fun sendRequestToGraphiQL() {
-        Logger.error("Send Request to GraphiQL")
+        Logger.debug("Send Request to GraphiQL")
         sendRequestToEmbeddedTool("graphiql")
     }
 
     private fun sendRequestToPlayground() {
-        Logger.error("Send Request to Playground")
+        Logger.debug("Send Request to Playground")
         sendRequestToEmbeddedTool("playground")
     }
 
     private fun sendRequestToAltair() {
-        Logger.error("Send Request to Altair")
+        Logger.debug("Send Request to Altair")
         sendRequestToEmbeddedTool("altair")
     }
 
     private fun sendRequestToVoyager() {
-        Logger.error("Send Request to GraphQL Voyager")
+        Logger.debug("Send Request to GraphQL Voyager")
         val request = this.getRequest() ?: return
 
         val server = request.url()
