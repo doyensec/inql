@@ -1,6 +1,7 @@
 package inql
 
 import burp.Burp
+import burp.BurpExtender
 import burp.BurpIcons
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
@@ -30,7 +31,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
     val attacker = Attacker(this)
 
     init {
-        Burp.Montoya.logging().raiseInfoEvent("InQL Started")
+        Burp.Montoya.logging().raiseInfoEvent("InQL ${BurpExtender.version} Started")
 
         // Cleanup from previous versions
         // FIXME: Remove this once this is exposed through Settings UI
