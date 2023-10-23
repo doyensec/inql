@@ -2,7 +2,7 @@ package inql.graphql.formatting
 
 import org.apache.commons.text.StringEscapeUtils
 
-class Token(val type: Type, var text: String) {
+class Token(var type: Type, var text: String) {
 
     var subtype: Subtype = Subtype.NONE
 

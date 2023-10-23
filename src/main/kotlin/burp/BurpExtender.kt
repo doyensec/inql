@@ -10,9 +10,10 @@ import java.util.*
 @Suppress("unused")
 class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
 
-    val version =
-        Properties().also { it.load(this.javaClass.getResourceAsStream("/version.properties")) }.getProperty("version")
-            ?: ""
+    companion object {
+        val version =
+            Properties().also { it.load(this::class.java.getResourceAsStream("/version.properties")) }.getProperty("version") ?: ""
+    }
     private lateinit var callbacks: IBurpExtenderCallbacks
     private lateinit var inql: InQL
 
@@ -64,7 +65,7 @@ class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
         Burp.initialize(montoyaApi)
 
         // Set the name of the extension
-        montoyaApi.extension().setName(if (version.isNotEmpty()) "InQL $version" else "InQL")
+        montoyaApi.extension().setName("InQL")
 
         inql = InQL()
         montoyaApi.extension().registerUnloadingHandler(this)

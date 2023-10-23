@@ -12,12 +12,15 @@ import java.util.*
    FloatValue
    StringValue     but """ starts a block string
  */
-class SyntaxParser private constructor(val tokens: LinkedList<Token>, val fixIntrospection: Boolean = false) {
+class SyntaxParser private constructor(val originalTokens: LinkedList<Token>, val fixIntrospection: Boolean = false) {
     companion object {
         fun parse(tokens: List<Token>, fixIntrospection: Boolean = false): List<Token> {
             return SyntaxParser(LinkedList(tokens), fixIntrospection).parse()
         }
     }
+
+    /* Get only tokens with syntactic relevance */
+    val tokens = originalTokens.filter { t -> t.type != Token.Type.COMMENT && t.text != "," }
 
     private var idx = 0
 
@@ -34,13 +37,11 @@ class SyntaxParser private constructor(val tokens: LinkedList<Token>, val fixInt
             Logger.error("Error while parsing GraphQL")
             Logger.error((e.stackTraceToString()))
         }
-        return this.tokens.filter { it.type != Token.Type.EMPTY }
+        return this.originalTokens.filter { it.type != Token.Type.EMPTY }
     }
 
     private fun consume() {
-        do {
-            idx++
-        } while (idx < this.tokens.size && (this.current.type == Token.Type.COMMENT || this.current.text == ","))
+        idx++
     }
 
     private fun consumeText(text: String) {
@@ -53,7 +54,8 @@ class SyntaxParser private constructor(val tokens: LinkedList<Token>, val fixInt
     }
 
     private fun delete() {
-        this.tokens[this.idx] = Token(Token.Type.EMPTY, "")
+        this.tokens[this.idx].type = Token.Type.EMPTY
+        this.tokens[this.idx].text = ""
     }
 
     private fun document() {
