@@ -20,7 +20,7 @@ class Introspection {
         }
 
         fun sendIntrospectionQuery(request: HttpRequest): String? {
-            for (version in IntrospectionQuery.Version.entries) {
+            for (version in IntrospectionQuery.Version.entries.asReversed()) {
                 return sendIntrospectionQueryVersion(request, version) ?: continue
             }
             Logger.warning("Introspection seems disabled for this endpoint: ${request.url()}")
