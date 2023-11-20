@@ -397,10 +397,8 @@ inql/__version__.py
 bin/
 
 # Ignore compiled JavaScript files from React apps
-lib/graphiql/build/
-lib/playground/build/
-lib/voyager/build/
-lib/altair/build/
+lib/**/build/
+lib/**/node_modules/
 resources/static/
 
 # Taskfile
