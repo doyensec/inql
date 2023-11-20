@@ -5,66 +5,63 @@ env:
   DISABLE_ESLINT_PLUGIN: true
 
 interval: '500ms'
-
-#output:
-#  group:
-#    error_only: true
+output: prefixed
 
 tasks:
   init:
     label: "Initializing git submodules"
     cmds:
-      - git submodule init
-      - git submodule update --checkout
+      - git submodule update --init --checkout
     sources:
-      - ./.gitmodules
-    generates:
-      - lib/GQLSpection/README.md
+      - .gitmodules
 
-  deps-item:
+  web-deps:
     internal: true
     label: "Installing dependencies for {{.APP}}"
+    prefix: "deps-{{.APP}}"
     dir: lib/{{.APP}}
     cmds:
-      - yarn install
+      - yarn --no-progress --non-interactive --silent install
     sources:
       - package.json
     generates:
       - build/index.html
 
-  deps:
-    label: "Installing dependencies for web services"
-    deps:
-      - task: deps-item
-        vars: { APP: 'graphiql' }
-      - task: deps-item
-        vars: { APP: 'playground' }
-      - task: deps-item
-        vars: { APP: 'voyager' }
-      - task: deps-item
-        vars: { APP: 'altair' }
-
   web-build:
     label: "Building web app: {{.APP}}"
     internal: true
+    prefix: "build-{{.APP}}"
     dir: 'lib/{{.APP}}'
     cmds:
-      - yarn build
+      - yarn --no-progress --non-interactive --silent build
 
   web-copy:
     label: "Copying web app resources: {{.APP}}"
     internal: true
+    prefix: "copy-{{.APP}}"
     cmds:
       - 'rm -rf resources/static/{{.APP}}'
-      - 'cp -r lib/{{.APP}}/build/ resources/static/{{.APP}}/'
+      - 'mv lib/{{.APP}}/build/ resources/static/{{.APP}}/'
+
+  web-cleanup:
+    label: "Cleaning up: {{.APP}}"
+    internal: true
+    prefix: "cleanup-{{.APP}}"
+    ignore_error: true
+    cmds:
+      - 'rm -rf lib/{{.APP}}/node_modules/'
 
   web-item:
     label: "Build and copy webapp: {{.APP}}"
     internal: true
     cmds:
+      - task: web-deps
+        vars: { APP: '{{.APP}}' }
       - task: web-build
         vars: { APP: '{{.APP}}' }
       - task: web-copy
+        vars: { APP: '{{.APP}}' }
+      - task: web-cleanup
         vars: { APP: '{{.APP}}' }
     sources:
       - 'lib/{{.APP}}/src/**/*.json'
@@ -81,21 +78,20 @@ tasks:
     generates:
       - 'resources/static/{{.APP}}/index.html'
 
-  assure-resources:
+  create-resources-folder:
     label: "Make sure resources/static/ exists"
     internal: true
     cmds:
       - mkdir -p resources/static/
-    sources:
-      - Taskfile.yaml
     generates:
       - resources/static/
-    method: timestamp
+    status:
+      - test -d resources/static
 
-  web:
-    label: "Rebuild web apps"
+  web-apps:
+    label: "Build web apps"
+    internal: true
     deps:
-      - assure-resources
       - task: web-item
         vars: { APP: 'graphiql' }
       - task: web-item
@@ -105,29 +101,33 @@ tasks:
       - task: web-item
         vars: { APP: 'altair' }
 
+  web:
+    cmds:
+      - task: create-resources-folder
+      - task: web-apps
+
   kotlin:
-    label: "Rebuild kotlin app"
+    label: "Build kotlin app"
     cmds:
       - ./gradlew build
     sources:
-      - ./src/**/*.kt
-      - ./resources/**/*.js
-      - ./resources/**/*.json
-      - ./resources/**/*.css
-      - ./resources/**/*.html
-      - ./resources/**/*.png
-      - ./resources/**/*.svg
-      - ./resources/**/*.ico
-      - ./resources/**/*.txt
-      - ./resources/**/*.md
-      - ./resources/**/*.woff2
+      - src/**/*.kt
+      - resources/**/*.js
+      - resources/**/*.json
+      - resources/**/*.css
+      - resources/**/*.html
+      - resources/**/*.png
+      - resources/**/*.svg
+      - resources/**/*.ico
+      - resources/**/*.txt
+      - resources/**/*.md
+      - resources/**/*.woff2
     generates:
       - InQL-v*.jar
 
   all:
     label: "Run all commands"
     cmds:
-      - task init
-      - task deps
-      - task web
-      - task kotlin
+      - task: init
+      - task: web
+      - task: kotlin
