@@ -5,6 +5,8 @@ import burp.BurpExtender
 import burp.BurpIcons
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
+import inql.externaltools.ExternalToolsRequestFixer
+import inql.externaltools.WebServer
 import inql.graphql.gqlspection.IGQLSpection
 import inql.graphql.gqlspection.PyGQLSpection
 import inql.savestate.SavesAndLoadData
@@ -22,9 +24,11 @@ import javax.swing.SwingUtilities
 
 class InQL : TabbedPane(), SavesAndLoadData {
 
-    private val profiles = LinkedHashMap<String, Profile>()
     private val config = Config.getInstance()
+    private val profiles = LinkedHashMap<String, Profile>()
     val gqlspection: IGQLSpection
+    val embeddedServer: WebServer
+    val externalToolsInterceptor: ExternalToolsRequestFixer
 
     // main tabs
     val scanner = Scanner(this)
@@ -74,7 +78,10 @@ class InQL : TabbedPane(), SavesAndLoadData {
         }
 
         // Spawn an embedded web server and register Proxy listener to selectively redirect requests there
-        InternalHttpServer(this)
+        this.embeddedServer = WebServer()
+        this.externalToolsInterceptor = ExternalToolsRequestFixer(this, this.embeddedServer.listeningPort)
+        Burp.Montoya.proxy().registerRequestHandler(this.externalToolsInterceptor)
+        Burp.Montoya.proxy().registerResponseHandler(this.externalToolsInterceptor)
     }
 
     fun unload() = runBlocking {

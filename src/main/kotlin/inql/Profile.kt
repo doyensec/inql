@@ -21,7 +21,6 @@ class Profile(val name: String, val id: String, val host: String) : SavesDataToP
     }
 
     val customHeaders: MutableMap<String, String> = LinkedHashMap<String, String>()
-    val cachedSchemas: MutableMap<String, String> = LinkedHashMap<String, String>()
 
     fun overwrite(headers: Map<String, String>) {
         this.customHeaders.clear()
@@ -52,10 +51,5 @@ class Profile(val name: String, val id: String, val host: String) : SavesDataToP
 
     override fun toString(): String {
         return name
-    }
-
-    fun upsertSchema(endpoint: String, schema: String) {
-        this.cachedSchemas[endpoint] = schema
-        this.saveToProjectFileAsync()
     }
 }

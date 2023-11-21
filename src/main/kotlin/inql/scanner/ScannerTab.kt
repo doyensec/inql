@@ -232,12 +232,6 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         // Update this tab in burp's project file
         this.scanner.updateChildObjectAsync(this)
-
-        // Cache GraphQL schema
-        val url = this.requestTemplate.url()
-        this._linkedProfile?.upsertSchema(url, jsonSchema)
-        Logger.error("Caching schema for the endpoint $url")
-
         this.scanCompleted()
     }
 
@@ -245,6 +239,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         this.scanConfigView.setBusy(false) // Do we need this?
         this.showView(SCAN_RESULT_VIEW)
         this.scanResultsView.refresh()
+        this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
     }
 
     private fun scanFailed(reason: String?) {

@@ -16,6 +16,7 @@ import javax.swing.BorderFactory
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     private val tabFactory = ScannerTabFactory(this)
+    public val introspectionCache = IntrospectionCache(this.inql)
 
     companion object {
         fun fetchHeadersForHost(
@@ -132,5 +133,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         for (tab in 0..<prevTabCnt) {
             this.tabbedPane.removeTabAt(tab)
         }
+        // Update Introspection Cache
+        this.introspectionCache.populateFromScanner()
     }
 }
