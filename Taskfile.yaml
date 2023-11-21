@@ -111,6 +111,7 @@ tasks:
     cmds:
       - ./gradlew build
     sources:
+      - build.gradle
       - src/**/*.kt
       - resources/**/*.js
       - resources/**/*.json
