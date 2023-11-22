@@ -132,3 +132,7 @@ tasks:
       - task: init
       - task: web
       - task: kotlin
+
+  default:
+    cmds:
+      - task: all
