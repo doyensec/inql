@@ -24,7 +24,7 @@ import java.awt.Font
 import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 
-class StyledPayloadEditor private constructor(val inql: InQL, private val readOnly: Boolean) :
+class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
     ExtensionProvidedHttpRequestEditor {
     companion object {
         class Provider(private val inql: InQL) : HttpRequestEditorProvider {
@@ -197,7 +197,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, private val readOn
             }
         }
 
-        var body = JsonObject().also { it.addProperty("query", query) }
+        val body = JsonObject().also { it.addProperty("query", query) }
         if (vars != null) body.add("variables", vars)
         if (operationName != null) body.addProperty("operationName", operationName)
 

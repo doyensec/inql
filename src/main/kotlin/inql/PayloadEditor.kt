@@ -23,7 +23,7 @@ import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JSplitPane
 
-class PayloadEditor private constructor(val inql: InQL, private val readOnly: Boolean) :
+class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
     ExtensionProvidedHttpRequestEditor {
     companion object {
         class Provider(private val inql: InQL) : HttpRequestEditorProvider {
@@ -191,7 +191,7 @@ class PayloadEditor private constructor(val inql: InQL, private val readOnly: Bo
             }
         }
 
-        var body = JsonObject().also { it.addProperty("query", query) }
+        val body = JsonObject().also { it.addProperty("query", query) }
         if (vars != null) body.add("variables", vars)
         if (operationName != null) body.addProperty("operationName", operationName)
 
