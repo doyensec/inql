@@ -90,7 +90,7 @@ class WebServer {
                 }
             }
         }).start()
-        Logger.debug("Started embedded web server on port $listeningPort")
+        Logger.debug("Successfully started embedded web server on port $listeningPort")
     }
 
     companion object {

@@ -25,7 +25,7 @@ class Config private constructor() {
     val defaults = mapOf<String, Any>(
         "codegen.depth" to 2,
         "codegen.pad" to 4,
-        "integrations.browser.internal" to false,
+        "integrations.browser.internal" to true,
         "integrations.browser.external.command" to "",
         "integrations.graphiql" to true,
         "integrations.voyager" to true,

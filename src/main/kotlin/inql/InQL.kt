@@ -5,8 +5,7 @@ import burp.BurpExtender
 import burp.BurpIcons
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
-import inql.externaltools.ExternalToolsRequestFixer
-import inql.externaltools.WebServer
+import inql.externaltools.ExternalToolsService
 import inql.graphql.gqlspection.IGQLSpection
 import inql.graphql.gqlspection.PyGQLSpection
 import inql.savestate.SavesAndLoadData
@@ -27,8 +26,6 @@ class InQL : TabbedPane(), SavesAndLoadData {
     private val config = Config.getInstance()
     private val profiles = LinkedHashMap<String, Profile>()
     val gqlspection: IGQLSpection
-    val embeddedServer: WebServer
-    val externalToolsInterceptor: ExternalToolsRequestFixer
 
     // main tabs
     val scanner = Scanner(this)
@@ -77,12 +74,8 @@ class InQL : TabbedPane(), SavesAndLoadData {
             this.loadFromProjectFileAsync()
         }
 
-        // Spawn an embedded web server and register Proxy listener to selectively redirect requests there
-        this.embeddedServer = WebServer()
-        this.externalToolsInterceptor = ExternalToolsRequestFixer(this, this.embeddedServer.listeningPort)
-        Burp.Montoya.proxy().registerRequestHandler(this.externalToolsInterceptor)
-        Burp.Montoya.proxy().registerResponseHandler(this.externalToolsInterceptor)
-
+        // Initialize ExternalToolsService to make it ready to spawn the webserver and register the interceptor when they are needed
+        ExternalToolsService.init(this)
     }
 
     fun unload() = runBlocking {

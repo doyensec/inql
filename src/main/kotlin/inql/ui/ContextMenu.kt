@@ -12,6 +12,7 @@ import com.google.gson.reflect.TypeToken
 import inql.Config
 import inql.InQL
 import inql.Logger
+import inql.externaltools.ExternalToolsService
 import java.awt.Component
 import java.awt.Toolkit
 import java.awt.event.ActionEvent
@@ -165,7 +166,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
 
         val config = Config.getInstance()
         val useInternalBrowser = config.getBoolean("integrations.browser.internal")?: true
-        Logger.info("Should use internal browser: $useInternalBrowser")
+        Logger.info("Should use internal browser? $useInternalBrowser")
 
         if (useInternalBrowser) {
             Browser.launchEmbedded(url)
@@ -175,6 +176,9 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     }
 
     private fun sendRequestToEmbeddedTool(tool: String) {
+        // Ensure ExternalToolsService is running
+        ExternalToolsService.startIfOff()
+
         val request: HttpRequest = this.getRequest() ?: return
 
         // Pass GraphQL endpoint URL as 'server' parameter
@@ -223,6 +227,9 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     private fun sendRequestToVoyager() {
         Logger.debug("Send Request to GraphQL Voyager")
         val request = this.getRequest() ?: return
+
+        // Ensure ExternalToolsService is running
+        ExternalToolsService.startIfOff()
 
         val server = request.url()
         val serverEncoded = URLEncoder.encode(server, "UTF-8")
