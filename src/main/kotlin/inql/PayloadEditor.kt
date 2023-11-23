@@ -16,7 +16,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
 import inql.graphql.formatting.Formatter
 import inql.ui.SendFromInqlHandler
-import inql.utils.GraphQL.Companion.isGraphQLQuery
+import inql.utils.GraphQL.Companion.isGraphQLRequest
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
 import kotlinx.coroutines.runBlocking
@@ -149,7 +149,7 @@ class PayloadEditor private constructor(val inql: InQL, private val readOnly: Bo
     }
 
     override fun isEnabledFor(requestResponse: HttpRequestResponse): Boolean {
-        return isGraphQLQuery(requestResponse.request().bodyToString())
+        return isGraphQLRequest(requestResponse.request())
     }
 
     override fun caption(): String {

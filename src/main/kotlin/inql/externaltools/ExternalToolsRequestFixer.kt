@@ -4,11 +4,10 @@ import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.http.message.responses.HttpResponse
 import burp.api.montoya.proxy.http.*
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import inql.InQL
 import inql.Logger
 import inql.scanner.IntrospectionCache
+import inql.utils.GraphQL.Companion.getGraphQLQuery
 import inql.utils.get
 import inql.utils.withUpsertedHeader
 
@@ -19,40 +18,7 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
         const val INQL_HEADER = "Inql"
 
         private fun isIntrospectionRequest(request: InterceptedRequest): Boolean {
-            if (request.method() != "POST") {
-                return false
-            }
-
-            val contentType = request.headers().get("content-type")
-            if (contentType == null || (contentType != "application/json" && !contentType.startsWith("application/graphql"))) {
-                Logger.debug("Content type header is not suitable for GraphQL: $contentType")
-                return false
-            }
-
-            // The actual Content Type of the body (as detected by Burp) is JSON as well
-            val burpContentType = request.contentType().name
-            if (burpContentType != "JSON") {
-                Logger.debug("Content type of the body is not suitable for GraphQL: $burpContentType")
-                return false
-            }
-
-            // Body is a valid JSON
-            val json: JsonObject
-            try {
-                json = Gson().fromJson(request.bodyToString(), JsonObject::class.java)
-            } catch(e: Exception) {
-                Logger.debug("Body is not a valid JSON")
-                return false
-            }
-
-            // There is a "query" key
-            val query: String
-            try {
-                query = json.get("query").asString
-            } catch(e: Exception) {
-                Logger.debug("Query key not present in the body")
-                return false
-            }
+            val query = getGraphQLQuery(request) ?: return false
 
             // The value of "query" contains "__schema"
             // TODO: Replace this with proper parsing of the GraphQL request

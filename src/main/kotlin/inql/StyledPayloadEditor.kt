@@ -16,7 +16,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
 import inql.ui.GraphQLEditor
 import inql.ui.SendFromInqlHandler
-import inql.utils.GraphQL.Companion.isGraphQLQuery
+import inql.utils.GraphQL.Companion.isGraphQLRequest
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
 import java.awt.Component
@@ -155,7 +155,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, private val readOn
     }
 
     override fun isEnabledFor(requestResponse: HttpRequestResponse): Boolean {
-        return isGraphQLQuery(requestResponse.request().bodyToString())
+        return isGraphQLRequest(requestResponse.request())
     }
 
     override fun caption(): String {
