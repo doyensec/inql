@@ -74,15 +74,17 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
         when (val content = node.userObject) {
-            is String -> this.payloadView.load(content)
+            is String -> {
+                this.payloadView.load(content)
+                this.sendToHandler.setEnabled(false)
+            }
             is IGQLSchema.IGQLElement -> {
                 this.payloadView.load(content)
+                val requestGenerationSuccessful = this.generateRequestForSelectedNode(node)
+                this.sendToHandler.setEnabled(requestGenerationSuccessful)
             }
-
             else -> Logger.error("Unknown node type selected! ${content.javaClass.name}")
         }
-        val requestGenerationSuccessful = this.generateRequestForSelectedNode(node)
-        this.sendToHandler.setEnabled(requestGenerationSuccessful)
     }
 
     fun getCurrentRequest(): HttpRequest? {
@@ -93,6 +95,10 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         SendFromInqlHandler(view.scannerTab.inql, false) {
         override fun getRequest(): HttpRequest? {
             return view.getCurrentRequest()
+        }
+
+        override fun getText(): String {
+            return view.payloadView.getText()
         }
     }
 }

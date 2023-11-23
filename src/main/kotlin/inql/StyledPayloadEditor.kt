@@ -209,5 +209,9 @@ class StyledPayloadEditor private constructor(val inql: InQL, private val readOn
         override fun getRequest(): HttpRequest {
             return editor.getRequest()
         }
+
+        override fun getText(): String {
+            return editor.query
+        }
     }
 }

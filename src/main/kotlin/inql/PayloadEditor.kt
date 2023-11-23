@@ -203,5 +203,9 @@ class PayloadEditor private constructor(val inql: InQL, private val readOnly: Bo
         override fun getRequest(): HttpRequest {
             return editor.getRequest()
         }
+
+        override fun getText(): String {
+            return editor.query
+        }
     }
 }

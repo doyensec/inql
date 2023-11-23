@@ -34,8 +34,7 @@ open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (
     The actions have associated Keyboard Shortcuts so that standard Burp shortcuts can be used from InQL
 
     This class is also extended below from SendToInqlHandler which instead provides the Extension Context Menu "InQL >" for
-    Burp's standard context menu in other Burp tools (Scanner, Proxy, etc). This way the actions only have to be defined one time
-    and they will appear on both menus.
+    Burp's standard context menu in other Burp tools (Scanner, Proxy, etc).
  */
 abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boolean = false) : MouseAdapter() {
     private val popup = JPopupMenu()
@@ -71,6 +70,14 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     }
     protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager (GraphQL schema visualizer)", null) {
         this.sendRequestToVoyager()
+    }
+
+    protected val saveToFileAction = MenuAction("Save to file", null) {
+        val filechooser = JFileChooser()
+        if (filechooser.showSaveDialog(Burp.Montoya.userInterface().swingUtils().suiteFrame()) == JFileChooser.APPROVE_OPTION) {
+            val file = filechooser.selectedFile
+            file.writeText(this.getText())
+        }
     }
 
     // A list of optional actions to include based on config values:
@@ -113,6 +120,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendToAltairAction
     )
     abstract fun getRequest(): HttpRequest?
+    abstract fun getText(): String
     override fun mousePressed(e: MouseEvent) {
         if (e.button == MouseEvent.BUTTON3) {    // Right Click only
             this.setContextActions()
@@ -143,6 +151,8 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
                 this.popup.add(action)
             }
         }
+        this.popup.addSeparator()
+        this.popup.add(this.saveToFileAction)
     }
 
     // ===== Convenience methods for the actions
@@ -310,5 +320,9 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     override fun getRequest(): HttpRequest? {
         return this.request
+    }
+
+    override fun getText(): String {
+        return this.request.toString()
     }
 }

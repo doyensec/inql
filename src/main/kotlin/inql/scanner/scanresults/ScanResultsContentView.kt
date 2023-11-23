@@ -21,6 +21,8 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
 
     val rawEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
     val gqlEditor = GraphQLEditor(readOnly = true, isIntrospection = true)
+    var selectedCard: String = RAW_EDITOR_CARD
+        private set
 
     init {
         // Raw payload card
@@ -33,22 +35,35 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         gqlEditorCard.add(JScrollPane(gqlEditor), BorderLayout.CENTER)
         this.add(gqlEditorCard, GQL_EDITOR_CARD)
 
-        (this.layout as CardLayout).show(this, RAW_EDITOR_CARD)
+        this.show(RAW_EDITOR_CARD)
+    }
+
+    private fun show(card: String) {
+        this.selectedCard = card
+        (this.layout as CardLayout).show(this, card)
     }
 
     fun load(elem: IGQLSchema.IGQLElement) {
         this.gqlEditor.setQuery(elem.content())
-        (this.layout as CardLayout).show(this, GQL_EDITOR_CARD)
+        this.show(GQL_EDITOR_CARD)
     }
 
     fun load(elem: String) {
         this.rawEditor.contents = ByteArray.byteArray(elem)
-        (this.layout as CardLayout).show(this, RAW_EDITOR_CARD)
+        this.show(RAW_EDITOR_CARD)
     }
 
     fun load(elem: ByteArray) {
         this.rawEditor.contents = elem
-        (this.layout as CardLayout).show(this, RAW_EDITOR_CARD)
+        this.show(RAW_EDITOR_CARD)
+    }
+
+    fun getText(): String {
+        return when (selectedCard) {
+            RAW_EDITOR_CARD -> this.rawEditor.contents.toString()
+            GQL_EDITOR_CARD -> this.gqlEditor.getQuery()
+            else -> ""
+        }
     }
 
     fun setContextMenuHandler(handler: SendFromInqlHandler) {
