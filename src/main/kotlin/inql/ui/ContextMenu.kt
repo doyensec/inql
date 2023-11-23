@@ -105,6 +105,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     protected val sendFromInqlActions = mutableListOf<MenuAction>(
         sendToIntruderAction,
         sendToRepeaterAction,
+        sendToInqlAttackerAction,
         sendToInqlScannerAction,
         sendToGraphiqlAction,
         sendToPlaygroundAction,
