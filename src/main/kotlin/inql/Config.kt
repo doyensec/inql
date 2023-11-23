@@ -1,9 +1,6 @@
 package inql
 
 import burp.Burp
-import burp.api.montoya.core.BurpSuiteEdition
-import java.io.File
-import java.util.prefs.Preferences
 
 class Config private constructor() {
     companion object {
@@ -25,101 +22,11 @@ class Config private constructor() {
     private val globalStore = Burp.Montoya.persistence().preferences()
     private val projectStore = Burp.Montoya.persistence().extensionData()
 
-    private fun getInternalBrowserCommandMacOS(burpAppName: String): String? {
-        // The command to run is something like
-        //   open -a /Applications/Burp\ Suite\ Professional.app/Contents/Resources/app/burpbrowser/117.0.5938.62/Chromium.app https://google.com
-        // But we need to figure out exact version of bundled Chromium
-        val burpBrowserDir = "/Applications/${burpAppName}.app/Contents/Resources/app/burpbrowser"
-        // Identify the first directory that contains subdirectory "Chromium.app"
-        val chromiumDir = java.io.File(burpBrowserDir).listFiles()?.firstOrNull {
-            it.isDirectory && it.listFiles()?.any {
-                it.name == "Chromium.app"
-            } == true
-        }
-        if (chromiumDir != null) {
-            val chromiumVersion = chromiumDir.name
-            return "open -a \"${burpBrowserDir}/${chromiumVersion}/Chromium.app\" \"%s\""
-        }
-        return null
-    }
-
-    private fun getInternalBrowserCommandWindows(burpAppName: String): String? {
-        val userRegistryPath = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${burpAppName}"
-        val systemRegistryPath = "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${burpAppName}"
-
-        val userInstallLocation = Preferences.userRoot().get(userRegistryPath + "\\InstallLocation", null)
-        val systemInstallLocation = Preferences.systemRoot().get(systemRegistryPath + "\\InstallLocation", null)
-
-        val installLocation = userInstallLocation ?: systemInstallLocation
-
-        if (installLocation == null) {
-            Logger.error("Could not find Burp Suite install location in registry.")
-            return null
-        }
-
-        val burpBrowserDir = File(installLocation, "burpbrowser")
-
-        val chromeDir = burpBrowserDir.listFiles { file ->
-            file.isDirectory && File(file, "chrome.exe").exists()
-        }?.firstOrNull()
-
-        if (chromeDir == null) {
-            Logger.error("Could not find Chromium in Burp Suite install location.")
-            return null
-        }
-
-        // Check if we have a pre-wired browser profile (located in %APPDATA%\BurpSuite\pre-wired-browser)
-        val browserProfileDir = File(System.getenv("APPDATA"), "BurpSuite\\pre-wired-browser")
-
-        if (browserProfileDir.exists()) {
-            val chromePath = File(chromeDir, "chrome.exe").absolutePath
-            val userDataDir = browserProfileDir.absolutePath.replace("\\", "\\\\")
-
-            return "\"$chromePath\" --user-data-dir=\"$userDataDir\" \"%s\""
-        }
-
-        Logger.error("Could not find pre-wired browser profile in %APPDATA%\\BurpSuite\\pre-wired-browser.")
-        return null
-    }
-
-    fun getInternalBrowserCommand(): String? {
-        val os = System.getProperty("os.name").lowercase()
-        // if Burp.Montoya.burpSuite().version.edition() matches BurpSuiteEdition.PROFESSIONAL set to "Burp Suite Professional"
-        // and if BurpSuiteEdition.COMMUNITY_EDITION then to "Burp Suite Community Edition"
-        val edition = Burp.Montoya.burpSuite().version().edition()
-        val name = if (edition == BurpSuiteEdition.PROFESSIONAL) {
-            "Burp Suite Professional"
-        } else if (edition == BurpSuiteEdition.COMMUNITY_EDITION) {
-            "Burp Suite Community Edition"
-        } else {
-            Logger.error("Unknown Burp Suite edition: $edition")
-            return null
-        }
-
-        if (os.contains("mac")) {
-            return getInternalBrowserCommandMacOS(name)
-        } else if (os.contains("win")) {
-            return getInternalBrowserCommandWindows(name)
-        } else {
-            Logger.error("Unsupported OS: $os")
-            return null
-        }
-    }
-
-    private fun getDefaultBrowserCommand(): String {
-        val os = System.getProperty("os.name").lowercase()
-        return when {
-            os.contains("win") -> "start %s"
-            os.contains("mac") -> "open %s"
-            else -> "xdg-open %s"
-        }
-    }
-
     val defaults = mapOf<String, Any>(
         "codegen.depth" to 2,
         "codegen.pad" to 4,
-        "integrations.browser.internal" to if (getInternalBrowserCommand() != null) "embedded" else "external",
-        "integrations.browser.external" to getDefaultBrowserCommand(),
+        "integrations.browser.internal" to false,
+        "integrations.browser.external.command" to "",
         "integrations.graphiql" to true,
         "integrations.voyager" to true,
         "integrations.playground" to false,

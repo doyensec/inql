@@ -82,6 +82,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
         this.externalToolsInterceptor = ExternalToolsRequestFixer(this, this.embeddedServer.listeningPort)
         Burp.Montoya.proxy().registerRequestHandler(this.externalToolsInterceptor)
         Burp.Montoya.proxy().registerResponseHandler(this.externalToolsInterceptor)
+
     }
 
     fun unload() = runBlocking {

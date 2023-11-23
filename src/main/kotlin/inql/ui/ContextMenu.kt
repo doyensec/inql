@@ -1,26 +1,25 @@
 package inql.ui
 
+import burp.Browser
 import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.LongSerializationPolicy
+import com.google.gson.reflect.TypeToken
+import inql.Config
 import inql.InQL
+import inql.Logger
 import java.awt.Component
 import java.awt.Toolkit
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.*
 import java.net.URLEncoder
-import inql.Config
-import inql.Logger
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.LongSerializationPolicy
-import com.google.gson.reflect.TypeToken
-import java.lang.StringBuilder
-import java.util.StringTokenizer
+import javax.swing.*
 
 open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (ActionEvent) -> Unit) :
     AbstractAction(name) {
@@ -29,10 +28,19 @@ open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (
     }
 }
 
+/*
+    This class provides the Context Menu that is opened when the user Right-Clicks inside InQL (e.g. in the Scanner Tab Results
+    The actions have associated Keyboard Shortcuts so that standard Burp shortcuts can be used from InQL
+
+    This class is also extended below from SendToInqlHandler which instead provides the Extension Context Menu "InQL >" for
+    Burp's standard context menu in other Burp tools (Scanner, Proxy, etc). This way the actions only have to be defined one time
+    and they will appear on both menus.
+ */
 abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boolean = false) : MouseAdapter() {
     private val popup = JPopupMenu()
 
-    // Actions
+    // ===== Actions associated with Menu Items
+
     protected val sendToIntruderAction = MenuAction(
         "Send to Intruder",
         KeyStroke.getKeyStroke(KeyEvent.VK_I, Toolkit.getDefaultToolkit().menuShortcutKeyMaskEx),
@@ -63,6 +71,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager (GraphQL schema visualizer)", null) {
         this.sendRequestToVoyager()
     }
+
     // A list of optional actions to include based on config values:
     //         "integrations.graphiql" to true,
     //         "integrations.voyager" to true,
@@ -86,11 +95,20 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
         actions
     }
-    // FIXME: Where exactly is this used? Commenting out does not seem to impact any functionality.
+
+    /* The following list is currently used for:
+     - Enable/Disable (grey-out) context menu items when the user
+        right-clicks something that is not actually a GraphQL item, e.g. a point of interest in the scanner results.
+     - Provide Keyboard Shortcuts (CTRL+R, CTRL+I, etc)
+     */
     protected val sendFromInqlActions = mutableListOf<MenuAction>(
-        //sendToIntruderAction,
-        //sendToRepeaterAction,
-        //*sendToEmbeddedToolActions().toTypedArray(),
+        sendToIntruderAction,
+        sendToRepeaterAction,
+        sendToInqlScannerAction,
+        sendToGraphiqlAction,
+        sendToPlaygroundAction,
+        sendToVoyagerAction,
+        sendToAltairAction
     )
     abstract fun getRequest(): HttpRequest?
     override fun mousePressed(e: MouseEvent) {
@@ -100,8 +118,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
     }
 
-
-    // Create right menu handlers in InQL views (InQL Scanner, GraphQL editor view)
+    // Populate the right click menu in InQL views (InQL Scanner, GraphQL editor view)
     // The context menus added by Burp itself **are not handled here** (e.g. Repeater - Raw editor - right click)
     // In order to add elements to Burp's menu (Extensions - InQL - ...), modify sendToInqlComponents in SendToInqlHandler class
     private fun setContextActions() {
@@ -126,6 +143,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
     }
 
+    // ===== Convenience methods for the actions
     private fun sendRequestToIntruder() {
         Burp.Montoya.intruder().sendToIntruder(this.getRequest() ?: return)
     }
@@ -143,78 +161,16 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     }
 
     private fun openURL(url: String) {
-        Logger.info("Open URL: $url")
+        Logger.info("Opening URL: $url")
 
         val config = Config.getInstance()
-        val useInternalBrowser = config.getString("integrations.browser.internal")?.equals("embedded") ?: false
+        val useInternalBrowser = config.getBoolean("integrations.browser.internal")?: true
         Logger.info("Should use internal browser: $useInternalBrowser")
 
-        val browserCommandTemplate: String?
         if (useInternalBrowser) {
-            browserCommandTemplate = config.getInternalBrowserCommand()
-            if (browserCommandTemplate == null) {
-                Logger.debug("Could not find internal browser command")
-                return
-            }
+            Browser.launchEmbedded(url)
         } else {
-            browserCommandTemplate = config.getString("integrations.browser.external")
-            if (browserCommandTemplate == null) {
-                Logger.debug("Could not find external browser command")
-                return
-            }
-        }
-
-        val browserCommand = browserCommandTemplate.format(url)
-        Logger.debug("Browser command: $browserCommand")
-
-        // Java deprecated passing string to Runtime.getRuntime().exec() and requires an array of strings
-        // but we want to support passing arguments with spaces in them, so we need to parse the command
-        // using StringTokenizer and then convert it to an array of strings.
-        val tokenizer = StringTokenizer(browserCommand)
-        val commandArgs = mutableListOf<String>()
-
-        while (tokenizer.hasMoreTokens()) {
-            val token = tokenizer.nextToken()
-
-            // If the next word starts with a quote, we should concatenate upcoming words until the next quote
-            if (token.startsWith("\"")) {
-                // But what if it's just a single quoted word, without whitespace?
-                if (token.endsWith("\"")) {
-                    val length = token.length - 1
-                    commandArgs.add(token.substring(1, length))
-                    continue
-                }
-
-                // Otherwise, we have found the first word of a long argument that contains whitespace.
-                // Init the string builder with the first word (sans opening quote)
-                val builder = StringBuilder(token.substring(1))
-
-                // Keep appending words until we find a word ending with quote (or run out of words)
-                while (tokenizer.hasMoreTokens()) {
-                    val nextToken = tokenizer.nextToken()
-
-                    if (nextToken.endsWith("\"")) {
-                        val length = nextToken.length
-                        builder.append(" ").append(nextToken.substring(0, length-1))
-                        break
-                    } else {
-                        builder.append(" ").append(nextToken)
-                    }
-                }
-                commandArgs.add(builder.toString())
-            } else {
-                commandArgs.add(token)
-            }
-        }
-
-        Logger.debug("About to execute command: $commandArgs")
-        val commandArray = commandArgs.toTypedArray()
-        Logger.debug("Executed command: $commandArray")
-
-        try {
-            Runtime.getRuntime().exec(commandArray)
-        } catch (e: Exception) {
-            Logger.error("Error executing command: $browserCommand")
+            Browser.launchExternal(url)
         }
     }
 
