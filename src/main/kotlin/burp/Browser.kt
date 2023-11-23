@@ -1,5 +1,7 @@
 package burp
 
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import inql.Config
 import inql.Logger
 import java.awt.Desktop
@@ -10,15 +12,18 @@ import java.util.*
 class Browser {
 
     companion object {
-        public fun getInternalBrowserPath(): String? {
+        private fun getChromiumExecutableNameForOS(): String {
             val os = System.getProperty("os.name").lowercase()
-            val executableName: String = if (os.contains("win")) {
+            return  if (os.contains("win")) {
                 "chrome.exe"
             } else if (os.contains("mac")) {
                 "Chromium.app/Contents/MacOS/Chromium"
             } else {
                 "chrome"
             }
+        }
+        public fun getInternalBrowserPath(): String? {
+            val executableName: String = getChromiumExecutableNameForOS()
 
             // Check in Burp jar's folder
             val burpPath = Burp.findBurpJarPath()?.let { File(it) } ?: return null
@@ -44,7 +49,37 @@ class Browser {
             return File(versions.first(), executableName).absolutePath
         }
 
-        public fun getChromiumArgs(): List<String> {
+        private fun getChromiumVersionFromPath(path: String): String? {
+            val executableName: String = getChromiumExecutableNameForOS()
+            val directory = File(path.removeSuffix(executableName))
+            // Expected string like 119.0.6045.159
+            if (directory.isDirectory && directory.name.matches(Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+\$"))) {
+                return directory.name
+            }
+            return null
+        }
+
+        private fun getBurpProxyPort(): Int {
+            try {
+                val json = Burp.Montoya.burpSuite().exportProjectOptionsAsJson("proxy.request_listeners")
+                val settings = Gson().fromJson(json, JsonObject::class.java)
+                val listeners = settings.get("proxy").asJsonObject.get("request_listeners").asJsonArray
+                for (listener in listeners.map { it.asJsonObject }) {
+                    if (listener.get("running").asBoolean && !listener.has("redirect_to_host")) { // Get non-redirecting proxy ports only
+                        val port = listener.get("listener_port").asInt
+                        Logger.debug("Found Burp Proxy port: $port")
+                        return port
+                    }
+                }
+                Logger.warning("Cannot find a valid proxy port, defaulting to 8080")
+                return 8080
+            } catch (e: Exception) {
+                Logger.warning("Failed to determine Burp's proxy port, defaulting to 8080")
+                return 8080
+            }
+        }
+
+        public fun getChromiumArgs(path: String): List<String> {
             val dataDir = Burp.getBurpDataDir()
             return mutableListOf(
                 "--disable-ipc-flooding-protection",
@@ -77,9 +112,9 @@ class Browser {
                 "--dbus-stub",
                 "--disable-background-networking",
                 "--disable-features=ChromeWhatsNewUI,HttpsUpgrades",
-                "--proxy-server=localhost:8080", // TODO: get actual proxy port
+                "--proxy-server=localhost:${getBurpProxyPort()}",
                 "--proxy-bypass-list=<-loopback>",
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.159 Safari/537.36", // TODO: Get real Chrome version
+                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${getChromiumVersionFromPath(path)} Safari/537.36",
                 "--user-data-dir=${dataDir}/pre-wired-browser",
                 "--ignore-certificate-errors",
                 "--load-extension=${dataDir}/burp-chromium-extension",
@@ -90,8 +125,8 @@ class Browser {
             val uri = if (_uri.startsWith("http")) _uri else "https://${_uri}"
             val pb = ProcessBuilder()
 
-            val executable = this.getInternalBrowserPath()
-            val args = this.getChromiumArgs()
+            val executable = this.getInternalBrowserPath() ?: return false
+            val args = this.getChromiumArgs(executable)
             pb.command(
                 executable,
                 *args.toTypedArray(),
