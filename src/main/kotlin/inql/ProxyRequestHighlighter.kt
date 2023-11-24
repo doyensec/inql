@@ -60,7 +60,7 @@ class ProxyRequestHighlighter private constructor(){
             if (newIdx == this.oldIdx) continue
 
             // Else, spawn a coroutine for each new requests
-            Logger.debug("Spawning coroutines for requests ${this.oldIdx+1}-$newIdx")
+            // Logger.debug("Spawning coroutines for requests ${this.oldIdx+1}-$newIdx")
             for (idx in this.oldIdx+1..newIdx) {
                 this.coroutineScope.launch { this@ProxyRequestHighlighter.handleRequest(Burp.Montoya.proxy().history()[idx]) }
             }

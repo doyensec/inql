@@ -33,6 +33,7 @@ class Config private constructor() {
         "integrations.playground" to false,
         "integrations.altair" to false,
         "report.introspection" to true,
+        "integrations.webserver.lazy" to true,
         "report.sdl" to false,
         "report.cycles" to false,
         "report.poi" to true,

@@ -36,6 +36,10 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             "content-type",
             "content-length",
             "content-encoding",
+            "accept",
+            "accept-language",
+            "accept-encoding",
+            "cache-control"
         )
     }
 
@@ -136,7 +140,9 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             .associate { header -> header.name().lowercase() to header.value() }
         // Keep the header from the request if it's not a default one OR the value is different from the default
         val custom =
-            reqHeaders.filter { (!defaultHeaders.containsKey(it.key.lowercase())) || (defaultHeaders.containsKey(it.key.lowercase()) && defaultHeaders[it.key] != it.value) }
+            reqHeaders
+                .filter { (!defaultHeaders.containsKey(it.key.lowercase())) || (defaultHeaders.containsKey(it.key.lowercase()) && defaultHeaders[it.key] != it.value) }
+                .filter { !EXCLUDED_HEADERS.contains(it.key.lowercase())  }
         p.overwrite(custom)
     }
 
