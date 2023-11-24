@@ -86,22 +86,20 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     //         "integrations.playground" to false,
     //         "integrations.altair" to false,
     // Check those with: Config.getInstance().getBoolean("integrations.graphiql")
-    protected val sendToEmbeddedToolActions = {
+    protected val sendToEmbeddedToolActions = mutableListOf<MenuAction>().apply {
         val config = Config.getInstance()
-        val actions = mutableListOf<MenuAction>()
         if (config.getBoolean("integrations.graphiql") == true) {
-            actions.add(sendToGraphiqlAction)
+            this.add(sendToGraphiqlAction)
         }
         if (config.getBoolean("integrations.playground") == true) {
-            actions.add(sendToPlaygroundAction)
+            this.add(sendToPlaygroundAction)
         }
         if (config.getBoolean("integrations.voyager") == true) {
-            actions.add(sendToVoyagerAction)
+            this.add(sendToVoyagerAction)
         }
         if (config.getBoolean("integrations.altair") == true) {
-            actions.add(sendToAltairAction)
+            this.add(sendToAltairAction)
         }
-        actions
     }
 
     /* The following list is currently used for:
@@ -143,7 +141,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
         this.popup.add(this.sendToInqlAttackerAction)
 
-        val embeddedActions = this.sendToEmbeddedToolActions()
+        val embeddedActions = this.sendToEmbeddedToolActions
         if (embeddedActions.isNotEmpty()) {
             this.popup.addSeparator()
 
@@ -288,7 +286,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
             BurpMenuItem(super.sendToInqlScannerAction),
             BurpMenuItem(super.sendToInqlAttackerAction)
         ).apply {
-            for (action in super.sendToEmbeddedToolActions()) {
+            for (action in super.sendToEmbeddedToolActions) {
                 this.add(BurpMenuItem(action))
             }
         }
