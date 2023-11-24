@@ -1,6 +1,7 @@
 package inql
 
 import burp.Burp
+import burp.api.montoya.core.HighlightColor
 
 class Config private constructor() {
     companion object {
@@ -48,6 +49,8 @@ class Config private constructor() {
         "report.poi.custom_scalars" to true,
         "report.poi.custom_keywords" to "",
         "logging.level" to "WARN",
+        "proxy.highlight_enabled" to true,
+        "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
     )
 
     private val hooks = hashMapOf<String, (Any) -> Unit>(
