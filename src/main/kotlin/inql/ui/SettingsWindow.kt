@@ -1,14 +1,14 @@
-package inql
+package inql.ui
 
-import inql.ui.*
+import inql.Config
 import javax.swing.*
 
 class SettingsWindow private constructor() : Window("InQL Settings") {
     companion object {
         private lateinit var instance: SettingsWindow
         fun getInstance(): SettingsWindow {
-            if (!this::instance.isInitialized) this.instance = SettingsWindow()
-            return this.instance
+            if (!this::instance.isInitialized) instance = SettingsWindow()
+            return instance
         }
     }
 

@@ -12,9 +12,7 @@ import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.scanner.Scanner
-import inql.ui.ImgButton
-import inql.ui.SendToInqlHandler
-import inql.ui.TabbedPane
+import inql.ui.*
 import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JPanel

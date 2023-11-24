@@ -6,8 +6,8 @@ import burp.api.montoya.http.message.responses.HttpResponse
 import burp.api.montoya.proxy.http.*
 import inql.InQL
 import inql.Logger
+import inql.graphql.Utils.Companion.getGraphQLQuery
 import inql.scanner.IntrospectionCache
-import inql.utils.GraphQL.Companion.getGraphQLQuery
 import inql.utils.get
 import inql.utils.withUpsertedHeader
 
@@ -23,7 +23,6 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
             // The value of "query" contains "__schema"
             // TODO: Replace this with proper parsing of the GraphQL request
             if (!query.contains("__schema")) {
-                Logger.debug("Query does not contain '__schema'")
                 return false
             }
 

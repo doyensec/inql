@@ -1,4 +1,4 @@
-package inql
+package inql.ui
 
 import burp.Burp
 import burp.api.montoya.core.ByteArray
@@ -14,9 +14,9 @@ import burp.api.montoya.ui.editor.extension.HttpRequestEditorProvider
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
-import inql.ui.GraphQLEditor
-import inql.ui.SendFromInqlHandler
-import inql.utils.GraphQL.Companion.isGraphQLRequest
+import inql.InQL
+import inql.Logger
+import inql.graphql.Utils.Companion.isGraphQLRequest
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
 import java.awt.Component
@@ -38,8 +38,8 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
 
         private var provider: Provider? = null
         fun getProvider(inql: InQL): Provider {
-            if (this.provider == null) this.provider = Provider(inql)
-            return this.provider as Provider
+            if (provider == null) provider = Provider(inql)
+            return provider as Provider
         }
     }
 
