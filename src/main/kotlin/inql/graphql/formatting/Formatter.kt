@@ -66,11 +66,7 @@ class Formatter(
                         // fragment A on B { ... }
                         if (index + 3 < tokens.size && tokens[index + 2].text == "on") {
                             result.append(
-                                "${token.print(this.asHTML)} ${tokens[index + 1].print(this.asHTML)} ${
-                                    tokens[index + 2].print(
-                                        this.asHTML,
-                                    )
-                                } ${tokens[index + 3].print(this.asHTML)}",
+                                "${token.print(this.asHTML)} ${tokens[index + 1].print(this.asHTML)} ${tokens[index + 2].print(this.asHTML)} ${tokens[index + 3].print(this.asHTML)}",
                             )
                             index += 3
                             newline = false

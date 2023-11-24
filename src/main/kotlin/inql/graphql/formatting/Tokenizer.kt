@@ -2,8 +2,7 @@ package inql.graphql.formatting
 
 class Tokenizer(val query: String) {
     private var index = 0
-    private val length
-        get() = this.query.length
+    private val length = query.length
 
     fun tokenize(): List<Token> {
         /* Tokenize the GraphQL request."""
@@ -33,17 +32,12 @@ class Tokenizer(val query: String) {
                 '"' -> readString()
                 '#' -> readComment()
                 '!', '$', '(', ')', '.', ',', ':', '=', '@', '[', ']', '{', '|', '}' -> readPunctuator()
-                '-', '+' -> readNumber()
-                '_' -> readName()
-                else -> {
-                    if (chr.isDigit()) {
-                        readNumber()
-                    } else if (chr.isLetter()) {
-                        readName()
-                    } else {
-                        throw Exception("Unexpected character $chr at position ${this.index}")
-                    }
-                }
+                '-', '+', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> readNumber()
+                '_', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' -> readName()
+                else -> throw Exception("Unexpected character $chr at position ${this.index}")
             }
             tokens.add(token)
         }
@@ -64,7 +58,7 @@ class Tokenizer(val query: String) {
         var blockString = false
 
         // check for block strings - start with """ and may contain newlines
-        if (this.length >= index + 3 && this.query.substring(index, index + 3) == "\"\"\"") {
+        if (this.length >= index + 3 && this.query.regionMatches(index, "\"\"\"", 0, "\"\"\"".length)) {
             blockString = true
             index += 3
         } else {
@@ -76,30 +70,35 @@ class Tokenizer(val query: String) {
             val chr = this.query[index]
 
             // check for escaped characters
-            if (chr == '\\') {
-                // check for escaped unicode (\u + 4 hex digits)
-                if (index + 5 < this.length && this.query[index + 1] == 'u') {
-                    index += 6
-                } else {
-                    // otherwise it's a regular escaped character
-                    // according to spec, only "\/bfnrt are allowed, but this could vary by implementation
-                    index += 2
+            when (chr) {
+                '\\' -> {
+                    // check for escaped unicode (\u + 4 hex digits)
+                    if (index + 5 < this.length && this.query[index + 1] == 'u') {
+                        index += 6
+                    } else {
+                        // otherwise it's a regular escaped character
+                        // according to spec, only "\/bfnrt are allowed, but this could vary by implementation
+                        index += 2
+                    }
                 }
-                continue
-            }
-
-            if (chr == '"') {
-                if (blockString) {
-                    if (this.length >= index + 3 && this.query.substring(index, index + 3) == "\"\"\"") {
+                '"' -> {
+                    if (!blockString) {
+                        // End of normal string
+                        index++
+                        break
+                    } else if (this.length >= index + 3 && this.query.regionMatches(index, "\"\"\"", 0, "\"\"\"".length)) {
+                        // End of blockstring
                         index += 3
                         break
+                    } else {
+                        // Quote char inside a blockstring, do nothing
                     }
-                } else {
+                }
+                else -> {
+                    // Normal character
                     index++
-                    break
                 }
             }
-            index++
         }
 
         if (index >= this.length) {
@@ -107,6 +106,18 @@ class Tokenizer(val query: String) {
         }
         this.index = index
         return Token(Token.Type.STRING, this.query.substring(start, index))
+    }
+
+    /*
+    This method finds all whitespace characters from start of string to "end"
+    and returns true if the whitespace sequence contains a newline
+     */
+    private fun lookbehindNewline(s: String, end: Int): Boolean {
+        for (i in end-1 downTo 0) {
+            if (!s[i].isWhitespace()) return false
+            if (s[i] == '\n') return true
+        }
+        return false
     }
 
     private fun readComment(): Token {
@@ -120,9 +131,7 @@ class Tokenizer(val query: String) {
          In order to separate these two styles of comments, we'll store newline (if present) at the end of the token - hack!
          */
 
-        val startOfPreviousWhitespace = this.query.substring(0, start).trimEnd().length
-        val whitespace = this.query.substring(startOfPreviousWhitespace, start)
-        val containsNewline = whitespace.contains('\n')
+        val onItsOwnLine = lookbehindNewline(this.query, this.index)
 
         // Comment ends at the end of the line (don't include the newline in the token)
         var newlineIdx = this.query.indexOf('\n', this.index)
@@ -133,7 +142,7 @@ class Tokenizer(val query: String) {
         var token = this.query.substring(start, newlineIdx)
 
         this.index = newlineIdx + 1
-        if (containsNewline) token += '\n'
+        if (onItsOwnLine) token += '\n'
 
         return Token(Token.Type.COMMENT, token)
     }
@@ -141,7 +150,7 @@ class Tokenizer(val query: String) {
     private fun readPunctuator(): Token {
         /* Consume a punctuator token */
         val token: String
-        if (this.length >= this.index + 3 && this.query.substring(this.index, this.index + 3) == "...") {
+        if (this.length >= this.index + 3 && this.query.regionMatches(this.index, "...", 0, "...".length)) {
             token = "..."
             this.index += 3
         } else {
