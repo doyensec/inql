@@ -12,7 +12,7 @@ import kotlinx.coroutines.*
 class ProxyRequestHighlighter private constructor(){
     companion object {
         private lateinit var instance: ProxyRequestHighlighter
-        public fun start() {
+        fun start() {
             if (!this::instance.isInitialized) {
                 this.instance = ProxyRequestHighlighter()
             } else {
@@ -21,7 +21,7 @@ class ProxyRequestHighlighter private constructor(){
             }
         }
 
-        public fun stop() {
+        fun stop() {
             if (this::instance.isInitialized) this.instance.stop()
         }
     }

@@ -92,7 +92,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
             .replace(Regex("[^A-Za-z0-9-]+"), "_")
             .lowercase()
         var id = sanitizedName
-        var i: UInt = 0u
+        var i = 0u
         while (this.profiles.containsKey(id)) {
             i++
             id = "$sanitizedName-$i"
