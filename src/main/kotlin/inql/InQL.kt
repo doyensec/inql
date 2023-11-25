@@ -74,6 +74,9 @@ class InQL : TabbedPane(), SavesAndLoadData {
 
         // Initialize ExternalToolsService to make it ready to spawn the webserver and register the interceptor when they are needed
         ExternalToolsService.init(this)
+        if (this.config.getBoolean("integrations.webserver.lazy") == false) {
+            ExternalToolsService.startIfOff()
+        }
 
         // If enabled, start request highlighter
         if (this.config.getBoolean("proxy.highlight_enabled") == true) {

@@ -1,5 +1,6 @@
 package inql.ui
 
+import burp.api.montoya.core.HighlightColor
 import inql.Config
 import javax.swing.*
 
@@ -112,6 +113,23 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             ),
         )
 
+        val featuresSection = SettingsSection(
+            "InQL Features",
+            "Select which features to enable. Reloading the extension or restarting Burp may be required to apply the changes.",
+            SettingsElement(
+                "proxy.highlight_enabled",
+                CheckBox("Enable request highlighting in Proxy")
+            ),
+            SettingsElement(
+                "proxy.highlight_color",
+                ComboBox("Request highlighting color", *HighlightColor.entries.map { it.displayName() }.toTypedArray())
+            ),
+            SettingsElement(
+                "editor.syntax_highlighting.enabled",
+                CheckBox("Enable Syntax Highlighting in the GraphQL editor")
+            )
+        )
+
         val integrationsSection = SettingsSection(
             "InQL Integrations",
             "Configure integrations with embedded tools.",
@@ -133,12 +151,16 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             ),
             SettingsElement(
                 "integrations.browser.internal",
-                ComboBox("Use embedded Chromium or an external browser", "embedded", "external")
+                CheckBox("Use embedded Chromium when launching IDEs")
             ),
             SettingsElement(
-                "integrations.browser.external",
-                TextField("Command to launch external browser (if enabled above)"),
-            )
+                "integrations.browser.external.command",
+                TextField("Command to launch external browser (when not using embedded)"),
+            ),
+            SettingsElement(
+                    "integrations.webserver.lazy",
+            CheckBox("Start internal webserver lazily (when a request is sent to IDE from context menu)")
+        ),
         )
 
         val poiSection = SettingsSection(
@@ -188,6 +210,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             BoxLayout.Y_AXIS,
             gap = 0,
             codeGenerationSection,
+            JSeparator(JSeparator.HORIZONTAL),
+            featuresSection,
             JSeparator(JSeparator.HORIZONTAL),
             integrationsSection,
             JSeparator(JSeparator.HORIZONTAL),
