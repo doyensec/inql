@@ -1,5 +1,10 @@
 package inql.graphql.formatting
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.apache.commons.codec.digest.MurmurHash3
+
 class Formatter(
     val minimized: Boolean = false,
     val spaces: Short = 4,
@@ -8,6 +13,14 @@ class Formatter(
     val isIntrospection: Boolean = false,
 ) {
     companion object {
+        private val globalCache = HashMap<String, HashMap<Long, String>>()
+
+        private fun getQueryHash(query: String): Long {
+            /*
+            For now we don't handle collisions, this should be unique enough for this use case
+             */
+            return MurmurHash3.hash128(query.toByteArray())[0]
+        }
         fun format(query: String, minimized: Boolean = false, spaces: Short = 4, asHTML: Boolean = false): String {
             return Formatter(minimized, spaces, asHTML).format(query)
         }
@@ -17,20 +30,45 @@ class Formatter(
         }
     }
 
+    private val cacheKey = "$minimized$spaces$stripComments$asHTML$isIntrospection"
+
+    init {
+        if (!globalCache.containsKey(this.cacheKey)) {
+            globalCache[this.cacheKey] = HashMap()
+        }
+    }
+
+    private fun getCache(query: String): String? {
+        val hash = getQueryHash(query)
+        return globalCache[this.cacheKey]!![hash]
+    }
+
+    private fun setCache(query: String, formatted: String) {
+        val hash = getQueryHash(query)
+        globalCache[this.cacheKey]!![hash] = formatted
+    }
+
     private fun makeIndent(level: Int): String {
         return " ".repeat(level * this.spaces)
     }
 
     fun format(query: String): String {
+        val cached = this.getCache(query)
+        if (cached != null) {
+            return cached
+        }
+
         var tokens = Tokenizer(query).tokenize()
         tokens = SyntaxParser.parse(tokens, isIntrospection)
         if (stripComments) {
             tokens = tokens.filter { it.type != Token.Type.COMMENT }
         }
-        return this.format(tokens)
+        val formatted = this.format(tokens)
+        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, formatted) } // We don't need to wait for this
+        return formatted
     }
 
-    fun format(tokens: List<Token>): String {
+    private fun format(tokens: List<Token>): String {
         val result = StringBuilder()
         var indentLevel = 0
         var firstTopLevelToken: Token? = null

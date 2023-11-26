@@ -21,6 +21,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
     implementation 'org.apache.commons:commons-text:1.10.0'
+    implementation 'commons-codec:commons-codec:1.16.0'
     implementation 'org.python:jython-standalone:2.7.3'
     implementation 'io.ktor:ktor-server-core:2.3.4'
     implementation 'io.ktor:ktor-server-netty:2.3.4'

@@ -52,8 +52,8 @@ class Config private constructor() {
         "logging.level" to "WARN",
         "proxy.highlight_enabled" to true,
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
-        "editor.syntax_highlighting.enabled" to true,
-        "editor.syntax_highlighting.timeout" to 1000, // Cutoff in milliseconds
+        "editor.formatting.enabled" to true,
+        "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
     )
 
     private val hooks = hashMapOf<String, (Any) -> Unit>(

@@ -125,8 +125,12 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 ComboBox("Request highlighting color", *HighlightColor.entries.map { it.displayName() }.toTypedArray())
             ),
             SettingsElement(
-                "editor.syntax_highlighting.enabled",
-                CheckBox("Enable Syntax Highlighting in the GraphQL editor")
+                "editor.formatting.enabled",
+                CheckBox("Enable Formatting in the GraphQL editor")
+            ),
+            SettingsElement(
+                "editor.formatting.timeout",
+                Spinner("Formatting timeout (ms)", 0, 10000)
             )
         )
 
