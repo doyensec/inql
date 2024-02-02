@@ -21,7 +21,7 @@ tasks:
     prefix: "deps-{{.APP}}"
     dir: lib/{{.APP}}
     cmds:
-      - yarn --no-progress --non-interactive --silent install
+      - yarn --no-progress --non-interactive --silent install --mutex file:../../yarn.mutex
     sources:
       - package.json
     generates:
