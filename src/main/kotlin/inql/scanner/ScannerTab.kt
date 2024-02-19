@@ -39,7 +39,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             "accept",
             "accept-language",
             "accept-encoding",
-            "cache-control"
+            "cache-control",
+            "origin"
         )
     }
 
