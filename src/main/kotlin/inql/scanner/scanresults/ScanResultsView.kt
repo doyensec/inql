@@ -4,8 +4,10 @@ import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import inql.Config
 import inql.Logger
 import inql.graphql.IGQLSchema
+import inql.graphql.formatting.Formatter
 import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
@@ -16,7 +18,7 @@ import javax.swing.tree.DefaultMutableTreeNode
 class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     private val treeView = ScanResultsTreeView(this)
     private val payloadView = ScanResultsContentView(this)
-    private var httpRequest: HttpRequest? = null
+    private var currentNode: DefaultMutableTreeNode? = null
     private val sendToHandler = ScannerResultSendFromInqlHandler(this).also { it.setEnabled(false) }
 
     init {
@@ -52,24 +54,13 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         return n.userObject as ScanResult
     }
 
-    private fun generateRequestForSelectedNode(node: DefaultMutableTreeNode): Boolean {
-        val gqlElement = node.userObject
-        if (gqlElement !is IGQLSchema.IGQLElement ||
-            (gqlElement.type() != IGQLSchema.GQLElementType.MUTATION && gqlElement.type() != IGQLSchema.GQLElementType.QUERY)
-        ) {
-            this.httpRequest = null
-            return false
-        }
-
+    private fun generateRequest(requestTemplate: HttpRequest, query: String): HttpRequest? {
         // Find corresponding scanResult
-        val scanResult = this.getNodeScanResult(node) ?: return false
-        val requestTemplate = scanResult.requestTemplate
         val reqData = JsonObject()
-        reqData.addProperty("query", gqlElement.content())
-        this.httpRequest = requestTemplate
-            .withService(HttpService.httpService(scanResult.requestTemplate.url()))
+        reqData.addProperty("query", query)
+        return requestTemplate
+            .withService(HttpService.httpService(requestTemplate.url()))
             .withBody(Gson().toJson(reqData))
-        return true
     }
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
@@ -80,21 +71,41 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
             }
             is IGQLSchema.IGQLElement -> {
                 this.payloadView.load(content)
-                val requestGenerationSuccessful = this.generateRequestForSelectedNode(node)
-                this.sendToHandler.setEnabled(requestGenerationSuccessful)
+
+                if (content.type() != IGQLSchema.GQLElementType.MUTATION && content.type() != IGQLSchema.GQLElementType.QUERY) {
+                    this.currentNode = null
+                    this.sendToHandler.setEnabled(false)
+                } else {
+                    this.sendToHandler.setEnabled(true)
+                    this.currentNode = node
+                }
             }
             else -> Logger.error("Unknown node type selected! ${content.javaClass.name}")
         }
     }
 
-    fun getCurrentRequest(): HttpRequest? {
-        return this.httpRequest
-    }
-
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
+        private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
+        private val stripCommentsFormatter = Formatter(minimized = false, spaces = 4, stripComments = true, asHTML = false, isIntrospection = true)
+
+        private fun stripComments(query: String): String {
+            Logger.warning("STRIPPING COMMENTS")
+            return this.stripCommentsFormatter.format(query);
+        }
         override fun getRequest(): HttpRequest? {
-            return view.getCurrentRequest()
+            Logger.warning("VALUE: $shouldStripComments")
+
+            val node = view.currentNode ?: return null
+            val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
+            val nodeContent = node.userObject as IGQLSchema.IGQLElement
+            var query = nodeContent.content()
+
+            if (shouldStripComments == true) {
+                query = stripComments(query)
+            }
+
+            return view.generateRequest(requestTemplate, query)
         }
 
         override fun getText(): String {

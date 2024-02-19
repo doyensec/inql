@@ -54,6 +54,7 @@ class Config private constructor() {
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
         "editor.formatting.enabled" to true,
         "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
+        "editor.send_to.strip_comments" to true,
     )
 
     private val hooks = hashMapOf<String, (Any) -> Unit>(

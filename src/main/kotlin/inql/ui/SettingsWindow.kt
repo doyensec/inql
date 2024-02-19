@@ -131,7 +131,11 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement(
                 "editor.formatting.timeout",
                 Spinner("Formatting timeout (ms)", 0, 10000)
-            )
+            ),
+            SettingsElement(
+                "editor.send_to.strip_comments",
+                CheckBox("Strip GraphQL comments from the Scanner result tab when sending a request to another tool")
+            ),
         )
 
         val integrationsSection = SettingsSection(
