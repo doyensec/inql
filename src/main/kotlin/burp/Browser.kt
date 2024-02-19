@@ -81,7 +81,7 @@ class Browser {
 
         public fun getChromiumArgs(path: String): List<String> {
             val dataDir = Burp.getBurpDataDir()
-            return mutableListOf(
+            val args = mutableListOf(
                 "--disable-ipc-flooding-protection",
                 "--disable-xss-auditor",
                 "--disable-bundled-ppapi-flash",
@@ -115,10 +115,20 @@ class Browser {
                 "--proxy-server=localhost:${getBurpProxyPort()}",
                 "--proxy-bypass-list=<-loopback>",
                 "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${getChromiumVersionFromPath(path)} Safari/537.36",
-                "--user-data-dir=${dataDir}/pre-wired-browser",
                 "--ignore-certificate-errors",
-                "--load-extension=${dataDir}/burp-chromium-extension",
             )
+
+            val userDataDir = "${dataDir}/pre-wired-browser"
+            val extDir = "${dataDir}/burp-chromium-extension"
+
+            if (File(userDataDir).isDirectory) {
+                args.add("--user-data-dir=$userDataDir")
+            }
+            if (File(extDir).isDirectory) {
+                args.add("--load-extension=$extDir")
+            }
+
+            return args
         }
 
         public fun launchEmbedded(_uri: String): Boolean {
