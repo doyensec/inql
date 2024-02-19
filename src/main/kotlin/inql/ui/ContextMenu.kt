@@ -1,25 +1,20 @@
 package inql.ui
 
-import burp.Browser
 import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.LongSerializationPolicy
-import com.google.gson.reflect.TypeToken
 import inql.Config
 import inql.InQL
 import inql.Logger
 import inql.externaltools.ExternalToolsService
+import inql.externaltools.ExternalToolsService.Companion.sendRequestToEmbeddedTool
 import java.awt.Component
 import java.awt.Toolkit
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import java.net.URLEncoder
 import javax.swing.*
 
 open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (ActionEvent) -> Unit) :
@@ -170,83 +165,24 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         inql.attacker.loadFromRequest(this.getRequest() ?: return)
     }
 
-    private fun openURL(url: String) {
-        Logger.info("Opening URL: $url")
-
-        val config = Config.getInstance()
-        val useInternalBrowser = config.getBoolean("integrations.browser.internal")?: true
-        Logger.info("Should use internal browser? $useInternalBrowser")
-
-        if (useInternalBrowser) {
-            Browser.launchEmbedded(url)
-        } else {
-            Browser.launchExternal(url)
-        }
-    }
-
-    private fun sendRequestToEmbeddedTool(tool: String) {
-        // Ensure ExternalToolsService is running
-        ExternalToolsService.startIfOff()
-
-        val request: HttpRequest = this.getRequest() ?: return
-
-        // Pass GraphQL endpoint URL as 'server' parameter
-        val server = request.url()
-        val serverEncoded = URLEncoder.encode(server, "UTF-8")
-
-        // Session is InQL header value (headerValue API does not exist in Montoya API 1.0, manually go through headers)
-        val session = request.headers().firstOrNull { it.name() == "InQL" }?.value() ?: "default"
-        val sessionEncoded = URLEncoder.encode(session, "UTF-8")
-
-        // Parse body as JSON (the LongSerialization is to make sure that large numbers are not parsed as Double)
-        val body = request.bodyToString()
-        val gson = GsonBuilder().setLongSerializationPolicy(LongSerializationPolicy.STRING).create()
-        val parsed = gson.fromJson(body, object : TypeToken<Map<String, Any>>() {}.type) as Map<String, Any>
-
-        // Get query from body
-        val query = parsed["query"] as String
-        val queryEncoded = URLEncoder.encode(query, "UTF-8")
-
-        // Get variables from body
-        val variables = parsed["variables"]
-        val variablesEncoded = when (variables) {
-            is String -> URLEncoder.encode(variables, "UTF-8")
-            is Map<*, *> -> URLEncoder.encode(Gson().toJson(variables), "UTF-8")
-            else -> null
-        }
-
-        openURL("https://inql.burp/${tool}?server=${serverEncoded}&session=${sessionEncoded}&query=${queryEncoded}&variables=${variablesEncoded}")
-    }
-
     private fun sendRequestToGraphiQL() {
         Logger.debug("Send Request to GraphiQL")
-        sendRequestToEmbeddedTool("graphiql")
+        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_GRAPHIQL)
     }
 
     private fun sendRequestToPlayground() {
         Logger.debug("Send Request to Playground")
-        sendRequestToEmbeddedTool("playground")
+        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_PLAGROUND)
     }
 
     private fun sendRequestToAltair() {
         Logger.debug("Send Request to Altair")
-        sendRequestToEmbeddedTool("altair")
+        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_ALTAIR)
     }
 
     private fun sendRequestToVoyager() {
-        Logger.debug("Send Request to GraphQL Voyager")
-        val request = this.getRequest() ?: return
-
-        // Ensure ExternalToolsService is running
-        ExternalToolsService.startIfOff()
-
-        val server = request.url()
-        val serverEncoded = URLEncoder.encode(server, "UTF-8")
-
-        val session = request.headers().firstOrNull { it.name() == "InQL" }?.value() ?: "default"
-        val sessionEncoded = URLEncoder.encode(session, "UTF-8")
-
-        openURL("https://inql.burp/voyager?server=${serverEncoded}&session=${sessionEncoded}")
+        Logger.debug("Send Request to Voyager")
+        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_VOYAGER)
     }
 
     fun setEnabled(enabled: Boolean) {

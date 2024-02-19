@@ -7,6 +7,9 @@ import burp.api.montoya.proxy.http.*
 import inql.InQL
 import inql.Logger
 import inql.Profile
+import inql.externaltools.ExternalToolsService.Companion.INQL_HEADER
+import inql.externaltools.ExternalToolsService.Companion.INTERNAL_INQL_HOST
+import inql.externaltools.ExternalToolsService.Companion.INTERNAL_INQL_ORIGIN
 import inql.graphql.Utils.Companion.getGraphQLQuery
 import inql.scanner.IntrospectionCache
 import inql.utils.get
@@ -14,9 +17,7 @@ import inql.utils.withUpsertedHeader
 
 class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRequestHandler, ProxyResponseHandler {
     companion object {
-        const val INTERNAL_INQL_HOST = "inql.burp"
-        const val INTERNAL_INQL_ORIGIN = "https://$INTERNAL_INQL_HOST"
-        const val INQL_HEADER = "Inql"
+
 
         private fun isIntrospectionRequest(request: InterceptedRequest): Boolean {
             val query = getGraphQLQuery(request) ?: return false
@@ -34,7 +35,7 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
         private fun fixCORSHeaders(request: HttpRequest, response: HttpResponse): HttpResponse {
             val origin = request.headers().get("Origin") ?: INTERNAL_INQL_ORIGIN
             val allowedMethods = request.headers().get("Access-Control-Request-Method") ?: "GET, PATCH, POST, OPTIONS"
-            val allowedHeaders = request.headers().get("Access-Control-Request-Headers") ?: "Content-Type, InQL"
+            val allowedHeaders = request.headers().get("Access-Control-Request-Headers") ?: "Content-Type, $INQL_HEADER"
 
             return response
                 .withUpsertedHeader("Access-Control-Allow-Origin", origin)
@@ -139,14 +140,14 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
 
     private fun getSchemaForRequest(interceptedRequest: InterceptedRequest): String? {
         var profileName = interceptedRequest.headers().get(INQL_HEADER)
-        if (profileName == null || profileName.lowercase() == "default") profileName = IntrospectionCache.NO_PROFILE
+        if (profileName == null || profileName == "") profileName = IntrospectionCache.NO_PROFILE
         Logger.debug("Searching cached schema with the following details: ${interceptedRequest.url()} | $profileName")
         return this.inql.scanner.introspectionCache.get(interceptedRequest.url(), profileName)?.rawSchema
     }
 
     private fun getProfileForRequest(interceptedRequest: InterceptedRequest): Profile? {
         val profileName = interceptedRequest.headers().get(INQL_HEADER)
-        if (profileName.isNullOrBlank() || profileName.lowercase() == "default") return null
+        if (profileName.isNullOrBlank()) return null
         return this.inql.getProfile(profileName)
     }
 

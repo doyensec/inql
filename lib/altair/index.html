@@ -50,13 +50,14 @@
     ></script>
 
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const { server, session } = Object.fromEntries(params);
+        const params = Object.fromEntries(new URLSearchParams(window.location.search));
+        const target = decodeURIComponent(params.target || "");
+        const session = decodeURIComponent(params.session || "");
 
         AltairGraphQL.init({
-            endpointURL: server,
+            endpointURL: target,
             initialHeaders: {
-                'InQL': session
+                'X-Inql-Session': session
             }
         });
     </script>
