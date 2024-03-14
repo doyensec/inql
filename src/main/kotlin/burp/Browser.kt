@@ -155,7 +155,7 @@ class Browser {
 
         public fun launchExternal(_uri: String): Boolean {
             val uri = if (_uri.startsWith("http")) _uri else "https://${_uri}"
-            val customCommand = Config.getInstance().getString("integrations.browser.external.command") ?: ""
+            val customCommand = Config.getInstance().getString("integrations.browser.external.command")
 
             if (customCommand.isEmpty() && Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                 Desktop.getDesktop().browse(URI(uri));

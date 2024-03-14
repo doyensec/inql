@@ -20,8 +20,56 @@ class Config private constructor() {
         EFFECTIVE,
     }
 
-    private val globalStore = Burp.Montoya.persistence().preferences()
-    private val projectStore = Burp.Montoya.persistence().extensionData()
+    interface Store {
+        fun getBoolean(key: String): Boolean?
+        fun getInteger(key: String): Int?
+        fun getString(key: String): String?
+
+        fun setBoolean(key: String, value: Boolean)
+        fun setInteger(key: String, value: Int)
+        fun setString(key: String, value: String)
+
+        fun deleteBoolean(key: String)
+        fun deleteInteger(key: String)
+        fun deleteString(key: String)
+
+        fun booleanKeys(): Set<String>
+        fun integerKeys(): Set<String>
+        fun stringKeys(): Set<String>
+    }
+
+    class PreferencesStore(private val preferences: burp.api.montoya.persistence.Preferences) : Store {
+        override fun getBoolean(key: String): Boolean? = preferences.getBoolean(key)
+        override fun setBoolean(key: String, value: Boolean) = preferences.setBoolean(key, value)
+        override fun getInteger(key: String): Int? = preferences.getInteger(key)
+        override fun setInteger(key: String, value: Int) = preferences.setInteger(key, value)
+        override fun getString(key: String): String? = preferences.getString(key)
+        override fun setString(key: String, value: String) = preferences.setString(key, value)
+        override fun deleteBoolean(key: String) = preferences.deleteBoolean(key)
+        override fun deleteInteger(key: String) = preferences.deleteInteger(key)
+        override fun deleteString(key: String) = preferences.deleteString(key)
+        override fun booleanKeys(): Set<String> = preferences.booleanKeys()
+        override fun integerKeys(): Set<String> = preferences.integerKeys()
+        override fun stringKeys(): Set<String> = preferences.stringKeys()
+    }
+
+    class PersistedObjectStore(private val persistedObject: burp.api.montoya.persistence.PersistedObject) : Store {
+        override fun getBoolean(key: String): Boolean? = persistedObject.getBoolean(key)
+        override fun setBoolean(key: String, value: Boolean) = persistedObject.setBoolean(key, value)
+        override fun getInteger(key: String): Int? = persistedObject.getInteger(key)
+        override fun setInteger(key: String, value: Int) = persistedObject.setInteger(key, value)
+        override fun getString(key: String): String? = persistedObject.getString(key)
+        override fun setString(key: String, value: String) = persistedObject.setString(key, value)
+        override fun deleteBoolean(key: String) = persistedObject.deleteBoolean(key)
+        override fun deleteInteger(key: String) = persistedObject.deleteInteger(key)
+        override fun deleteString(key: String) = persistedObject.deleteString(key)
+        override fun booleanKeys(): Set<String> = persistedObject.booleanKeys()
+        override fun integerKeys(): Set<String> = persistedObject.integerKeys()
+        override fun stringKeys(): Set<String> = persistedObject.stringKeys()
+    }
+
+    private val globalStore = PreferencesStore(Burp.Montoya.persistence().preferences())
+    private val projectStore = PersistedObjectStore(Burp.Montoya.persistence().extensionData())
 
     val defaults = mapOf<String, Any>(
         "codegen.depth" to 2,
@@ -40,19 +88,20 @@ class Config private constructor() {
         "report.poi" to true,
         "report.poi.depth" to 2,
         "report.poi.format" to "text",
-        "report.poi.auth" to true,
-        "report.poi.privileged" to true,
-        "report.poi.pii" to true,
-        "report.poi.payment" to true,
-        "report.poi.database" to true,
-        "report.poi.debugging" to true,
-        "report.poi.files" to true,
-        "report.poi.deprecated" to true,
-        "report.poi.custom_scalars" to true,
+        "report.poi.type.auth" to true,
+        "report.poi.type.privileged" to true,
+        "report.poi.type.pii" to true,
+        "report.poi.type.payment" to true,
+        "report.poi.type.database" to true,
+        "report.poi.type.debugging" to true,
+        "report.poi.type.files" to true,
+        "report.poi.type.deprecated" to true,
+        "report.poi.type.custom_scalars" to true,
         "report.poi.custom_keywords" to "",
         "logging.level" to "WARN",
         "proxy.highlight_enabled" to true,
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
+        "proxy.hijack_introspection" to true,
         "editor.formatting.enabled" to true,
         "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
         "editor.send_to.strip_comments" to true,
@@ -62,183 +111,118 @@ class Config private constructor() {
         "logging.level" to { level -> Logger.setLevel(level.toString()) },
     )
 
-    fun getBoolean(key: String, scope: Scope = Scope.EFFECTIVE): Boolean? {
-        var output: Boolean? = null
-        var scopeLog: Scope? = null
-        if (scope == Scope.PROJECT || scope == Scope.EFFECTIVE) {
-            output = projectStore.getBoolean(key)
-            scopeLog = Scope.PROJECT
+    private fun <T> get(key: String, scope: Scope = Scope.EFFECTIVE, getter: (Store, String) -> T?): T? {
+        val scopes = when (scope) {
+            Scope.EFFECTIVE -> listOf(Scope.PROJECT, Scope.GLOBAL, Scope.DEFAULT)
+            Scope.EFFECTIVE_GLOBAL -> listOf(Scope.GLOBAL, Scope.DEFAULT)
+            else -> listOf(scope)
         }
-        if (output == null && (scope == Scope.GLOBAL || scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            output = globalStore.getBoolean(key)
-            scopeLog = Scope.GLOBAL
-        }
-        if (output == null && (scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            if (defaults[key] != null && defaults[key] is Boolean) {
-                output = defaults[key] as Boolean
-                scopeLog = Scope.DEFAULT
+
+        for (currentScope in scopes) {
+            @Suppress("UNCHECKED_CAST")
+            val output = when (currentScope) {
+                Scope.PROJECT -> getter(projectStore, key) as T
+                Scope.GLOBAL -> getter(globalStore, key) as T
+                Scope.DEFAULT -> defaults[key] as T
+                else -> throw Exception("Invalid scope provided to get(): $currentScope")
+            }
+            if (output != null) {
+                Logger.debug("Search $key (scope $currentScope): found with value $output")
+                return output
             }
         }
 
-        var logStr = "Search Boolean $key (scope $scope): "
-        logStr += if (output != null) {
-            "found in $scopeLog with value $output"
-        } else {
-            "not found"
-        }
-        Logger.debug(logStr)
-        return output
+        Logger.debug("Search $key (scope $scope): not found")
+        return null
     }
 
-    fun getInt(key: String, scope: Scope = Scope.EFFECTIVE): Int? {
-        var output: Int? = null
-        var scopeLog: Scope? = null
-        if (scope == Scope.PROJECT || scope == Scope.EFFECTIVE) {
-            output = projectStore.getInteger(key)
-            scopeLog = Scope.PROJECT
-        }
-        if (output == null && (scope == Scope.GLOBAL || scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            output = globalStore.getInteger(key)
-            scopeLog = Scope.GLOBAL
-        }
-        if (output == null && (scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            if (defaults[key] != null && defaults[key] is Int) {
-                output = defaults[key] as Int
-                scopeLog = Scope.DEFAULT
+    fun getBoolean(key: String, scope: Scope = Scope.EFFECTIVE): Boolean =
+        get(key, scope, Store::getBoolean) ?: false
+
+    fun getInt(key: String, scope: Scope = Scope.EFFECTIVE): Int =
+        get(key, scope, Store::getInteger) ?: 0
+
+    fun getString(key: String, scope: Scope = Scope.EFFECTIVE): String =
+        get(key, scope, Store::getString) ?: ""
+
+    private fun getAny(key: String, scope: Scope = Scope.EFFECTIVE): Any? {
+        for (getter in listOf(Store::getBoolean, Store::getInteger, Store::getString)) {
+            try {
+                get(key, scope, getter)?.let { return it }
+            } catch (e: ClassCastException) {
+                // Ignore the exception and try the next type
             }
         }
-
-        var logStr = "Search Int $key (scope $scope): "
-        logStr += if (output != null) {
-            "found in $scopeLog with value $output"
-        } else {
-            "not found"
-        }
-        Logger.debug(logStr)
-        return output
+        return null
     }
 
-    fun getString(key: String, scope: Scope = Scope.EFFECTIVE): String? {
-        var output: String? = null
-        var scopeLog: Scope? = null
+    @Suppress("ReplaceCallWithBinaryOperator")
+    private fun <T : Any> set(key: String, value: T, scope: Scope = Scope.PROJECT, setter: (Store, String, T) -> Unit) {
+        Logger.debug("Setting config value: $key=$value (scope: $scope, type: ${value::class.simpleName})")
 
-        if (scope == Scope.PROJECT || scope == Scope.EFFECTIVE) {
-            output = projectStore.getString(key)
-            scopeLog = Scope.PROJECT
-        }
-        if (output == null && (scope == Scope.GLOBAL || scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            output = globalStore.getString(key)
-            scopeLog = Scope.GLOBAL
-        }
-        if (output == null && (scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
-            if (defaults[key] != null && defaults[key] is String) {
-                output = defaults[key] as String
-                scopeLog = Scope.DEFAULT
-            }
+        val valueNotUpdated = when (value) {
+            is Boolean -> getBoolean(key).equals(value)
+            is Int -> getInt(key).equals(value)
+            is String -> getString(key).equals(value)
+            else -> throw Exception("Invalid value type provided to set(): ${value::class.simpleName}")
         }
 
-        var logStr = "Search String $key (scope $scope): "
-        logStr += if (output != null) {
-            "found in $scopeLog with value $output"
-        } else {
-            "not found"
-        }
-        Logger.debug(logStr)
-        return output
-    }
-
-    fun get(key: String, scope: Scope = Scope.EFFECTIVE): Any? {
-        return getBoolean(key, scope) ?: getInt(key, scope) ?: getString(key, scope)
-    }
-
-    fun set(key: String, value: Boolean, scope: Scope = Scope.PROJECT) {
-        Logger.debug("Setting config value: $key=$value (scope: $scope, type: Boolean)")
         when (scope) {
-            Scope.PROJECT -> projectStore.setBoolean(key, value)
-            Scope.GLOBAL -> globalStore.setBoolean(key, value)
+            Scope.PROJECT -> setter(projectStore, key, value)
+            Scope.GLOBAL -> setter(globalStore, key, value)
             else -> throw Exception("Invalid scope provided to set(): $scope")
         }
-        if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
+
+        hooks[key]?.let {
+            if (!valueNotUpdated)
+                it(value)
         }
     }
 
-    fun set(key: String, value: Int, scope: Scope = Scope.PROJECT) {
-        Logger.debug("Setting config value: $key=$value (scope: $scope, type: Integer)")
-        when (scope) {
-            Scope.PROJECT -> projectStore.setInteger(key, value)
-            Scope.GLOBAL -> globalStore.setInteger(key, value)
-            else -> throw Exception("Invalid scope provided to set(): $scope")
-        }
-        if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
-        }
-    }
+    fun set(key: String, value: Boolean, scope: Scope = Scope.PROJECT) =
+        set(key, value, scope, Store::setBoolean)
 
-    fun set(key: String, value: String, scope: Scope = Scope.PROJECT) {
-        Logger.debug("Setting config value: $key=$value (scope: $scope, type: String)")
-        when (scope) {
-            Scope.PROJECT -> projectStore.setString(key, value)
-            Scope.GLOBAL -> globalStore.setString(key, value)
-            else -> throw Exception("Invalid scope provided to set(): $scope")
-        }
-        if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
-        }
-    }
+    fun set(key: String, value: Int, scope: Scope = Scope.PROJECT) =
+        set(key, value, scope, Store::setInteger)
+
+    fun set(key: String, value: String, scope: Scope = Scope.PROJECT) =
+        set(key, value, scope, Store::setString)
 
     fun delete(key: String, scope: Scope = Scope.PROJECT) {
-        when (scope) {
-            Scope.PROJECT -> {
-                projectStore.deleteBoolean(key)
-                projectStore.deleteInteger(key)
-                projectStore.deleteString(key)
-            }
-
-            Scope.GLOBAL -> {
-                globalStore.deleteBoolean(key)
-                globalStore.deleteInteger(key)
-                globalStore.deleteString(key)
-            }
-
+        val store = when (scope) {
+            Scope.GLOBAL -> globalStore
+            Scope.PROJECT -> projectStore
             else -> throw Exception("Invalid scope provided to delete(): $scope")
         }
-        if (hooks.containsKey(key)) {
-            hooks[key]?.let { this.get(key, scope)?.let { it1 -> it(it1) } }
+
+        val effectiveValue = getAny(key)
+
+        store.deleteBoolean(key)
+        store.deleteInteger(key)
+        store.deleteString(key)
+
+        hooks[key]?.let {
+            val newValue = getAny(key)
+            if (effectiveValue != newValue && newValue != null)
+                it(newValue)
         }
     }
 
-    fun reset(scope: Scope = Scope.PROJECT) {
-        this.keys(scope).forEach { key ->
-            this.delete(key, scope)
-        }
-    }
-
-    private fun keys(scope: Scope = Scope.PROJECT): List<String> {
-        return when (scope) {
-            Scope.DEFAULT -> defaults.keys.toList()
-            Scope.GLOBAL -> listOf(
-                globalStore.booleanKeys(),
-                globalStore.integerKeys(),
-                globalStore.stringKeys(),
-            ).flatten()
-
-            Scope.PROJECT -> listOf(
-                projectStore.booleanKeys(),
-                projectStore.integerKeys(),
-                projectStore.stringKeys(),
-            ).flatten()
-
-            else -> ArrayList(0)
-        }
-    }
-
-    private fun items(scope: Scope = Scope.PROJECT): Map<String, Any?> {
-        return when (scope) {
+    private fun items(scope: Scope = Scope.PROJECT): Map<String, Any> =
+        when (scope) {
             Scope.DEFAULT -> defaults
-            else -> this.keys(scope).associateWith { key -> this.get(key, scope) }
+            Scope.GLOBAL, Scope.PROJECT -> {
+                val store = if (scope == Scope.GLOBAL) globalStore else projectStore
+
+                val booleans = store.booleanKeys().associateWith { store.getBoolean(it) ?: false }
+                val integers = store.integerKeys().associateWith { store.getInteger(it) ?: 0 }
+                val strings = store.stringKeys().associateWith { store.getString(it) ?: "" }
+
+                booleans + integers + strings
+            }
+
+            else -> throw Exception("Invalid scope provided to items(): $scope")
         }
-    }
 
     fun dumpContents() {
         Logger.info("PROJECT SETTINGS:")

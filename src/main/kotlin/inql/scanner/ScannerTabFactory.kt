@@ -10,6 +10,6 @@ class ScannerTabFactory(val scanner: Scanner, var tabIdx: Int = 0) : ITabCompone
 
     override fun getNewTabTitle(idx: Int, c: JComponent): String {
         if (c !is ScannerTab) throw Exception("The passed component is not a ScannerTab instance")
-        return if (c.linkedProfile != null) "${c.id} [${c.linkedProfile!!.name}]" else "${c.id}"
+        return c.session?.sessionId ?: "${c.id}"
     }
 }

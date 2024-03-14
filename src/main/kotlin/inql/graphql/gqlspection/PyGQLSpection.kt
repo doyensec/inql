@@ -1,14 +1,31 @@
 package inql.graphql.gqlspection
 
-import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
-import com.google.gson.reflect.TypeToken
-import inql.Config
 import inql.Logger
-import inql.graphql.GQLSchemaMemoryBackedImpl
+import inql.graphql.CacheableSchema
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.python.core.Py
 import org.python.util.PythonInterpreter
+import java.io.IOException
+import java.util.concurrent.Executors
+
+class InterpreterWrapper(private val jythonDispatcher: ExecutorCoroutineDispatcher) {
+    val interpreter: PythonInterpreter = PythonInterpreter()
+    private val lock = Mutex()
+
+    suspend fun <T> withInterpreter(block: PythonInterpreter.() -> T): T = withContext(jythonDispatcher) {
+        lock.withLock {
+            interpreter.block()
+        }
+    }
+}
+
+// This class should only have simple methods that call the Python interpreter
+// Do not put any logic here, and avoid methods calling other methods
 
 class PyGQLSpection private constructor() : IGQLSpection {
     companion object {
@@ -17,220 +34,187 @@ class PyGQLSpection private constructor() : IGQLSpection {
             if (instance == null) instance = PyGQLSpection()
             return instance as PyGQLSpection
         }
+    }
 
-        private fun getEnabledPoiCategories(): List<String> {
-            val config = Config.getInstance()
-            val keys = config.defaults.keys.filter { it.startsWith("report.poi.") }
-            return keys.filter { config.getBoolean(it) == true }.map { it.substring("report.poi.".length) }
+    val jythonDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val interpreterWrapper = InterpreterWrapper(jythonDispatcher)
+    private val maxCacheSize = 4
+
+    init {
+        runBlocking {
+            initInterpreter()
         }
     }
 
-    private val interpreter = PythonInterpreter()
-    private val lock = Mutex()
+    private suspend fun initInterpreter() = interpreterWrapper.withInterpreter {
+        exec(
+            """
+            import sys
+            reload(sys)
+            sys.setdefaultencoding('UTF8')
+        """.trimIndent()
+        )
 
-    init {
-        interpreter.exec("import sys; reload(sys); sys.setdefaultencoding('UTF8')")
-        interpreter.setOut(System.out)
-        interpreter.setErr(System.err)
-        interpreter.exec("from gqlspection import log as gql_log")
-        interpreter.exec("from gqlspection import GQLSchema")
-        interpreter.exec("import logging")
-        interpreter.exec("import re")
-        interpreter.exec("import json")
+        setOut(System.out)
+        setErr(System.err)
+
+        exec(
+            """
+            from gqlspection import log as gql_log
+            from gqlspection import GQLSchema, GQLCycleDetector
+            from collections import OrderedDict
+            import logging
+            import json
+
+            cache = OrderedDict()
+            max_cache_size = $maxCacheSize
+
+            def create_and_cache_schema(schema_id, json_string):
+                cache[schema_id] = GQLSchema(json=json_string)
+                if len(cache) > max_cache_size:
+                    cache.popitem(last=False)
+                return cache[schema_id]
+
+            def has_schema(schema_id):
+                return schema_id in cache
+
+            def get_schema(schema_id):
+                return cache.get(schema_id)
+        """.trimIndent()
+        )
     }
 
-    private fun _unload() {
-        interpreter.cleanup()
-        interpreter.close()
+    // Sets `schema` to the GQLSchema object in the Python interpreter and executes the given command
+    private suspend fun execute(schema: CacheableSchema, command: String) = interpreterWrapper.withInterpreter {
+        try {
+            if (eval("has_schema(${schema.id})").asInt() == 0) {
+                // We're trying to limit the number of times data is copied between Kotlin and Python
+                set("schemaJson", schema.json)
+                Logger.info("Executing: create_and_cache_schema(${schema.id}, schemaJson)")
+                exec("schema = create_and_cache_schema(${schema.id}, schemaJson)")
+                exec("del schemaJson")
+            } else {
+                Logger.info("Executing: get_schema(${schema.id})")
+                exec("schema = get_schema(${schema.id})")
+            }
+            Logger.info("Executing: $command")
+            exec(command)
+        } catch (e: IOException) {
+            Logger.error("Error executing command: $command due to IOException. The Python code might be too large.")
+            e.printStackTrace()
+        }
+    }
+
+    private suspend inline fun <reified T> getObject(name: String): T? = interpreterWrapper.withInterpreter {
+        val pyObject = get(name)
+        Py.tojava(pyObject, T::class.java)
+    }
+
+    private suspend fun setObject(name: String, value: Any?) = interpreterWrapper.withInterpreter {
+        set(name, value)
+    }
+
+    // The rest of the functions should be rewritten to use the above methods
+
+    suspend fun listQueries(schema: CacheableSchema): List<String> {
+        this.execute(
+            schema,
+            """
+            queries = [query.name for query in schema.query.fields if query.name]
+            """.trimIndent(),
+        )
+        return this.getObject("queries") ?: emptyList()
+    }
+
+    suspend fun listMutations(schema: CacheableSchema): List<String> {
+        this.execute(
+            schema,
+            """
+            mutations = [mutation.name for mutation in schema.mutation.fields if mutation.name]
+            """.trimIndent(),
+        )
+        return this.getObject("mutations") ?: emptyList()
+    }
+
+    suspend fun getQuery(schema: CacheableSchema, name: String, depth: Int, pad: Int): String? {
+        setObject("name", name)
+        this.execute(
+            schema,
+            """
+            query = schema.generate_query(name, $depth).to_string(pad=$pad)
+            """.trimIndent(),
+        )
+        return this.getObject("query")
+    }
+
+    suspend fun getMutation(schema: CacheableSchema, name: String, depth: Int, pad: Int): String? {
+        setObject("name", name)
+        this.execute(
+            schema,
+            """
+            mutation = schema.generate_mutation(name, $depth).to_string(pad=$pad)
+            """.trimIndent(),
+        )
+        return this.getObject("mutation")
+    }
+
+    suspend fun getPointsOfInterest(
+        schema: CacheableSchema,
+        categories: List<String>,
+        keywords: List<String>,
+        depth: Int
+    ): String {
+        this.setObject("categories", categories)
+        this.setObject("keywords", keywords)
+        this.execute(
+            schema,
+            """
+            poi_json = json.dumps(schema.points_of_interest(depth=$depth, categories=categories, keywords=keywords))
+            """.trimIndent(),
+        )
+        return this.getObject("poi_json") ?: ""
+    }
+
+    suspend fun getCycleDetectionResults(schema: CacheableSchema, maxDepth: Int): String {
+        this.execute(
+            schema,
+            """
+            cycle_detector = GQLCycleDetector(schema, max_depth=$maxDepth)
+            cycle_detector.detect()
+            cycle_detection_results = cycle_detector.cycles_as_string()
+            """.trimIndent(),
+        )
+        return this.getObject("cycle_detection_results") ?: ""
+    }
+
+    override suspend fun unload() = interpreterWrapper.withInterpreter {
+        cleanup()
+        close()
         instance = null
     }
 
-    private fun _parseSchema(schema: String): GQLSchemaMemoryBackedImpl? {
-        // Parse schema
-
-        val gson = Gson()
-        Logger.debug("Parse Schema Called")
-        // Deserialize JSON here to check for errors
-        try {
-            gson.fromJson(schema, Map::class.java)
-            Logger.debug("JSON parsed successfully in Kotlin")
-        } catch (e: Exception) {
-            Logger.info("Could not parse introspection response")
-            Logger.info("Exception: $e")
-            throw e
-        }
-
-        // fetch some configs
-        val config = Config.getInstance()
-        val depth = config.getInt("codegen.depth")
-        val pad = config.getInt("codegen.pad")
-
-        try {
-            // define name validation function
-            Logger.debug("Passing data to Python")
-            interpreter.exec("name_regex = re.compile('^[_A-Za-z][_0-9A-Za-z]*\$')")
-            interpreter.exec(
-                "def is_valid_graphql_name(name):\n" +
-                    "    return name_regex.match(name) is not None",
-            )
-
-            // set the schema as a python object
-            interpreter.set("schema", schema)
-
-            // parse the schema
-            Logger.debug("Parsing the JSON with GQLSpection")
-            interpreter.exec("parsed = GQLSchema(json=schema)")
-
-            // initialize containing dicts
-            interpreter.exec("queries = {}")
-            interpreter.exec("mutations = {}")
-
-            Logger.debug("Extracting data")
-            // extract data
-            Logger.debug("Extracting queries...")
-            interpreter.exec(
-                """
-                for query in parsed.query.fields:
-                    if not query.name: continue
-                    if not is_valid_graphql_name(query.name): continue
-                    queries[query.name] = parsed.generate_query(query, depth=$depth).to_string(pad=$pad)
-                """.trimIndent(),
-            )
-
-            Logger.debug("Extracting mutations...")
-            interpreter.exec(
-                """
-                for mutation in parsed.mutation.fields:
-                    if not mutation.name: continue
-                    if not is_valid_graphql_name(mutation.name): continue
-                    mutations[mutation.name] = parsed.generate_mutation(mutation, depth=$depth).to_string(pad=$pad)
-                """.trimIndent(),
-            )
-
-            // convert to json for easy transfer to Java
-            interpreter.exec("json_queries = json.dumps(queries)")
-            interpreter.exec("json_mutations = json.dumps(mutations)")
-
-            Logger.debug("Fetching JSON data structures")
-            val jsonQueries = interpreter.get("json_queries").asString()
-            val jsonMutations = interpreter.get("json_mutations").asString()
-
-            // convert back to maps
-            Logger.debug("Parsing fetched JSON back to Java Maps")
-            val mapType = object : TypeToken<Map<String, String>>() {}.type
-            val queries: Map<String, String>
-            val mutations: Map<String, String>
-            try {
-                queries = gson.fromJson<Map<String, String>>(jsonQueries, mapType)
-                mutations = gson.fromJson<Map<String, String>>(jsonMutations, mapType)
-            } catch (_: JsonSyntaxException) {
-                Logger.error("Cannot parse JSON queries and mutations from (Py)GQLSpection")
-                return null
-            }
-
-            // process pois
-            var poisJson: String? = null
-            if (config.getBoolean("report.poi") != false) {
-                Logger.debug("POIs enabled, fetching...")
-                // get enabled poi categories
-                Logger.debug("Setting categories")
-                interpreter.exec("categories = []")
-                for (category in getEnabledPoiCategories()) {
-                    interpreter.set("cat", category)
-                    interpreter.exec("categories.append(cat)")
-                }
-
-                // get custom keywords
-                Logger.debug("Setting keywords")
-                interpreter.exec("keywords = []")
-                for (keyword in (config.getString("report.poi.custom_keywords") ?: "").split('\n')) {
-                    interpreter.set("kw", keyword)
-                    interpreter.exec("keywords.append(cat)")
-                }
-
-                Logger.debug("Processing POIs")
-                interpreter.exec("poi_json = json.dumps(parsed.points_of_interest(depth=$depth, categories=categories, keywords=keywords))")
-
-                Logger.debug("Fetching JSON POIs")
-                poisJson = interpreter.get("poi_json").asString()
-
-                // POI Cleanup
-                try {
-                    interpreter.exec("del categories, keywords, cat, kw, poi_json")
-                } catch (_: Exception) {
-                    // Catch this in case one of the variables is not defined but do nothing about it
-                }
-            }
-
-            // process cycle detection
-            var cycleDetectionResults: String? = null
-            if (config.getBoolean("report.cycles") != false) {
-                Logger.debug("Cycle detection enabled, fetching...")
-                interpreter.exec("from gqlspection import GQLCycleDetector")
-                val cycleDepth = config.getInt("report.cycles.depth")
-                interpreter.exec("cycle_detector = GQLCycleDetector(parsed, $cycleDepth)")
-                interpreter.exec("cycle_detector.detect()")
-                interpreter.exec("cycle_detection_results = cycle_detector.cycles_as_string()")
-                cycleDetectionResults = interpreter.get("cycle_detection_results").asString()
-            }
-
-            // Cleanup
-            Logger.debug("Parsing done, cleaning up...")
-            interpreter.exec("del schema, parsed, queries, mutations, json_queries, json_mutations, cycle_detector, cycle_detection_results")
-
-            return GQLSchemaMemoryBackedImpl(queries, mutations, poisJson, cycleDetectionResults)
-        } catch (e: Exception) {
-            Logger.info("GQLSpection failed to parse the JSON")
-            Logger.info("Error: $e")
-            // Cleanup
-            try {
-                interpreter.exec("del schema, parsed, queries, mutations, json_queries, json_mutations")
-            } catch (_: Exception) {
-                // Catch this in case one of the variables is not defined but do nothing about it
-            }
-            return null
-        }
-    }
-
-    private fun _setLogLevel(level: String) {
-        interpreter.set("log_level", level)
-        interpreter.exec(
-            "class DebugOrInfo(logging.Filter):\n" +
-                "    def filter(self, record):\n" +
-                "        return record.levelno in (logging.DEBUG, logging.INFO)",
+    override suspend fun setLogLevel(level: String) = interpreterWrapper.withInterpreter {
+        set("log_level", level)
+        exec(
+            """
+            class DebugOrInfo(logging.Filter):
+                def filter(self, record):
+                    return record.levelno in (logging.DEBUG, logging.INFO)
+                    
+            gql_log.setLevel(log_level)
+            formatter = logging.Formatter('[thread#%(thread)d %(filename)s:%(lineno)d :: %(funcName)s()]    %(message)s')
+            handler_stdout = logging.StreamHandler(sys.stdout)
+            handler_stdout.setFormatter(formatter)
+            handler_stdout.setLevel(logging.DEBUG)
+            handler_stdout.addFilter(DebugOrInfo())
+            handler_stderr = logging.StreamHandler(sys.stderr)
+            handler_stderr.setFormatter(formatter)
+            handler_stderr.setLevel(logging.WARNING)
+            del gql_log.handlers[:]
+            gql_log.addHandler(handler_stdout)
+            gql_log.addHandler(handler_stderr)
+            """.trimIndent()
         )
-        interpreter.exec(
-            "gql_log.setLevel(log_level)\n" +
-                "formatter = logging.Formatter('[thread#%(thread)d %(filename)s:%(lineno)d :: %(funcName)s()]    %(message)s')\n" +
-                "handler_stdout = logging.StreamHandler(sys.stdout)\n" +
-                "handler_stdout.setFormatter(formatter)\n" +
-                "handler_stdout.setLevel(logging.DEBUG)\n" +
-                "handler_stdout.addFilter(DebugOrInfo())\n" +
-                "handler_stderr = logging.StreamHandler(sys.stderr)\n" +
-                "handler_stderr.setFormatter(formatter)\n" +
-                "handler_stderr.setLevel(logging.WARNING)\n" +
-                "del gql_log.handlers[:]\n" +
-                "gql_log.addHandler(handler_stdout)\n" +
-                "gql_log.addHandler(handler_stderr)",
-        )
-        interpreter.exec("del log_level")
-    }
-
-    override suspend fun parseSchema(schema: String): GQLSchemaMemoryBackedImpl? {
-        lock.withLock {
-            return this._parseSchema(schema)
-        }
-    }
-
-    suspend fun setLogLevel(level: String) {
-        lock.withLock {
-            this._setLogLevel(level)
-        }
-    }
-
-    override suspend fun unload() {
-        lock.withLock {
-            this._unload()
-        }
+        exec("del log_level")
     }
 }

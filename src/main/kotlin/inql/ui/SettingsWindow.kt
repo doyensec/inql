@@ -20,7 +20,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             when (component) {
                 is CheckBox -> {
                     val cb = this.component as CheckBox
-                    cb.setSelected(config.getBoolean(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    cb.setSelected(config.getBoolean(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL))
                     cb.addItemListener {
                         config.set(key, cb.isSelected(), scope = Config.Scope.GLOBAL)
                     }
@@ -28,7 +28,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
                 is Spinner -> {
                     val spinner = this.component as Spinner
-                    spinner.setValue(config.getInt(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    spinner.setValue(config.getInt(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL))
                     spinner.addChangeListener {
                         config.set(key, spinner.getValue(), scope = Config.Scope.GLOBAL)
                     }
@@ -36,7 +36,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
                 is ComboBox -> {
                     val cb = this.component as ComboBox
-                    cb.setSelectedItem(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    cb.setSelectedItem(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL))
                     cb.addItemListener {
                         config.set(key, cb.getSelectedItem(), scope = Config.Scope.GLOBAL)
                     }
@@ -44,7 +44,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
                 is TextField -> {
                     val tf = this.component as TextField
-                    tf.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    tf.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL))
                     tf.changeListener = fun() {
                         config.set(key, tf.getText(), scope = Config.Scope.GLOBAL)
                     }
@@ -52,7 +52,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
                 is TextArea -> {
                     val ta = this.component as TextArea
-                    ta.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
+                    ta.setText(config.getString(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL))
                     ta.changeListener = fun() {
                         config.set(key, ta.getText(), scope = Config.Scope.GLOBAL)
                     }
@@ -174,27 +174,27 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.poi.depth", Spinner("Maximum depth of the generated queries", 1, 10)),
             SettingsElement("report.poi.format", ComboBox("Format of the generated queries", "text", "json", "both")),
             null,
-            SettingsElement("report.poi.auth", CheckBox("Report points of interest that deal with authentication")),
+            SettingsElement("report.poi.type.auth", CheckBox("Report points of interest that deal with authentication")),
             SettingsElement(
-                "report.poi.privileged",
+                "report.poi.type.privileged",
                 CheckBox("Report points of interest that require or provide privileged access"),
             ),
-            SettingsElement("report.poi.pii", CheckBox("Report points of interest that might contain or process PII")),
+            SettingsElement("report.poi.type.pii", CheckBox("Report points of interest that might contain or process PII")),
             SettingsElement(
-                "report.poi.payment",
+                "report.poi.type.payment",
                 CheckBox("Report points of interest that might contain or process payment information"),
             ),
             SettingsElement(
-                "report.poi.database",
+                "report.poi.type.database",
                 CheckBox("Report points of interest that might allow direct database access"),
             ),
             SettingsElement(
-                "report.poi.debugging",
+                "report.poi.type.debugging",
                 CheckBox("Report points of interest that expose debugging information"),
             ),
-            SettingsElement("report.poi.files", CheckBox("Report points of interest that deal with file management")),
-            SettingsElement("report.poi.deprecated", CheckBox("Report deprecated functionality")),
-            SettingsElement("report.poi.custom_scalars", CheckBox("Report custom scalars")),
+            SettingsElement("report.poi.type.files", CheckBox("Report points of interest that deal with file management")),
+            SettingsElement("report.poi.type.deprecated", CheckBox("Report deprecated functionality")),
+            SettingsElement("report.poi.type.custom_scalars", CheckBox("Report custom scalars")),
             null,
             SettingsElement("report.poi.custom_keywords", TextArea("Custom keywords for points of interest", 6, 20)),
         )

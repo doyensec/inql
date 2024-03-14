@@ -1,21 +1,11 @@
 package inql.scanner
 
 import burp.Burp
-import burp.api.montoya.http.message.HttpHeader
 import burp.api.montoya.http.message.requests.HttpRequest
-import burp.api.montoya.persistence.PersistedObject
-import inql.Logger
-import inql.Profile
-import inql.graphql.GQLSchemaMemoryBackedImpl
-import inql.graphql.Introspection
-import inql.savestate.SavesAndLoadData
-import inql.savestate.SavesDataToProject
-import inql.savestate.getSaveStateKeys
 import inql.scanner.scanconfig.ScanConfigView
 import inql.scanner.scanresults.ScanResultsView
 import inql.ui.EditableTab
 import inql.ui.ErrorDialog
-import inql.utils.withUpsertedHeaders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,64 +14,32 @@ import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
 import javax.swing.JPanel
-import com.google.gson.Gson
+import inql.session.Session
 
-class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
+class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()) {
     companion object {
         const val SCAN_CONFIG_VIEW = "SCAN_CONFIG_VIEW"
         const val SCAN_RESULT_VIEW = "SCAN_RESULT_VIEW"
-        val EXCLUDED_HEADERS = setOf<String>(
-            // Keep these lowercase
-            "connection",
-            "host",
-            "content-type",
-            "content-length",
-            "content-encoding",
-            "accept",
-            "accept-language",
-            "accept-encoding",
-            "cache-control",
-            "origin"
-        )
     }
 
-    private var _tabTitle = "ScannerTab"
-    val scanResults = ArrayList<ScanResult>(1)
-    private var _linkedProfile: Profile? = null
-    var linkedProfile: Profile?
-        get() = this._linkedProfile
-        set(new) {
-            // Fix the tab tile with the new profile name before setting the new profile
-            val prev = this._linkedProfile
-            this._linkedProfile = new
-
-            if (prev == null && new == null) return
-            val currentTitle = this.getTabTitle()
-            var newTitle = currentTitle
-            if (prev != null) {
-                // Remove old suffix
-                val oldSuffix = " [${prev.name}]"
-                newTitle = newTitle.removeSuffix(oldSuffix)
-            }
-            if (new != null) {
-                // Add new suffix
-                val newSuffix = " [${new.name}]"
-                newTitle += newSuffix
-            }
-            this.setTabTitle(newTitle)
+    var session: Session? = null
+    var sessionConfig: String
+        get() = this.scanConfigView.sessionYaml
+        set(s) {
+            this.scanConfigView.sessionYaml = s
         }
-
+    private var _tabTitle = "ScannerTab"
     val inql = scanner.inql
-    val scanConfigView = ScanConfigView(this)
-    val scanResultsView = ScanResultsView(this)
+    private val scanConfigView = ScanConfigView(this)
+    private val scanResultsView = ScanResultsView(this)
 
     var url: String
-        get() = this.scanConfigView.urlField.text
+        get() = this.scanConfigView.url ?: ""
         set(s) {
-            this.scanConfigView.urlField.text = s
+            this.scanConfigView.url = s
         }
-    var fileSchema: String?
-        get() = this.scanConfigView.file
+    var fileSchema: String
+        get() = this.scanConfigView.file ?: ""
         set(s) {
             this.scanConfigView.file = s
         }
@@ -94,11 +52,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
                 null
             }
         }
-    var requestTemplate: HttpRequest
-        get() = this.scanConfigView.requestTemplate
-        set(r) {
-            this.scanConfigView.requestTemplate = r
-        }
+
+    // Gets triggered from Scanner.newTabFromRequest when creating a new tab from an existing HTTP request
+    fun updateFromHttpRequest(req: HttpRequest) {
+        this.url = req.url()
+
+        sessionConfig = Session.updateTemplateWithUrl(sessionConfig, req.url())
+        sessionConfig = Session.updateTemplateWithHeaders(sessionConfig, req.headers())
+    }
 
     private fun showView(card: String) {
         if (!setOf<String>(
@@ -127,142 +88,57 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         Burp.Montoya.userInterface().applyThemeToComponent(scanConfigView)
         Burp.Montoya.userInterface().applyThemeToComponent(scanResultsView)
-    }
 
-    fun loadFromProfile(p: Profile) {
-        // Let's not load excluded headers
-        val headers = p.customHeaders.filter { !EXCLUDED_HEADERS.contains(it.key.lowercase()) }
-        // Let's not reset the current template to default, but add the headers to the existing one
-        this.requestTemplate = this.requestTemplate.withUpsertedHeaders(headers)
-    }
-
-    fun saveToProfile(p: Profile) {
-        val reqHeaders = this.requestTemplate.headers().associate { header -> header.name() to header.value() }
-        val defaultHeaders = HttpRequest.httpRequest().withDefaultHeaders().headers()
-            .associate { header -> header.name().lowercase() to header.value() }
-        // Keep the header from the request if it's not a default one OR the value is different from the default
-        val custom =
-            reqHeaders
-                .filter { (!defaultHeaders.containsKey(it.key.lowercase())) || (defaultHeaders.containsKey(it.key.lowercase()) && defaultHeaders[it.key] != it.value) }
-                .filter { !EXCLUDED_HEADERS.contains(it.key.lowercase())  }
-        p.overwrite(custom)
+        sessionConfig = Session.createEmptyTemplate()
     }
 
     fun launchScan() {
-        if (this.scanConfigView.verifyAndReturnUrl() == null) return
-        this.normalizeHeaders()
-        this.scanConfigView.setBusy(true)
         CoroutineScope(Dispatchers.IO).launch {
             this@ScannerTab.analyze()
         }
     }
 
-    private fun normalizeHeaders() {
-        val headers = this.requestTemplate.headers()
-        if (headers.isEmpty()) return
-
-        // ensure "Host" is the first header
-        val hostIdx = headers.indexOfFirst { it.name().lowercase() == "host" }
-        when (hostIdx) {
-            -1 -> {
-                // Not present, add it
-                headers.add(0, HttpHeader.httpHeader("Host", this.host!!))
-            }
-
-            0 -> {
-                // First header, OK
-            }
-
-            else -> {
-                headers.removeAt(hostIdx)
-                headers.add(0, HttpHeader.httpHeader("Host", this.host!!))
-            }
-        }
-
-        // Ensure "Content-Type" is set
-        val contentTypeIdx = headers.indexOfFirst { it.name().lowercase() == "content-type" }
-        if (contentTypeIdx == -1) {
-            headers.add(HttpHeader.httpHeader("Content-Type", "application/json"))
-        } else if (!setOf("application/json", "application/graphql").contains(
-                headers[contentTypeIdx].value().lowercase(),
-            )
-        ) {
-            headers[contentTypeIdx] = HttpHeader.httpHeader("Content-Type", "application/json")
-        }
-    }
-
     private suspend fun analyze() {
-        // Get the schema
-        var jsonSchema: String?
-        var sdlSchema: String?
-
-        if (this.fileSchema != null && this.fileSchema!!.isNotBlank()) {
-            Logger.info("GraphQL schema supplied as a file: ${this.fileSchema}")
+        if (this.fileSchema.isNotBlank()) {
+            if (!File(this.fileSchema).exists()) {
+                scanFailed("File not found")
+                return
+            }
             try {
-                // FIXME: This is not ideal for big files,
-                //  once GQLSpection is ported to Kotlin we can find a more suitable solution
-                //  such as using a reader
-                val fileContent = File(this.fileSchema!!).readText()
+                val fileContent = File(this.fileSchema).readText()
                 try {
-                    Gson().fromJson(fileContent, Any::class.java)
-                    // The file is a valid JSON, assume it's an introspection schema
-                    jsonSchema = fileContent
-                    sdlSchema = SchemaTools.jsonToSdl(jsonSchema)
+                    this.session = Session.createWithLocalSchema(this, fileContent)
                 } catch (e: Exception) {
-                    // Assume the file is GraphQL schema in SDL format
-                    sdlSchema = fileContent
-                    jsonSchema = SchemaTools.sdlToJson(sdlSchema)
+                    scanFailed("Could not initiate local scan: ${e.message}")
+                    return
                 }
             } catch (e: Exception) {
-                scanFailed("Exception raised while reading file")
+                scanFailed("Could not read file")
                 return
             }
         } else {
             try {
-                jsonSchema = Introspection.sendIntrospectionQuery(this.requestTemplate)
+                this.session = Session.createWithRemoteSchema(this)
             } catch (e: Exception) {
-                scanFailed("Could not parse introspection response from the endpoint")
+                scanFailed("Could not initiate remote scan: ${e.message}")
                 return
-            }
-            if (jsonSchema == null) {
-                scanFailed("Introspection seems disabled for this endpoint")
-                return
-            } else {
-                sdlSchema = SchemaTools.jsonToSdl(jsonSchema)
             }
         }
 
-        // Invoke GQLSpection to analyze GraphQL schema
-        val schema: GQLSchemaMemoryBackedImpl?
         try {
-            schema = this.inql.gqlspection.parseSchema(jsonSchema!!)
+            this.session!!.analyze()
         } catch (e: Exception) {
-            scanFailed("Failed to deserialize JSON schema")
-            return
-        }
-        if (schema == null) {
-            scanFailed("GQLSpection failed to parse the schema")
+            scanFailed("Schema analysis failed: ${e.message}")
             return
         }
 
-        // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, jsonSchema, sdlSchema)
-
-        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
-        // and multiple scans at the same time for the same ScannerTab are not allowed
-        this.scanResults.add(sr)
-
-        // Update this tab in burp's project file
-        this.setTabTitle(host!!)
-        this.scanner.updateChildObjectAsync(this)
         this.scanCompleted()
     }
 
-    private fun scanCompleted() {
+    private suspend fun scanCompleted() {
         this.scanConfigView.setBusy(false) // Do we need this?
         this.showView(SCAN_RESULT_VIEW)
-        this.scanResultsView.refresh()
-        this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
+        this.scanResultsView.refresh(this.session!!)
     }
 
     private fun scanFailed(reason: String?) {
@@ -288,48 +164,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     }
 
     fun onClose() {
-        if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
-    }
-
-    override val saveStateKey: String
-        get() = "Scanner.Tab.$id"
-
-    override fun getChildrenObjectsToSave(): Collection<SavesDataToProject> = this.scanResults
-
-    override fun burpSerialize(): PersistedObject {
-        val obj = PersistedObject.persistedObject()
-        obj.setString("tabTitle", this.getTabTitle())
-        obj.setString("url", this.url)
-        obj.setHttpRequest("template", requestTemplate)
-        if (this.fileSchema != null) {
-            obj.setString("fileSchema", this.fileSchema)
-        }
-        val profile = this.linkedProfile
-        if (profile != null) obj.setString("linkedProfileId", profile.id)
-        obj.setStringList("results", getSaveStateKeys(this.scanResults))
-        return obj
-    }
-
-    override fun burpDeserialize(obj: PersistedObject) {
-        this.url = obj.getString("url")
-        this.requestTemplate = obj.getHttpRequest("template")
-        this.fileSchema = obj.getString("fileSchema")
-        val profileId = obj.getString("linkedProfileId")
-        this.linkedProfile = if (profileId != null) this.inql.getProfile(profileId) else null
-        val resultsIdLst = obj.getStringList("results")
-        if (!resultsIdLst.isNullOrEmpty()) {
-            for (resultId in resultsIdLst) {
-                this.scanResults.add(ScanResult.Deserializer(resultId).get() ?: continue)
-            }
-        }
-
-        // Set the tab title AFTER setting the linked profile to prevent double suffix
-        this.setTabTitle(obj.getString("tabTitle"))
-
-        // Set the UI to show the results
-        if (this.scanResults.isNotEmpty()) {
-            this.showResultsView()
-            this.scanResultsView.refresh()
-        }
+        // FIXME: Figure out how to properly delete references to this tab when it's closed
+        //if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
     }
 }

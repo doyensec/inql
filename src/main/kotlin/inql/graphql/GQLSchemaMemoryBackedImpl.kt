@@ -1,149 +1,96 @@
 package inql.graphql
 
-import burp.api.montoya.persistence.PersistedObject
+import com.google.gson.JsonParser
+import inql.Config
 import inql.Logger
-import inql.savestate.BurpDeserializableToObject
+import inql.session.Session
+import inql.graphql.gqlspection.PyGQLSpection
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.withContext
 
-class GQLSchemaMemoryBackedImpl private constructor(
-    queries: List<IGQLElement>,
-    mutations: List<IGQLElement>,
-    val jsonPointsOfInterest: String?,
-    val cycleDetectionResults: String?,
-) : IGQLSchema() {
+class CacheableSchema(val json: String) {
+    val id: Int = nextId.getAndIncrement()
 
-    private val queries: HashMap<String, IGQLElement> = HashMap()
-    private val mutations: HashMap<String, IGQLElement> = HashMap()
-    private val pointsOfInterest: HashMap<String, List<IGQLElement>> = HashMap()
+    companion object {
+        private val nextId = AtomicInteger(0)
+    }
+}
 
-    init {
-        this.queries.putAll(queries.associateBy { it.name() })
-        this.mutations.putAll(mutations.associateBy { it.name() })
-        if (this.jsonPointsOfInterest != null) {
-            this.pointsOfInterest.putAll(parsePointsOfInterestToMap(jsonPointsOfInterest))
-        }
+class GQLSchemaMemoryBackedImpl private constructor(val session: Session, val schema: CacheableSchema) : IGQLSchema() {
+    constructor(session: Session): this(session, CacheableSchema(session.schema.json))
+
+    private val config = Config.getInstance()
+    private val gqlspection = PyGQLSpection.getInstance()
+
+    private var cachedQueries: List<String>? = null
+    private var cachedMutations: List<String>? = null
+    private var cachedPointsOfInterest: String? = null
+    private var cachedCycleDetectionResults: String? = null
+
+    private val queryValues: HashMap<String, IGQLElement> = HashMap()
+    private val mutationValues: HashMap<String, IGQLElement> = HashMap()
+
+    enum class GQLElementType { QUERY, MUTATION, POI }
+
+    data class GQLElement (
+        override val type: GQLElementType,
+        override val name: String,
+        override val content: String
+    ) : IGQLElement
+
+    override suspend fun getQuery(name: String): IGQLElement? = withContext(gqlspection.jythonDispatcher) {
+        queryValues[name]?.let { return@withContext it }
+        val depth = session.uiSettings.maxQueryDepth
+        val pad = session.uiSettings.padding
+        val content = gqlspection.getQuery(schema, name, depth, pad) ?: return@withContext null
+        GQLElement(GQLElementType.QUERY, name, content).also { queryValues[name] = it }
     }
 
-    companion object : BurpDeserializableToObject<GQLSchemaMemoryBackedImpl> {
-        override fun burpDeserialize(obj: PersistedObject): GQLSchemaMemoryBackedImpl {
-            val queriesObj = obj.getChildObject("queries")
-            val mutationsObj = obj.getChildObject("mutations")
-            val jsonPointsOfInterest = obj.getString("jsonPOI")
-            val cycleDetectionResults = obj.getString("cycleDetectionResults")
+    override suspend fun getMutation(name: String): IGQLElement? = withContext(gqlspection.jythonDispatcher) {
+        mutationValues[name]?.let { return@withContext it }
+        val depth = session.uiSettings.maxQueryDepth
+        val pad = session.uiSettings.padding
+        val content = gqlspection.getMutation(schema, name, depth, pad) ?: return@withContext null
+        GQLElement(GQLElementType.MUTATION, name, content).also { mutationValues[name] = it }
+    }
 
-            val queriesKeys = queriesObj.childObjectKeys()
-            val mutationsKeys = mutationsObj.childObjectKeys()
-            val queries = ArrayList<IGQLElement>(queriesKeys.size)
-            val mutations = ArrayList<IGQLElement>(mutationsKeys.size)
+    override suspend fun listQueries(): List<String> = withContext(gqlspection.jythonDispatcher) {
+        cachedQueries ?: gqlspection.listQueries(schema).also { cachedQueries = it }
+    }
 
-            Logger.debug("Loading ${queriesKeys.size} queries")
-            for (name in queriesKeys) {
-                val qObj = queriesObj.getChildObject(name)
-                queries.add(
+    override suspend fun listMutations(): List<String> = withContext(gqlspection.jythonDispatcher) {
+        cachedMutations ?: gqlspection.listMutations(schema).also { cachedMutations = it }
+    }
+
+    override suspend fun getPointsOfInterestAsJson(): String = withContext(gqlspection.jythonDispatcher) {
+        cachedPointsOfInterest ?: gqlspection.getPointsOfInterest(
+            schema,
+            config.defaults.keys
+                .filter { it.startsWith("report.poi.type.") && config.getBoolean(it) }
+                .map { it.removePrefix("report.poi.type.") },
+            config.getString("report.poi.custom_keywords").split('\n'),
+            config.getInt("report.cycles.depth")
+        ).also { cachedPointsOfInterest = it }
+    }
+
+    override suspend fun getPointsOfInterest(): Map<String, List<IGQLElement>> {
+        return getPointsOfInterestAsJson().let { json ->
+            JsonParser.parseString(json).asJsonObject.entrySet().associate { (category, findings) ->
+                category to findings.asJsonArray.map { finding ->
+                    val poi = finding.asJsonObject
                     GQLElement(
-                        GQLElementType.QUERY,
-                        qObj.getString("name"),
-                        qObj.getString("content"),
-                    ),
-                )
+                        GQLElementType.POI,
+                        poi.get("path").asString,
+                        poi.get("description")?.asString ?: ""
+                    )
+                }
             }
-
-            Logger.debug("Loading ${mutationsKeys.size} mutations")
-            for (name in mutationsKeys) {
-                val mObj = mutationsObj.getChildObject(name)
-                mutations.add(
-                    GQLElement(
-                        GQLElementType.MUTATION,
-                        mObj.getString("name"),
-                        mObj.getString("content"),
-                    ),
-                )
-            }
-
-            return GQLSchemaMemoryBackedImpl(
-                queries,
-                mutations,
-                jsonPointsOfInterest,
-                cycleDetectionResults,
-            )
         }
     }
 
-    constructor(queries: Map<String, String>, mutations: Map<String, String>, jsonPointsOfInterest: String?, cycleDetectionResults: String?) : this(
-        queries.map { GQLElement(GQLElementType.QUERY, it.key, it.value) },
-        mutations.map { GQLElement(GQLElementType.MUTATION, it.key, it.value) },
-        jsonPointsOfInterest,
-        cycleDetectionResults,
-    )
-
-    class GQLElement(val _type: GQLElementType, val _name: String, val _content: String) : IGQLElement {
-        override fun type(): GQLElementType {
-            return _type
-        }
-
-        override fun name(): String {
-            return _name
-        }
-
-        override fun content(): String {
-            return _content
-        }
-
-        override fun burpSerialize(): PersistedObject {
-            val obj = PersistedObject.persistedObject()
-            obj.setInteger("type", type().ordinal)
-            obj.setString("name", name())
-            obj.setString("content", content())
-            return obj
-        }
-
-        override fun toString(): String {
-            return this._name
-        }
-    }
-
-    override fun getQueries(): Map<String, IGQLElement> {
-        return this.queries
-    }
-
-    override fun getMutations(): Map<String, IGQLElement> {
-        return this.mutations
-    }
-
-    override fun getPointsOfInterest(): Map<String, List<IGQLElement>> {
-        return this.pointsOfInterest
-    }
-
-    override fun getPointsOfInterestAsJson(): String? {
-        return this.jsonPointsOfInterest
-    }
-
-    override fun getCycleDetectionResultsAsText(): String? {
-        return this.cycleDetectionResults
-    }
-
-    override fun burpSerialize(): PersistedObject {
-        val mainObj = PersistedObject.persistedObject()
-        val queriesObj = PersistedObject.persistedObject()
-        val mutationsObj = PersistedObject.persistedObject()
-
-        Logger.debug("Saving ${queries.size} queries")
-        for (query in queries) {
-            queriesObj.setChildObject(query.key, query.value.burpSerialize())
-        }
-
-        Logger.debug("Saving ${mutations.size} mutations")
-        for (mutation in mutations) {
-            mutationsObj.setChildObject(mutation.key, mutation.value.burpSerialize())
-        }
-
-        mainObj.setChildObject("queries", queriesObj)
-        mainObj.setChildObject("mutations", mutationsObj)
-        if (this.jsonPointsOfInterest != null) {
-            mainObj.setString("jsonPOI", jsonPointsOfInterest)
-        }
-        if (this.cycleDetectionResults != null) {
-            mainObj.setString("cycleDetectionResults", cycleDetectionResults)
-        }
-        return mainObj
+    override suspend fun getCycleDetectionResultsAsText(): String = withContext(gqlspection.jythonDispatcher) {
+        cachedCycleDetectionResults ?:
+            gqlspection.getCycleDetectionResults(schema, config.getInt("report.cycles.depth"))
+                .also { cachedCycleDetectionResults = it }
     }
 }

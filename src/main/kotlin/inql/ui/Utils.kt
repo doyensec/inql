@@ -348,7 +348,7 @@ class SettingsTabButton() : JPanel() {
         val textLabel = JLabel(text)
         clickablePart.add(textLabel)
 
-        clickablePart.addMouseListener(object : MouseAdapter() {
+        addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent?) {
                 SwingUtilities.invokeLater {
                     SettingsWindow.getInstance().isVisible = true

@@ -1,53 +1,55 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10"
-    }
-}
+// Define kotlinVersion and jvmTarget in gradle.properties to keep them in sync
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.9.10"
     id("com.palantir.git-version") version "3.0.0"
-}
-
-dependencies {
-    implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
-    implementation 'net.portswigger.burp.extensions:montoya-api:1.0.0'
-    implementation 'com.google.code.gson:gson:2.10.1'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
-    implementation 'org.apache.commons:commons-text:1.11.0'
-    implementation 'commons-codec:commons-codec:1.16.1'
-    implementation 'org.python:jython-standalone:2.7.3'
-    implementation 'io.ktor:ktor-server-core:2.3.9'
-    implementation 'io.ktor:ktor-server-netty:2.3.9'
-    implementation 'com.formdev:flatlaf:3.4'
-    implementation 'com.formdev:flatlaf-extras:3.4'
-    implementation 'com.graphql-java:graphql-java:21.3'
-}
-
-java {
-    sourceCompatibility = 17
-    targetCompatibility = 17
-}
-
-tasks.withType(KotlinCompile).configureEach {
-    compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
-}
-
-compileKotlin {
-    compilerOptions {
-        // Configure the Kotlin compiler options
-        allWarningsAsErrors = true
-    }
+    id("org.jetbrains.kotlin.jvm") version "$kotlinVersion"
+    id("org.jetbrains.kotlin.plugin.serialization") version "$kotlinVersion"
 }
 
 repositories {
     mavenCentral()
+}
+
+// This needs to be kept in sync with Kotlin (defined in settings.gradle), but frustratingly uses different versioning
+def kotlinCoroutinesVersion = "1.8.0"
+// Avoid bumping Montoya API and JVM versions as much as possible, for compatibility with older Burp Suite releases
+def montoyaApiVersion = "1.0.0"
+// Define versions for dependencies which need to be kept in sync across libraries
+def flatLafVersion = "3.4"
+def ktorVersion = "2.3.9"
+
+dependencies {
+    implementation 'commons-validator:commons-validator:1.8.0'
+    implementation 'com.graphql-java:graphql-java:21.3'
+    implementation 'commons-codec:commons-codec:1.16.1'
+    implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
+    implementation 'org.apache.commons:commons-text:1.11.0'
+    implementation 'org.python:jython-standalone:2.7.3'
+    implementation "com.formdev:flatlaf-extras:$flatLafVersion"
+    implementation "com.formdev:flatlaf:$flatLafVersion"
+    implementation "io.ktor:ktor-server-core:$ktorVersion"
+    implementation "io.ktor:ktor-server-netty:$ktorVersion"
+    implementation "net.portswigger.burp.extensions:montoya-api:$montoyaApiVersion"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion"
+
+    // Json parsing (We're in process of migrating to kotlinx.serialization)
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+
+    // Yaml parsing (note that Kaml is *very* picky about versions of its dependencies!)
+    implementation 'com.charleskorn.kaml:kaml:0.59.0'
+    implementation 'com.squareup.okio:okio:3.9.0'
+    implementation 'it.krzeminski:snakeyaml-engine-kmp:2.7.5'
+    implementation 'net.thauvin.erik.urlencoder:urlencoder-lib:1.5.0'
+}
+
+java {
+    sourceCompatibility = jvmTargetVersion
+    targetCompatibility = jvmTargetVersion
+}
+
+compileKotlin {
+    kotlinOptions.jvmTarget = jvmTargetVersion
 }
 
 def generatedVersionDir = layout.buildDirectory.dir("generated-version").get().asFile.path

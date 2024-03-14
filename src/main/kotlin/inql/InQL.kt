@@ -24,7 +24,6 @@ import java.awt.event.*
 class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     private val config = Config.getInstance()
-    private val profiles = LinkedHashMap<String, Profile>()
     val gqlspection: IGQLSpection
 
     // main tabs
@@ -42,14 +41,13 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         config.delete("codegen.pad", Config.Scope.PROJECT)
         config.delete("ScannerPanel", Config.Scope.GLOBAL)
 
-        val logLevel = config.getString("logging.level") ?: "DEBUG"
+        val logLevel = config.getString("logging.level")
         Logger.setLevel(logLevel)
 
         // Initialize PyGQLSpection
-        val pyGQLSpection = PyGQLSpection.getInstance()
-        this.gqlspection = pyGQLSpection
+        gqlspection = PyGQLSpection.getInstance()
         runBlocking {
-            pyGQLSpection.setLogLevel(logLevel)
+            gqlspection.setLogLevel(logLevel)
         }
 
         // Register GraphQL Payload Editor
@@ -76,64 +74,19 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
         // Initialize ExternalToolsService to make it ready to spawn the webserver and register the interceptor when they are needed
         ExternalToolsService.init(this)
-        if (this.config.getBoolean("integrations.webserver.lazy") == false) {
+        if (!this.config.getBoolean("integrations.webserver.lazy")) {
             ExternalToolsService.startIfOff()
         }
 
         // If enabled, start request highlighter
-        if (this.config.getBoolean("proxy.highlight_enabled") == true) {
+        if (this.config.getBoolean("proxy.highlight_enabled")) {
             ProxyRequestHighlighter.start()
         }
     }
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
-        this@InQL.gqlspection.unload()
-    }
-
-    fun getAvailableProfileId(name: String): String {
-        val sanitizedName = name
-            .replace(Regex("\\s+"), "-")
-            .replace(Regex("[^A-Za-z0-9-]+"), "_")
-            .lowercase()
-        var id = sanitizedName
-        var i = 0u
-        while (this.profiles.containsKey(id)) {
-            i++
-            id = "$sanitizedName-$i"
-        }
-        return id
-    }
-
-    fun getProfilesId(): Collection<String> {
-        return this.profiles.keys
-    }
-
-    fun getProfiles(): Collection<Profile> {
-        return this.profiles.values
-    }
-
-    fun getProfile(key: String): Profile? {
-        return this.profiles[key]
-    }
-
-    fun deleteProfile(key: String) {
-        if (this.profiles.containsKey(key)) {
-            this.profiles[key]?.deleteFromProjectFileAsync()
-            this.profiles.remove(key)
-        }
-    }
-
-    fun deleteProfile(p: Profile) {
-        this.deleteProfile(p.id)
-    }
-
-    fun createProfile(name: String, host: String): Profile {
-        val id = getAvailableProfileId(name)
-        val p = Profile(name, id, host)
-        this.profiles[id] = p
-        this.updateChildObjectAsync(p)
-        return p
+        gqlspection.unload()
     }
 
     fun focus() {
@@ -150,13 +103,16 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         get() = "InQL_Main"
 
     override fun getChildrenObjectsToSave(): Collection<SavesDataToProject> {
-        val lst: MutableList<SavesDataToProject> = this.profiles.values.toMutableList()
-        lst.add(this.scanner)
+        val lst: MutableList<SavesDataToProject> = mutableListOf()
+        // TODO: Add Sessions to the list, probably from SessionManager
         lst.add(this.attacker)
         return lst
     }
 
     override fun burpSerialize(): PersistedObject {
+        // TODO: Go over all Sessions in SessionManager and save them
+
+// old code, irrelevant now
 //        val obj = PersistedObject.persistedObject()
 //        obj.setStringList("profiles", getSaveStateKeys(this.profiles.values))
 //        return obj
@@ -164,6 +120,10 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     }
 
     override fun burpDeserialize(obj: PersistedObject) {
+        // TODO: Restore Sessions from the project file via SessionManager
+        // Then create the tabs for each session
+
+ // old code, irrelevant now
  //       val profilesLst = obj.getStringList("profiles")
  //       if (profilesLst != null) {
  //           for (profileId in profilesLst) {

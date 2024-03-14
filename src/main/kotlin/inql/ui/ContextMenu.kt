@@ -83,16 +83,16 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     // Check those with: Config.getInstance().getBoolean("integrations.graphiql")
     protected val sendToEmbeddedToolActions = mutableListOf<MenuAction>().apply {
         val config = Config.getInstance()
-        if (config.getBoolean("integrations.graphiql") == true) {
+        if (config.getBoolean("integrations.graphiql")) {
             this.add(sendToGraphiqlAction)
         }
-        if (config.getBoolean("integrations.playground") == true) {
+        if (config.getBoolean("integrations.playground")) {
             this.add(sendToPlaygroundAction)
         }
-        if (config.getBoolean("integrations.voyager") == true) {
+        if (config.getBoolean("integrations.voyager")) {
             this.add(sendToVoyagerAction)
         }
-        if (config.getBoolean("integrations.altair") == true) {
+        if (config.getBoolean("integrations.altair")) {
             this.add(sendToAltairAction)
         }
     }

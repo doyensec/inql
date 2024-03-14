@@ -1,4 +1,5 @@
 import com.google.gson.Gson
+import com.google.gson.JsonParseException
 import graphql.GraphQL
 import graphql.introspection.IntrospectionQuery
 import graphql.introspection.IntrospectionResultToSchema
@@ -12,7 +13,7 @@ object SchemaTools {
     private val schemaParser = SchemaParser()
     private val introspectionConverter = IntrospectionResultToSchema()
 
-    fun jsonToSdl(json: String): String? {
+    fun jsonToSdl(json: String): String {
         @Suppress("UNCHECKED_CAST")
         var introspectionResult : Map<String, Any> = gson.fromJson(json, Map::class.java) as Map<String, Any>
 
@@ -31,7 +32,7 @@ object SchemaTools {
         } else {
             Logger.debug("Could not convert JSON schema to SDL")
         }
-        return null
+        throw JsonParseException("Could not convert JSON schema to SDL")
     }
 
     // This mocking factory class is used to bypass the requirement for a runtime data fetcher

@@ -54,7 +54,7 @@ class ExternalToolsService private constructor(){
         public fun openURL(url: String) {
             Logger.info("Opening URL: $url")
 
-            val useInternalBrowser = config.getBoolean("integrations.browser.internal")?: true
+            val useInternalBrowser = config.getBoolean("integrations.browser.internal")
             Logger.info("Should use internal browser? $useInternalBrowser")
 
             if (useInternalBrowser) {
@@ -128,14 +128,14 @@ class ExternalToolsService private constructor(){
     }
 
     public val webserver: WebServer
-    public val interceptor: ExternalToolsRequestFixer
+    //public val interceptor: ExternalToolsRequestFixer
 
     init {
         this.webserver = WebServer()
-        this.interceptor = ExternalToolsRequestFixer(inql!!, this.webserver.listeningPort)
-        Logger.info("Registering external tools interceptor")
-        Burp.Montoya.proxy().registerRequestHandler(this.interceptor)
-        Burp.Montoya.proxy().registerResponseHandler(this.interceptor)
-        Logger.info("Started external tools service")
+        //this.interceptor = ExternalToolsRequestFixer(inql!!, this.webserver.listeningPort)
+        //Logger.info("Registering external tools interceptor")
+        //Burp.Montoya.proxy().registerRequestHandler(this.interceptor)
+        //Burp.Montoya.proxy().registerResponseHandler(this.interceptor)
+        //Logger.info("Started external tools service")
     }
 }

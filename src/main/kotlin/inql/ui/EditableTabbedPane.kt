@@ -247,7 +247,7 @@ open class EditableTabbedPane : TabbedPane() {
                         icon?.let {
                             panel.add(JLabel(icon))
                         } ?: panel.add(JLabel("+"))
-                        //panel.add(JLabel("+"))
+
                         panel.addMouseListener(object : MouseAdapter() {
                             override fun mouseClicked(e: MouseEvent?) {
                                 newTab()

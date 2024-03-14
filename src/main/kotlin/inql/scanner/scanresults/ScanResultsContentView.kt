@@ -1,9 +1,7 @@
 package inql.scanner.scanresults
 
 import burp.Burp
-import burp.api.montoya.core.ByteArray
 import burp.api.montoya.ui.editor.EditorOptions
-import inql.graphql.IGQLSchema
 import inql.ui.BorderPanel
 import inql.ui.GraphQLEditor
 import inql.ui.SendFromInqlHandler
@@ -13,7 +11,7 @@ import java.awt.CardLayout
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 
-class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
+class ScanResultsContentView : JPanel(CardLayout()) {
     companion object {
         const val RAW_EDITOR_CARD = "RAW_EDITOR_CARD"
         const val GQL_EDITOR_CARD = "GQL_EDITOR_CARD"
@@ -43,19 +41,17 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         (this.layout as CardLayout).show(this, card)
     }
 
-    fun load(elem: IGQLSchema.IGQLElement) {
-        this.gqlEditor.setQuery(elem.content())
-        this.show(GQL_EDITOR_CARD)
-    }
-
-    fun load(elem: String) {
-        this.rawEditor.contents = ByteArray.byteArray(elem)
-        this.show(RAW_EDITOR_CARD)
-    }
-
-    fun load(elem: ByteArray) {
-        this.rawEditor.contents = elem
-        this.show(RAW_EDITOR_CARD)
+    fun load(scanResult: ScanResult) {
+        when (scanResult) {
+            is ScanResult.GraphQL -> {
+                this.gqlEditor.setQuery(scanResult.content)
+                this.show(GQL_EDITOR_CARD)
+            }
+            is ScanResult.Raw -> {
+                this.rawEditor.contents = scanResult.content
+                this.show(RAW_EDITOR_CARD)
+            }
+        }
     }
 
     fun getText(): String {

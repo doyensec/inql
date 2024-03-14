@@ -38,7 +38,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private val formatter = Formatter(false, 4, asHTML = true, isIntrospection = isIntrospection)
     private val formattingCoroutineScope = CoroutineScope(Dispatchers.Default)
     private var runningJob: Job? = null
-    private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
+    private val timeout = Config.getInstance().getInt("editor.formatting.timeout")
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
 
     init {

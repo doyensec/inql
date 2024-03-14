@@ -7,6 +7,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+val extensionData = Burp.Montoya.persistence().extensionData()
+
+fun saveObjectToProjectFile(key: String, obj: PersistedObject) {
+    extensionData.setChildObject("inql_savestate.$key", obj)
+}
+
+fun loadObjectFromProjectFile(key: String): PersistedObject? {
+    return extensionData.getChildObject("inql_savestate.$key")
+}
+
+fun deleteObjectFromProjectFile(key: String) {
+    extensionData.deleteChildObject("inql_savestate.$key")
+}
+
+
 interface LoadsDataFromProject : BurpDeserializable {
     companion object {
         val coroutineScope = CoroutineScope(Dispatchers.IO)
@@ -15,15 +30,13 @@ interface LoadsDataFromProject : BurpDeserializable {
     val saveStateKey: String
 
     fun dataPresentInProjectFile(): Boolean {
-        val key = this.saveStateKey
-        val obj = Burp.Montoya.persistence().extensionData().getChildObject("inql_savestate.$key")
-        return obj != null
+        return loadObjectFromProjectFile(this.saveStateKey) != null
     }
 
     fun loadFromProjectFile(): Boolean {
         val key = this.saveStateKey
         Logger.debug("[$key] Trying to load data from project file")
-        val obj = Burp.Montoya.persistence().extensionData().getChildObject("inql_savestate.$key")
+        val obj = loadObjectFromProjectFile(key)
         if (obj == null) {
             Logger.warning("[$key] No savestate with this key found in this project file")
             return false
@@ -46,6 +59,7 @@ interface LoadsDataFromProject : BurpDeserializable {
         }
     }
 }
+
 
 interface SavesDataToProject : BurpSerializable {
     companion object {
@@ -74,7 +88,7 @@ interface SavesDataToProject : BurpSerializable {
             return null
         }
         Logger.info("[$key] Serialization completed successfully")
-        Burp.Montoya.persistence().extensionData().setChildObject("inql_savestate.$key", obj)
+        saveObjectToProjectFile(key, obj)
         return key
     }
 
@@ -107,7 +121,7 @@ interface SavesDataToProject : BurpSerializable {
 
     fun deleteFromProjectFile(deleteChildren: Boolean = true) {
         val key = this.saveStateKey
-        Burp.Montoya.persistence().extensionData().deleteChildObject("inql_savestate.$key")
+        deleteObjectFromProjectFile(key)
         if (deleteChildren) {
             val children = this.getChildrenObjectsToSave() ?: return
             for (child in children) {
@@ -134,7 +148,9 @@ interface SavesDataToProject : BurpSerializable {
     }
 }
 
+
 interface SavesAndLoadData : SavesDataToProject, LoadsDataFromProject
+
 
 // This Factory-Deserializer class allows to create a Kotlin object from the deserialization
 // of data from the project file, instead of creating the object first and then loading data into it

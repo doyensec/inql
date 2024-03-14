@@ -1,14 +1,18 @@
 package inql.graphql
 
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import inql.utils.get
+import kotlinx.serialization.json.*
 
 class Utils {
     companion object {
-        private val gson = Gson() // Initialize once
-        fun getGraphQLQuery(request: HttpRequest): String? {
+        private val json = Json { ignoreUnknownKeys = true }
+
+        fun isGraphQLRequest(request: HttpRequest): Boolean {
+            return getGraphQLQuery(request) != null
+        }
+
+        private fun getGraphQLQuery(request: HttpRequest): String? {
             // Let's reject wrong requests ASAP to get the best performance
             try {
                 // Check method
@@ -30,23 +34,15 @@ class Utils {
                 }
 
                 // Parse json
-                val query: String
-                val jsonObject = gson.fromJson(body, JsonObject::class.java)
-                if (!jsonObject.has("query")) {
-                    return null
+                val parsed = json.parseToJsonElement(body).jsonObject
+                return if (parsed.containsKey("query")) {
+                    parsed["query"]?.jsonPrimitive?.contentOrNull
+                } else {
+                    null
                 }
-                query = jsonObject.get("query").asString
-
-                // Possibly parse query in the future
-                if (query.isNotEmpty()) return query
             } catch (_: Exception) {
                 return null
             }
-            return null
-        }
-
-        fun isGraphQLRequest(request: HttpRequest): Boolean {
-            return getGraphQLQuery(request) != null
         }
     }
 }
