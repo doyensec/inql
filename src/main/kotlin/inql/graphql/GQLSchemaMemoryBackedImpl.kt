@@ -8,6 +8,7 @@ class GQLSchemaMemoryBackedImpl private constructor(
     queries: List<IGQLElement>,
     mutations: List<IGQLElement>,
     val jsonPointsOfInterest: String?,
+    val cycleDetectionResults: String?,
 ) : IGQLSchema() {
 
     private val queries: HashMap<String, IGQLElement> = HashMap()
@@ -27,6 +28,7 @@ class GQLSchemaMemoryBackedImpl private constructor(
             val queriesObj = obj.getChildObject("queries")
             val mutationsObj = obj.getChildObject("mutations")
             val jsonPointsOfInterest = obj.getString("jsonPOI")
+            val cycleDetectionResults = obj.getString("cycleDetectionResults")
 
             val queriesKeys = queriesObj.childObjectKeys()
             val mutationsKeys = mutationsObj.childObjectKeys()
@@ -61,14 +63,16 @@ class GQLSchemaMemoryBackedImpl private constructor(
                 queries,
                 mutations,
                 jsonPointsOfInterest,
+                cycleDetectionResults,
             )
         }
     }
 
-    constructor(queries: Map<String, String>, mutations: Map<String, String>, jsonPointsOfInterest: String?) : this(
+    constructor(queries: Map<String, String>, mutations: Map<String, String>, jsonPointsOfInterest: String?, cycleDetectionResults: String?) : this(
         queries.map { GQLElement(GQLElementType.QUERY, it.key, it.value) },
         mutations.map { GQLElement(GQLElementType.MUTATION, it.key, it.value) },
         jsonPointsOfInterest,
+        cycleDetectionResults,
     )
 
     class GQLElement(val _type: GQLElementType, val _name: String, val _content: String) : IGQLElement {
@@ -113,6 +117,10 @@ class GQLSchemaMemoryBackedImpl private constructor(
         return this.jsonPointsOfInterest
     }
 
+    override fun getCycleDetectionResultsAsText(): String? {
+        return this.cycleDetectionResults
+    }
+
     override fun burpSerialize(): PersistedObject {
         val mainObj = PersistedObject.persistedObject()
         val queriesObj = PersistedObject.persistedObject()
@@ -132,6 +140,9 @@ class GQLSchemaMemoryBackedImpl private constructor(
         mainObj.setChildObject("mutations", mutationsObj)
         if (this.jsonPointsOfInterest != null) {
             mainObj.setString("jsonPOI", jsonPointsOfInterest)
+        }
+        if (this.cycleDetectionResults != null) {
+            mainObj.setString("cycleDetectionResults", cycleDetectionResults)
         }
         return mainObj
     }

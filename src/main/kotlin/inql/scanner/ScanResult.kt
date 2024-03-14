@@ -13,7 +13,8 @@ class ScanResult private constructor(
     val host: String,
     val requestTemplate: HttpRequest,
     val parsedSchema: GQLSchemaMemoryBackedImpl,
-    val rawSchema: String? = null,
+    val jsonSchema: String? = null,
+    val sdlSchema: String? = null,
     val ts: LocalDateTime,
     val uuid: String,
 ) : SavesDataToProject {
@@ -21,8 +22,9 @@ class ScanResult private constructor(
         host: String,
         requestTemplate: HttpRequest,
         parsedSchema: GQLSchemaMemoryBackedImpl,
-        rawSchema: String? = null,
-    ) : this(host, requestTemplate, parsedSchema, rawSchema, LocalDateTime.now(), UUID.randomUUID().toString())
+        jsonSchema: String? = null,
+        sdlSchema: String? = null,
+    ) : this(host, requestTemplate, parsedSchema, jsonSchema, sdlSchema, LocalDateTime.now(), UUID.randomUUID().toString())
 
     class Deserializer(key: String) : DeserializerFactory<ScanResult>(key) {
         override fun burpDeserialize(obj: PersistedObject) {
@@ -30,7 +32,8 @@ class ScanResult private constructor(
                 obj.getString("host"),
                 obj.getHttpRequest("template"),
                 GQLSchemaMemoryBackedImpl.burpDeserialize(obj.getChildObject("schema")),
-                obj.getString("rawSchema"),
+                obj.getString("jsonSchema"),
+                obj.getString("sdlSchema"),
                 LocalDateTime.parse(obj.getString("ts"), DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 obj.getString("uuid"),
             )
@@ -49,7 +52,8 @@ class ScanResult private constructor(
         obj.setString("host", host)
         obj.setHttpRequest("template", requestTemplate)
         obj.setChildObject("schema", parsedSchema.burpSerialize())
-        if (rawSchema != null) obj.setString("rawSchema", rawSchema)
+        if (jsonSchema != null) obj.setString("jsonSchema", jsonSchema)
+        if (sdlSchema != null) obj.setString("sdlSchema", sdlSchema)
         return obj
     }
 }

@@ -162,11 +162,23 @@ class PyGQLSpection private constructor() : IGQLSpection {
                 }
             }
 
+            // process cycle detection
+            var cycleDetectionResults: String? = null
+            if (config.getBoolean("report.cycles") != false) {
+                Logger.debug("Cycle detection enabled, fetching...")
+                interpreter.exec("from gqlspection import GQLCycleDetector")
+                val cycleDepth = config.getInt("report.cycles.depth")
+                interpreter.exec("cycle_detector = GQLCycleDetector(parsed, $cycleDepth)")
+                interpreter.exec("cycle_detector.detect()")
+                interpreter.exec("cycle_detection_results = cycle_detector.cycles_as_string()")
+                cycleDetectionResults = interpreter.get("cycle_detection_results").asString()
+            }
+
             // Cleanup
             Logger.debug("Parsing done, cleaning up...")
-            interpreter.exec("del schema, parsed, queries, mutations, json_queries, json_mutations")
+            interpreter.exec("del schema, parsed, queries, mutations, json_queries, json_mutations, cycle_detector, cycle_detection_results")
 
-            return GQLSchemaMemoryBackedImpl(queries, mutations, poisJson)
+            return GQLSchemaMemoryBackedImpl(queries, mutations, poisJson, cycleDetectionResults)
         } catch (e: Exception) {
             Logger.info("GQLSpection failed to parse the JSON")
             Logger.info("Error: $e")

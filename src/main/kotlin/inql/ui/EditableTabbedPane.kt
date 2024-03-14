@@ -1,5 +1,6 @@
 package inql.ui
 
+import inql.Logger
 import java.awt.*
 import java.awt.event.*
 import javax.swing.*
@@ -7,11 +8,13 @@ import javax.swing.event.ChangeEvent
 import javax.swing.event.ChangeListener
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
+import com.formdev.flatlaf.extras.components.*
 
 class EditableTabTitle(title: String, val component: Component) : JTextField(title) {
     private val changeListeners = ArrayList<(EditableTabTitle) -> Unit>()
     private var valueBeforeChange = this.text
 
+    // A bunch of listeners to handle tab title change (these are fired when the title has been changed, not during editing)
     fun addChangeListener(listener: (EditableTabTitle) -> Unit) {
         this.changeListeners.add(listener)
     }
@@ -19,6 +22,9 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
     fun autoSize() {
         val textWidth = this.getFontMetrics(this.font).stringWidth(this.text)
         this.preferredSize = Dimension(textWidth + 5, this.preferredSize.height)
+        if (parent != null) {
+            parent.revalidate()
+        }
     }
 
     fun enterEditingMode() {
@@ -36,18 +42,21 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
         if (this.valueBeforeChange != this.text) {
             this.changeListeners.forEach { it(this) }
         }
-        this.autoSize()
     }
 
     init {
         this.border = BorderFactory.createEmptyBorder()
-        this.document.addDocumentListener(AutoSizeListener(this))
         this.exitEditingMode()
         this.addActionListener {
+            // Schedule the basic exit from editing mode, more complex logic is added elsewhere
             this.exitEditingMode()
         }
-        this.addFocusListener(FocusHandler())
+        // Enter / exit editing mode on double click
         this.addMouseListener(TabTitleMouseAdapter())
+        // Exit editing mode on focus lost
+        this.addFocusListener(FocusHandler())
+        // Resize the tab title when the text changes
+        this.document.addDocumentListener(AutoSizeListener(this))
     }
 
     class AutoSizeListener(val title: EditableTabTitle) : DocumentListener {
@@ -56,11 +65,11 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
         }
 
         override fun removeUpdate(e: DocumentEvent?) {
-            // Do nothing
+            title.autoSize()
         }
 
         override fun changedUpdate(e: DocumentEvent?) {
-            // Do nothing
+            title.autoSize()
         }
     }
 
@@ -122,43 +131,73 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
     }
 }
 
-class EditableTab(val tabTitle: EditableTabTitle, showClose: Boolean = true) : FlowPanel(FlowLayout.LEFT, gap = 0) {
-    constructor(title: String, component: Component, showClose: Boolean = true) : this(
-        EditableTabTitle(
-            title,
-            component,
-        ),
-        showClose,
-    )
-
-    val closeButton = JButton("⨉")
-    var showing = showClose
+class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, gap = 0) {
+    val closeButton = loadSvgIcon("resources/Media/svg/close.svg", 7)?.let { JButton(it) } ?: JButton("⨉")
     val closeListeners = ArrayList<(EditableTab) -> Unit>()
 
+    private val cornerRadius = 10 // Adjust the corner radius as needed
+    private val bottomBorderColor = Color(255, 102, 51) // Bottom border color
+    private val bottomBorderThickness = 2 // Thickness of the bottom border
+    private val background = Color(230, 230, 230)
+
+    override fun paintComponent(g: Graphics) {
+        super.paintComponent(g)
+        val g2 = g.create() as Graphics2D
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+        // Step 1: Draw the bottom border - a bottom-border-colored rounded rectangle
+        g2.color = bottomBorderColor
+        g2.fillRoundRect(0, 0, width, height, cornerRadius, cornerRadius)
+
+        // Step 2: Draw the main body on top, leaving only the bottom border visible
+        g2.color = background
+        g2.fillRoundRect(0, 0, width, height - bottomBorderThickness, cornerRadius, cornerRadius)
+
+        // Step 3: Draw a straight-line rectangle above the bottom to ensure a straight border
+        g2.fillRect(0, height - bottomBorderThickness * 3, width, bottomBorderThickness * 2)
+
+        g2.dispose()
+    }
+
+    // Ensures that the preferred size accounts for the border
+    override fun getPreferredSize(): Dimension {
+        val size = super.getPreferredSize()
+        size.height += bottomBorderThickness
+        return size
+    }
+
     init {
-        this.border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
-        this.isOpaque = false
+        //this.border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
+        //this.isOpaque = true
+        //this.style = "background: #eee; arc: 10; borderColor: #f63; borderWidth: 3; outlineColor: #f63; outline: error; error.borderColor: #f64"
+        //this.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, Color(255, 102, 51)));
         this.closeButton.isOpaque = false
         this.closeButton.isContentAreaFilled = false
         this.closeButton.isBorderPainted = false
         this.closeButton.iconTextGap = 0
-        this.closeButton.margin = Insets(0, 0, 0, 0)
+        this.closeButton.margin = Insets(4, 0, 0, 0)
         this.closeButton.addActionListener {
             this.closeListeners.forEach { it(this) }
         }
-        this.showCloseButton(showClose)
-        this.add(tabTitle)
-        if (showClose) this.add(closeButton)
-    }
 
-    fun showCloseButton(show: Boolean) {
-        if (show && !showing) {
-            this.showing = true
-            this.add(closeButton)
-        } else if (!show && showing) {
-            this.showing = false
-            this.remove(this.closeButton)
-        }
+        val upper = BoxPanel(BoxLayout.X_AXIS, gap = 0)
+        upper.isOpaque = false
+        upper.add(tabTitle)
+        upper.add(this.closeButton)
+        upper.border = BorderFactory.createEmptyBorder(2, 10, 2, 10)
+        add(upper)
+
+//        val lower = BoxPanel(BoxLayout.X_AXIS, gap = 0)
+//        lower.border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
+//        lower.add(FlatPanel().apply {
+//            isOpaque = true
+//            style = "background: #f63; height: 1; insets: 0,0,0,0"// foreground: #f63; height: 3"
+//            maximumSize = Dimension(Integer.MAX_VALUE, 1) // 3 pixels high, full width
+//            //minimumSize = Dimension(0, 15)
+//            //foreground = Color.ORANGE // Color of the separator
+//            //background = Color.ORANGE // Needed if the separator isn't showing up
+//        })
+//        add(lower)
     }
 
     fun addCloseListener(listener: (EditableTab) -> Unit) {
@@ -174,13 +213,11 @@ interface ITabComponentFactory {
 open class EditableTabbedPane : TabbedPane() {
     private var tabComponentFactory: ITabComponentFactory? = null
     private val changeListeners = ArrayList<(EditableTabTitle) -> Unit>()
-    private val newTabButtonPresent: Boolean
+    private val tabFactoryInitiated: Boolean
         get() = this.tabComponentFactory != null
     val tabCount: Int
         get() {
             var count = this.tabbedPane.tabCount
-            // Do not count the "New Tab" tab as a real tab
-            if (this.newTabButtonPresent) count--
             return count
         }
 
@@ -194,33 +231,44 @@ open class EditableTabbedPane : TabbedPane() {
             return lst
         }
 
-    // Index of the "New Tab" tab
-    val newTabIdx: Int
-        get() {
-            if (!this.newTabButtonPresent) return -1
-            return this.tabCount
+    init {
+        tabbedPane.apply {
+            setTabAreaInsets(Insets(0, 0, 0, 0))
+            setTabInsets(Insets(0, 4, 2, 3))
+            style = "tabSelectionHeight: 0"
+
+            // Add "New Tab" button on the right
+            setTrailingComponent(
+                BorderPanel(-2, 0, 2, 0).apply {
+                    add(FlowPanel(FlowLayout.LEFT, 0).apply {
+                        val panel = JPanel()
+
+                        val icon = loadSvgIcon("resources/Media/svg/add.svg", 17)
+                        icon?.let {
+                            panel.add(JLabel(icon))
+                        } ?: panel.add(JLabel("+"))
+                        //panel.add(JLabel("+"))
+                        panel.addMouseListener(object : MouseAdapter() {
+                            override fun mouseClicked(e: MouseEvent?) {
+                                newTab()
+                            }
+                        })
+                        add(panel)
+                    })
+                }
+            )
         }
+    }
 
     fun setTabComponentFactory(tabFactory: ITabComponentFactory) {
         if (this.tabComponentFactory != null) throw Exception("TabComponentFactory already set")
         this.tabComponentFactory = tabFactory
-        this.addNewTabButton()
-    }
-
-    private fun addNewTabButton() {
-        val panel = JPanel().also { it.add(JLabel("You should not really be able to see this")) }
-        this.tabbedPane.addTab("+", panel)
-        val plusLabel = JLabel("+").also {
-            it.font = it.font.deriveFont(Font.BOLD)
-        }
-        this.tabbedPane.setTabComponentAt(this.tabbedPane.tabCount - 1, plusLabel)
-        this.tabbedPane.addMouseListener(NewTabClickHandler(this))
-        this.tabbedPane.addChangeListener(NewTabChangeListener(this))
+        // Add first tab
+        newTab()
     }
 
     override fun addTab(title: String, component: JComponent) {
-        val idx = this.tabCount
-        this.insertTab(title, component, idx)
+        this.insertTab(title, component, this.tabCount)
     }
 
     fun insertTab(title: String, component: JComponent, idx: Int) {
@@ -233,7 +281,7 @@ open class EditableTabbedPane : TabbedPane() {
     }
 
     fun newTab(): JComponent {
-        if (!newTabButtonPresent) throw Exception("Trying to invoke new tab creation without TabComponentFactory present")
+        if (!tabFactoryInitiated) throw Exception("Trying to invoke new tab creation without TabComponentFactory present")
         val idx = this.tabCount
         val component = this.tabComponentFactory!!.createComponent(idx)
         val title = this.tabComponentFactory!!.getNewTabTitle(idx, component)
@@ -262,32 +310,7 @@ open class EditableTabbedPane : TabbedPane() {
 
     fun closeAllTabs() {
         for (idx in 0..<this.tabCount) {
-            this.closeTab(idx)
-        }
-    }
-
-    class NewTabClickHandler(private val pane: EditableTabbedPane) : MouseAdapter() {
-        override fun mousePressed(e: MouseEvent?) {
-            super.mousePressed(e)
-            if (e == null) return
-            if (pane.tabbedPane.indexAtLocation(e.x, e.y) == pane.newTabIdx) {
-                pane.newTab()
-            }
-        }
-    }
-
-    class NewTabChangeListener(private val pane: EditableTabbedPane) : ChangeListener {
-        override fun stateChanged(e: ChangeEvent?) {
-            if (e == null) return
-            if (pane.tabbedPane.selectedIndex == pane.newTabIdx) {
-                if (pane.tabCount == 0) {
-                    // Create a new tab if all tabs have been closed
-                    pane.newTab()
-                } else {
-                    // Else focus the last available tab
-                    pane.tabbedPane.selectedIndex = pane.tabCount - 1
-                }
-            }
+            this.closeTab(0)
         }
     }
 }

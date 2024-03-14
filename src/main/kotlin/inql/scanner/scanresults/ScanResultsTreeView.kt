@@ -35,7 +35,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     init {
         this.setupLookAndFeel()
         this.tree = JTree(DefaultMutableTreeNode()).also {
-            it.isRootVisible = true
+            it.isRootVisible = false
             it.addTreeSelectionListener(this)
             it.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
             it.expandsSelectedPaths = true
@@ -52,6 +52,9 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             this.root.add(ScanResultTreeNode(result))
         }
         this.tree.model = DefaultTreeModel(this.root)
+        for (i in 0 until this.tree.rowCount) {
+            this.tree.expandRow(i)
+        }
     }
 
     override fun valueChanged(e: TreeSelectionEvent) {

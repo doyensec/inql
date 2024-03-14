@@ -115,11 +115,12 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     }
 
     override fun burpDeserialize(obj: PersistedObject) {
-        val prevTabCnt = this.tabCount
         this.tabFactory.tabIdx = obj.getInteger("tabFactoryIdx")
         val tabIdList = obj.getStringList("tabs")
         if (tabIdList != null) {
-            Logger.debug("Loading ${tabIdList.size} tab(s) from project file")
+            Logger.error("Loading ${tabIdList.size} tab(s) from project file")
+            if (!tabIdList.isEmpty()) this.removeAll()
+
             for (tabId in tabIdList) {
                 val id = tabId.substring(tabId.lastIndexOf('.') + 1).toInt()
                 Logger.debug("Loading tab with id: $id")
@@ -129,10 +130,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
                 tab.setTabTitle(tab.getTabTitle())
             }
         }
-        // Remove pre-existing tabs
-        for (tab in 0..<prevTabCnt) {
-            this.tabbedPane.removeTabAt(tab)
-        }
+
         // Update Introspection Cache
         this.introspectionCache.populateFromScanner()
     }

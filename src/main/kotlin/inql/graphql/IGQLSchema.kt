@@ -56,4 +56,6 @@ abstract class IGQLSchema : BurpSerializable {
         }
         return sb.toString()
     }
+
+    abstract fun getCycleDetectionResultsAsText(): String?
 }

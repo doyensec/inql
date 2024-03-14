@@ -14,6 +14,24 @@ import javax.swing.event.ChangeListener
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import kotlin.math.min
+import javax.swing.ImageIcon;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import com.formdev.flatlaf.extras.FlatSVGIcon
+import javax.swing.JButton
+import java.lang.ClassLoader.getSystemResourceAsStream
+import java.awt.Dimension
+import java.awt.FlowLayout
+import javax.swing.JLabel
+import kotlin.math.*
+import com.formdev.flatlaf.ui.FlatTabbedPaneUI
+import javax.swing.plaf.ComponentUI
+import com.formdev.flatlaf.FlatLightLaf
+import com.formdev.flatlaf.FlatClientProperties
+import com.formdev.flatlaf.extras.components.*
+import java.io.InputStream
 
 class Label(text: String, bold: Boolean = false, big: Boolean = false) : JLabel(text) {
     init {
@@ -49,7 +67,9 @@ open class BorderPanel(val top: Int, val left: Int, val bottom: Int, val right: 
     constructor(vertical: Int, horizontal: Int) : this(vertical, horizontal, vertical, horizontal)
 }
 
-open class FlowPanel(val alignment: Int, val gap: Int = 5) : JPanel() {
+open class FlatPanel : JPanel(), FlatStyleableComponent
+
+open class FlowPanel(val alignment: Int, val gap: Int = 5) : FlatPanel() {
     init {
         if (alignment < FlowLayout.LEFT || alignment > FlowLayout.TRAILING) throw Exception("FlowPanel called with wrong alignment value: $alignment")
         val hgap = if (alignment < FlowLayout.LEADING) gap else 0
@@ -58,21 +78,23 @@ open class FlowPanel(val alignment: Int, val gap: Int = 5) : JPanel() {
     }
 }
 
-class BoxPanel(val axis: Int, val gap: Int = 5, vararg components: Component) : JPanel() {
+open class BoxPanel(val axis: Int, val gap: Int = 5, vararg components: Component) : FlatPanel() {
     init {
         if (axis < BoxLayout.X_AXIS || axis > BoxLayout.PAGE_AXIS) throw Exception("BoxPanel called with wrong axis value: $axis")
         this.layout = BoxLayout(this, axis)
         components.forEach { c ->
             this.add(c)
-            this.add(
-                if (axis == BoxLayout.X_AXIS) {
-                    Box.createHorizontalStrut(gap)
-                } else {
-                    Box.createVerticalStrut(
-                        gap,
-                    )
-                },
-            )
+            if (gap > 0) {
+                this.add(
+                    if (axis == BoxLayout.X_AXIS) {
+                        Box.createHorizontalStrut(gap)
+                    } else {
+                        Box.createVerticalStrut(
+                            gap,
+                        )
+                    },
+                )
+            }
         }
     }
 }
@@ -211,8 +233,22 @@ class TextArea(description: String, val rows: Int, val cols: Int) :
     }
 }
 
-open class TabbedPane : BorderPanel() {
-    val tabbedPane = JTabbedPane()
+open class InQLTabbedPane: TabbedPane() {
+    init {
+        tabbedPane.apply {
+            // Add "Settings" button on the right end
+            setTrailingComponent(
+                BorderPanel(-2, 0, 2, 0).apply {
+                    add(SettingsTabButton())
+                }
+            )
+        }
+    }
+}
+
+
+open class TabbedPane(val editable: Boolean = false) : BorderPanel(0, 0) {
+    val tabbedPane = FlatTabbedPane()
 
     init {
         this.add(this.tabbedPane)
@@ -267,74 +303,65 @@ open class MessageEditor(val readOnly: Boolean = false) : JTabbedPane() {
     }
 }
 
-class Icon(val normal: Image, val hover: Image?, val selected: Image?)
+fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
+    // Attempt to get the resource as a stream; if null, return null early.
+    val stream: InputStream = FlatSVGIcon::class.java.classLoader.getResourceAsStream(resourcePath) ?: return null
 
-class ImgButton(val fallback: String, displayIcon: Icon?) : JButton() {
-    private var normalIcon: ImageIcon? = null
-    private var hoverIcon: ImageIcon? = null
-    private var selectedIcon: ImageIcon? = null
+    // Create the SVG icon from the stream.
+    val svgIcon = FlatSVGIcon(stream)
+
+    // Calculate the scaling factor based on desired height and original icon height.
+    val scalingFactor = height.toFloat() / svgIcon.iconHeight.toFloat()
+
+    // Return a new svgIcon derived with the scaling factor, or null if the original icon had a height of 0 to prevent division by zero.
+    return if (svgIcon.iconHeight > 0) svgIcon.derive(scalingFactor) else null
+}
+
+class SettingsTabButton() : JPanel() {
+    val text = "InQL Settings"
+    val resourcePath = "resources/Media/svg/settings.svg"
 
     init {
-        this.border = BorderFactory.createEmptyBorder()
-        this.text = fallback
-        if (displayIcon?.normal != null) {
-            this.normalIcon = ImageIcon(autoResize(displayIcon.normal))
-            this.icon = normalIcon
-            this.text = null
-            if (displayIcon.hover != null) {
-                this.hoverIcon = ImageIcon(autoResize(displayIcon.hover))
-                this.addMouseListener(ImageHoverListener(this))
+        layout = FlowLayout(FlowLayout.LEFT, 5, 0)
+        isOpaque = false // Make the panel transparent
+
+        // Add a vertical separator at the left-most part
+        val separator = JLabel("|").apply {
+            foreground = Color.LIGHT_GRAY
+        }
+        add(separator)
+
+        // Adding some horizontal space
+        add(Box.createHorizontalStrut(4))
+
+        // Add the clickable part
+        val clickablePart = JPanel()
+
+        // Load and add the SVG icon (note: the path is relative to the resources directory in the *Burp* JAR file)
+        val icon = loadSvgIcon(resourcePath, this.preferredSize.height)
+        icon?.let {
+            val iconLabel = JLabel(it)
+            clickablePart.add(iconLabel)
+        }
+
+        // Add the text label
+        val textLabel = JLabel(text)
+        clickablePart.add(textLabel)
+
+        clickablePart.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) {
+                SwingUtilities.invokeLater {
+                    SettingsWindow.getInstance().isVisible = true
+                }
             }
-            if (displayIcon.selected != null) {
-                this.selectedIcon = ImageIcon(autoResize(displayIcon.selected))
-                this.addMouseListener(ImageClickListener(this))
-            }
-        }
+        })
+        add(clickablePart)
     }
 
-    fun hover(active: Boolean) {
-        if (active) {
-            this.icon = this.hoverIcon
-        } else {
-            this.icon = this.normalIcon
-        }
-    }
-
-    fun selected(active: Boolean) {
-        if (active) {
-            this.icon = this.selectedIcon
-        } else {
-            this.icon = this.normalIcon
-        }
-    }
-
-    private fun autoResize(src: Image): Image {
-        val sz = this.preferredSize.height - this.insets.top
-        return src.getScaledInstance(sz, sz, Image.SCALE_SMOOTH)
-    }
-
-    class ImageHoverListener(private val btn: ImgButton) : MouseAdapter() {
-        override fun mouseEntered(e: MouseEvent?) {
-            super.mouseEntered(e)
-            btn.hover(true)
-        }
-
-        override fun mouseExited(e: MouseEvent?) {
-            super.mouseExited(e)
-            btn.hover(false)
-        }
-    }
-
-    class ImageClickListener(private val btn: ImgButton) : MouseAdapter() {
-        override fun mousePressed(e: MouseEvent?) {
-            super.mousePressed(e)
-            btn.selected(true)
-        }
-
-        override fun mouseReleased(e: MouseEvent?) {
-            super.mouseReleased(e)
-            btn.selected(false)
-        }
+    private fun autoScale(icon: FlatSVGIcon): FlatSVGIcon {
+        val height = this.preferredSize.height
+        val scalingFactor = height.toFloat() / icon.iconHeight
+        return icon.derive(scalingFactor)
     }
 }
 

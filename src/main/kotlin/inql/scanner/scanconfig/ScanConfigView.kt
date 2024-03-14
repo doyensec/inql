@@ -157,11 +157,11 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 2. Second block concerning file input
         rootContainer.let {
             // 2.1 First line - a big text label
-            it.add(Label("2. (Optional) Introspection schema file (JSON format)", big = true).withPanel(5))
+            it.add(Label("2. (Optional) GraphQL schema file (JSON or SDL format)", big = true).withPanel(5))
             it.add(
                 MultilineLabel(
                     "InQL can query schema directly from GraphQL server. " +
-                        "If a server does not allow introspection functionality, provide schema as a file (in JSON format). " +
+                        "If a server does not allow introspection functionality, provide schema as a file (in JSON or SDL format). " +
                         "URL still needs to be provided to generate sample queries.",
                 ),
             )

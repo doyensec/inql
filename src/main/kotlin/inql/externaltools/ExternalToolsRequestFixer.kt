@@ -142,7 +142,7 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
         var profileName = interceptedRequest.headers().get(INQL_HEADER)
         if (profileName == null || profileName == "") profileName = IntrospectionCache.NO_PROFILE
         Logger.debug("Searching cached schema with the following details: ${interceptedRequest.url()} | $profileName")
-        return this.inql.scanner.introspectionCache.get(interceptedRequest.url(), profileName)?.rawSchema
+        return this.inql.scanner.introspectionCache.get(interceptedRequest.url(), profileName)?.jsonSchema
     }
 
     private fun getProfileForRequest(interceptedRequest: InterceptedRequest): Profile? {

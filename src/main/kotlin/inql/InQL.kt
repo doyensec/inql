@@ -2,7 +2,6 @@ package inql
 
 import burp.Burp
 import burp.BurpExtender
-import burp.BurpIcons
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
 import inql.externaltools.ExternalToolsService
@@ -18,8 +17,11 @@ import java.awt.Component
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
 import javax.swing.SwingUtilities
+import javax.swing.*
+import java.awt.*
+import java.awt.event.*
 
-class InQL : TabbedPane(), SavesAndLoadData {
+class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     private val config = Config.getInstance()
     private val profiles = LinkedHashMap<String, Profile>()
@@ -31,6 +33,7 @@ class InQL : TabbedPane(), SavesAndLoadData {
 
     init {
         Burp.Montoya.logging().raiseInfoEvent("InQL ${BurpExtender.version} Started")
+        config.dumpContents()
 
         // Cleanup from previous versions
         // FIXME: Remove this once this is exposed through Settings UI
@@ -55,9 +58,8 @@ class InQL : TabbedPane(), SavesAndLoadData {
         // Register Burp Scanner Checks
         Burp.Montoya.scanner().registerScanCheck(BurpScannerCheck())
 
-        this.addTab("Scanner", this.scanner)
-        this.addTab("Attacker", this.attacker)
-        this.addSettingsTab()
+        this.addTab("InQL Scanner", this.scanner)
+        this.addTab("InQL Attacker", this.attacker)
 
         // Register the extension main tab
         Burp.Montoya.userInterface().registerSuiteTab("InQL", this)
@@ -144,17 +146,6 @@ class InQL : TabbedPane(), SavesAndLoadData {
         this.tabbedPane.selectedComponent = tab
     }
 
-    private fun addSettingsTab() {
-        val button = ImgButton("Settings", BurpIcons.CONFIG)
-        button.background = this.background
-        button.isFocusable = false
-        button.addActionListener { SwingUtilities.invokeLater { SettingsWindow.getInstance().isVisible = true } }
-        val idx = this.tabbedPane.tabCount
-        this.addTab("Settings", JPanel())
-        this.tabbedPane.setTabComponentAt(idx, button)
-        this.tabbedPane.setEnabledAt(idx, false)
-    }
-
     override val saveStateKey: String
         get() = "InQL_Main"
 
@@ -166,21 +157,22 @@ class InQL : TabbedPane(), SavesAndLoadData {
     }
 
     override fun burpSerialize(): PersistedObject {
-        val obj = PersistedObject.persistedObject()
-        obj.setStringList("profiles", getSaveStateKeys(this.profiles.values))
-        return obj
+//        val obj = PersistedObject.persistedObject()
+//        obj.setStringList("profiles", getSaveStateKeys(this.profiles.values))
+//        return obj
+        return PersistedObject.persistedObject()
     }
 
     override fun burpDeserialize(obj: PersistedObject) {
-        val profilesLst = obj.getStringList("profiles")
-        if (profilesLst != null) {
-            for (profileId in profilesLst) {
-                val p = Profile.Deserializer(profileId).get() ?: continue
-                this.profiles[p.id] = p
-            }
-        }
+ //       val profilesLst = obj.getStringList("profiles")
+ //       if (profilesLst != null) {
+ //           for (profileId in profilesLst) {
+ //               val p = Profile.Deserializer(profileId).get() ?: continue
+ //               this.profiles[p.id] = p
+ //           }
+ //       }
 
-        this.scanner.loadFromProjectFile()
-        this.attacker.loadFromProjectFile()
+ //       this.scanner.loadFromProjectFile()
+ //       this.attacker.loadFromProjectFile()
     }
 }

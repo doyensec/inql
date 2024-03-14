@@ -24,6 +24,7 @@ import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
 import javax.swing.JPanel
+import com.google.gson.Gson
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
     companion object {
@@ -192,14 +193,26 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     private suspend fun analyze() {
         // Get the schema
-        val jsonSchema: String?
+        var jsonSchema: String?
+        var sdlSchema: String?
+
         if (this.fileSchema != null && this.fileSchema!!.isNotBlank()) {
             Logger.info("GraphQL schema supplied as a file: ${this.fileSchema}")
             try {
                 // FIXME: This is not ideal for big files,
                 //  once GQLSpection is ported to Kotlin we can find a more suitable solution
                 //  such as using a reader
-                jsonSchema = File(this.fileSchema!!).readText()
+                val fileContent = File(this.fileSchema!!).readText()
+                try {
+                    Gson().fromJson(fileContent, Any::class.java)
+                    // The file is a valid JSON, assume it's an introspection schema
+                    jsonSchema = fileContent
+                    sdlSchema = SchemaTools.jsonToSdl(jsonSchema)
+                } catch (e: Exception) {
+                    // Assume the file is GraphQL schema in SDL format
+                    sdlSchema = fileContent
+                    jsonSchema = SchemaTools.sdlToJson(sdlSchema)
+                }
             } catch (e: Exception) {
                 scanFailed("Exception raised while reading file")
                 return
@@ -214,13 +227,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             if (jsonSchema == null) {
                 scanFailed("Introspection seems disabled for this endpoint")
                 return
+            } else {
+                sdlSchema = SchemaTools.jsonToSdl(jsonSchema)
             }
         }
 
-        // Invoke GQLSpection to analyze it
+        // Invoke GQLSpection to analyze GraphQL schema
         val schema: GQLSchemaMemoryBackedImpl?
         try {
-            schema = this.inql.gqlspection.parseSchema(jsonSchema)
+            schema = this.inql.gqlspection.parseSchema(jsonSchema!!)
         } catch (e: Exception) {
             scanFailed("Failed to deserialize JSON schema")
             return
@@ -231,13 +246,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
 
         // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, jsonSchema)
+        val sr = ScanResult(this.host!!, this.requestTemplate, schema, jsonSchema, sdlSchema)
 
         // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
         // and multiple scans at the same time for the same ScannerTab are not allowed
         this.scanResults.add(sr)
 
         // Update this tab in burp's project file
+        this.setTabTitle(host!!)
         this.scanner.updateChildObjectAsync(this)
         this.scanCompleted()
     }
