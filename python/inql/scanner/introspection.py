@@ -120,7 +120,8 @@ def _analyze(url, filename=None, explicit_headers=None):
 
     # Create report directory (example: api.example.com/2023-02-15_102254)
     date = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    report_dir = "{}/{}".format(host, date)
+    # replaces : with _ for windows file naming restrictions (example: api.example.com_1234/2023-02-15_102254)
+    report_dir = "{}/{}".format(host.replace(':', '_'), date)
     queries_dir = os.path.join(report_dir, 'queries')
     mutations_dir = os.path.join(report_dir, 'mutations')
     try:
