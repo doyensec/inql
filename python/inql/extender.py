@@ -23,8 +23,6 @@ from .traffic_scan.scan_handler import BurpScannerCheck
 from .utils.decorators import unroll_exceptions
 from .utils.pyswing import panel
 
-DEBUG = True
-
 
 class MainTab(ITab):
     """Main InQL interface - a Burp tab, that includes multiple subtabs."""
@@ -75,7 +73,7 @@ class BurpExtenderPython(IExtensionStateListener):
         config.delete('ScannerPanel', 'global')
 
         # Dump configs (at the INFO level)
-        config.debug_contents()
+        #config.debug_contents()
 
         # creating temp dir
         self._tmpdir = tempfile.mkdtemp()
