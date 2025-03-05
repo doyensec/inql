@@ -90,20 +90,22 @@ class PyGQLSpection private constructor() : IGQLSpection {
             Logger.debug("Extracting queries...")
             interpreter.exec(
                 """
-                for query in parsed.query.fields:
-                    if not query.name: continue
-                    if not is_valid_graphql_name(query.name): continue
-                    queries[query.name] = parsed.generate_query(query, depth=$depth).to_string(pad=$pad)
+                if parsed.query:
+                    for query in parsed.query.fields:
+                        if not query.name: continue
+                        if not is_valid_graphql_name(query.name): continue
+                        queries[query.name] = parsed.generate_query(query, depth=$depth).to_string(pad=$pad)
                 """.trimIndent(),
             )
 
             Logger.debug("Extracting mutations...")
             interpreter.exec(
                 """
-                for mutation in parsed.mutation.fields:
-                    if not mutation.name: continue
-                    if not is_valid_graphql_name(mutation.name): continue
-                    mutations[mutation.name] = parsed.generate_mutation(mutation, depth=$depth).to_string(pad=$pad)
+                if parsed.mutation:
+                    for mutation in parsed.mutation.fields:
+                        if not mutation.name: continue
+                        if not is_valid_graphql_name(mutation.name): continue
+                        mutations[mutation.name] = parsed.generate_mutation(mutation, depth=$depth).to_string(pad=$pad)
                 """.trimIndent(),
             )
 
