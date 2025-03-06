@@ -111,8 +111,8 @@ class WebServer {
         // variables and headers are optional (can be null, not present or {})
         fun deserializeRequest(request: String): HttpRequest {
             val json = Gson().fromJson(request, JsonObject::class.java)
-            val server = json.get("server").asString
-            val path = java.net.URI(server).path
+            val target = json.get("target").asString
+            val path = java.net.URI(target).path
             val query = json.get("query").asString
             val variables = json.get("variables").asJsonObject
             val headers = json.get("headers").asJsonObject
@@ -133,7 +133,7 @@ class WebServer {
             }
 
             // Create HttpRequest object for Burp
-            val service = HttpService.httpService(server)
+            val service = HttpService.httpService(target)
             var httpRequest = HttpRequest.httpRequest()
                 .withService(service)
                 .withPath(path)
