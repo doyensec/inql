@@ -95,11 +95,8 @@ tasks:
       - task: web-item
         vars: { APP: 'graphiql' }
       - task: web-item
-        vars: { APP: 'playground' }
-      - task: web-item
         vars: { APP: 'voyager' }
-      - task: web-item
-        vars: { APP: 'altair' }
+
 
   web:
     cmds:

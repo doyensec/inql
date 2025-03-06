@@ -22,8 +22,6 @@ import java.util.*
 
         1. Serving web based GraphQL tools:
             - GraphiQL
-            - GraphQL Playground
-            - Altair
             - GraphQL Voyager
         2. "Send to Repeater/Intruder" webhook endpoints (from GraphiQL & Co)
 

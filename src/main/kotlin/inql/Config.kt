@@ -30,8 +30,6 @@ class Config private constructor() {
         "integrations.browser.external.command" to "",
         "integrations.graphiql" to true,
         "integrations.voyager" to true,
-        "integrations.playground" to false,
-        "integrations.altair" to false,
         "integrations.webserver.lazy" to true,
         "report.json" to true,
         "report.sdl" to true,

@@ -145,14 +145,6 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 CheckBox("Enable GraphQL Voyager")
             ),
             SettingsElement(
-                "integrations.playground",
-                CheckBox("Enable GraphQL Playground")
-            ),
-            SettingsElement(
-                "integrations.altair",
-                CheckBox("Enable Altair IDE")
-            ),
-            SettingsElement(
                 "integrations.browser.internal",
                 CheckBox("Use embedded Chromium when launching IDEs")
             ),
