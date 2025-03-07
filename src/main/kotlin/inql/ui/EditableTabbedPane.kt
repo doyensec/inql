@@ -138,11 +138,16 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
     private val cornerRadius = 10 // Adjust the corner radius as needed
     private val bottomBorderColor = Color(255, 102, 51) // Bottom border color
     private val bottomBorderThickness = 2 // Thickness of the bottom border
-    private val background = Color(230, 230, 230)
+    private val background = if (this.isDarkMode()) {
+                                    Color(100,100,100)
+                                } else {
+                                    Color(230, 230, 230)
+                                }
     var isSelected = false
 
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)
+
         val g2 = g.create() as Graphics2D
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
@@ -162,6 +167,10 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         g2.fillRect(0, height - bottomBorderThickness * 3, width, bottomBorderThickness * 2)
 
         g2.dispose()
+    }
+
+    private fun isDarkMode(): Boolean {
+        return (JPanel().getBackground().getRGB() == Color(50,51,52).getRGB())
     }
 
     // Ensures that the preferred size accounts for the border
