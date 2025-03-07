@@ -139,6 +139,7 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
     private val bottomBorderColor = Color(255, 102, 51) // Bottom border color
     private val bottomBorderThickness = 2 // Thickness of the bottom border
     private val background = Color(230, 230, 230)
+    var isSelected = false
 
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)
@@ -146,7 +147,11 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
         // Step 1: Draw the bottom border - a bottom-border-colored rounded rectangle
-        g2.color = bottomBorderColor
+        g2.color = if (isSelected) {
+            bottomBorderColor
+        } else {
+            background
+        }
         g2.fillRoundRect(0, 0, width, height, cornerRadius, cornerRadius)
 
         // Step 2: Draw the main body on top, leaving only the bottom border visible
@@ -187,17 +192,6 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         upper.border = BorderFactory.createEmptyBorder(2, 10, 2, 10)
         add(upper)
 
-//        val lower = BoxPanel(BoxLayout.X_AXIS, gap = 0)
-//        lower.border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
-//        lower.add(FlatPanel().apply {
-//            isOpaque = true
-//            style = "background: #f63; height: 1; insets: 0,0,0,0"// foreground: #f63; height: 3"
-//            maximumSize = Dimension(Integer.MAX_VALUE, 1) // 3 pixels high, full width
-//            //minimumSize = Dimension(0, 15)
-//            //foreground = Color.ORANGE // Color of the separator
-//            //background = Color.ORANGE // Needed if the separator isn't showing up
-//        })
-//        add(lower)
     }
 
     fun addCloseListener(listener: (EditableTab) -> Unit) {
@@ -232,6 +226,17 @@ open class EditableTabbedPane : TabbedPane() {
         }
 
     init {
+        var lastSelectedIndex = 0
+
+        tabbedPane.addChangeListener(ChangeListener {
+            val currentIndex = tabbedPane.selectedIndex
+            if (currentIndex != lastSelectedIndex) {
+                (tabbedPane.getTabComponentAt(currentIndex) as? EditableTab)?.isSelected = true
+                (tabbedPane.getTabComponentAt(lastSelectedIndex) as? EditableTab)?.isSelected = false
+                lastSelectedIndex = currentIndex
+            }
+        })
+
         tabbedPane.apply {
             setTabAreaInsets(Insets(0, 0, 0, 0))
             setTabInsets(Insets(0, 4, 2, 3))
