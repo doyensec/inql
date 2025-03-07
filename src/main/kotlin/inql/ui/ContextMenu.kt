@@ -48,16 +48,16 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     ) {
         this.sendRequestToRepeater()
     }
-    protected val sendToInqlScannerAction = MenuAction("Generate queries with InQL Scanner", null) {
+    protected val sendToInqlScannerAction = MenuAction("Generate queries", null) {
         this.sendRequestToInqlScanner()
     }
-    protected val sendToInqlAttackerAction = MenuAction("Batch attack with InQL Attacker", null) {
+    protected val sendToInqlAttackerAction = MenuAction("Batch attack", null) {
         this.sendRequestToInqlAttacker()
     }
-    protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL (GraphQL IDE)", null) {
+    protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL", null) {
         this.sendRequestToGraphiQL()
     }
-    protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager (GraphQL schema visualizer)", null) {
+    protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager", null) {
         this.sendRequestToVoyager()
     }
 

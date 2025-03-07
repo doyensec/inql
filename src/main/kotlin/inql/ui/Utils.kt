@@ -318,7 +318,7 @@ fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
 }
 
 class SettingsTabButton() : JPanel() {
-    val text = "InQL Settings"
+    val text = "Settings"
     val resourcePath = "resources/Media/svg/settings.svg"
 
     init {
