@@ -294,11 +294,15 @@ open class EditableTabbedPane : TabbedPane() {
         this.tabbedPane.setTabComponentAt(idx, tab)
     }
 
-    fun newTab(): JComponent {
+    fun newTab(titleArg: String? = null): JComponent {
         if (!tabFactoryInitiated) throw Exception("Trying to invoke new tab creation without TabComponentFactory present")
         val idx = this.tabCount
         val component = this.tabComponentFactory!!.createComponent(idx)
-        val title = this.tabComponentFactory!!.getNewTabTitle(idx, component)
+        val title = if (titleArg == null) {
+            this.tabComponentFactory!!.getNewTabTitle(idx, component)
+        } else {
+            titleArg
+        }
         this.insertTab(title, component, idx)
         this.tabbedPane.selectedIndex = idx
         return component

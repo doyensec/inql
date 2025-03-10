@@ -88,8 +88,9 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     }
 
     fun newTabFromRequest(req: HttpRequest) {
-        val tab = this.newTab() as ScannerTab
-        tab.url = req.url()
+        val r_url = req.url()
+        val tab = this.newTab(titleArg=r_url) as ScannerTab
+        tab.url = r_url
         tab.requestTemplate = req.withBody("")
         this.inql.focusTab(this.inql.scanner)
     }
