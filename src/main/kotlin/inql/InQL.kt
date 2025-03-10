@@ -59,7 +59,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         Burp.Montoya.scanner().registerScanCheck(BurpScannerCheck())
 
         this.addTab("Scanner", this.scanner)
-        this.addTab("Attacker", this.attacker)
+        this.addTab("Batch Queries", this.attacker)
 
         // Register the extension main tab
         Burp.Montoya.userInterface().registerSuiteTab("InQL", this)
