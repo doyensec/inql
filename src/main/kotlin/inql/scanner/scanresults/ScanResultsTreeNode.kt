@@ -1,33 +1,26 @@
 package inql.scanner.scanresults
 
 import inql.Config
-import inql.graphql.IGQLSchema
+import inql.graphql.GQLSchema
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
-import inql.Logger
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import graphql.introspection.IntrospectionResultToSchema
-import graphql.language.Document
-import java.util.HashMap
-import graphql.schema.idl.SchemaPrinter
-
-open class TreeNodeWithCustomLabel(val label: String, obj: Any) : DefaultMutableTreeNode(obj) {
+open class TreeNodeWithCustomLabel(val label: String, obj: Any?) : DefaultMutableTreeNode(obj) {
     override fun toString(): String {
         return this.label
     }
 }
 
-class GQLElementListTreeNode(label: String, val map: Map<String, IGQLSchema.IGQLElement>) :
-    TreeNodeWithCustomLabel(label, map) {
+class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
+    TreeNodeWithCustomLabel(label, null) {
     init {
-        map.keys.toList().sorted().forEach {
-            this.add(DefaultMutableTreeNode(map[it]))
+        list.forEach {
+            this.add(TreeNodeWithCustomLabel(it, GQLQueryElement(it, type, schema)))
         }
     }
 }
+
 
 class ScanResultTreeNode(val scanResult: ScanResult) :
     TreeNodeWithCustomLabel(scanResult.host, scanResult) {
@@ -41,9 +34,12 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         val config = Config.getInstance()
 
         // Add queries and mutations
-        this.add(GQLElementListTreeNode("Queries", gqlSchema.getQueries()))
-        this.add(GQLElementListTreeNode("Mutations", gqlSchema.getMutations()))
+        this.add(GQLElementListTreeNode("Queries", gqlSchema.queries.keys.sorted(), GQLSchema.OperationType.QUERY, gqlSchema))
+        this.add(GQLElementListTreeNode("Mutations", gqlSchema.mutations.keys.sorted(), GQLSchema.OperationType.MUTATION, gqlSchema))
+        this.add(GQLElementListTreeNode("Subscriptions", gqlSchema.subscriptions.keys.sorted(), GQLSchema.OperationType.SUBSCRIPTION, gqlSchema))
 
+
+        /* TODO: implement PoI
         // Add Points of Interest
         if (config.getBoolean("report.poi") == true) {
             val pois = gqlSchema.getPointsOfInterest()
@@ -75,7 +71,9 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
             }
             this.add(poiNode)
         }
+         */
 
+        /* TODO: implement cycle detection
         // Add cycle detection results
         if (config.getBoolean("report.cycles") == true) {
             val cycleDetectionResults = gqlSchema.getCycleDetectionResultsAsText()
@@ -83,6 +81,7 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
                 this.add(TreeNodeWithCustomLabel("Cycle Detection", cycleDetectionResults))
             }
         }
+         */
 
         // Add request template
         this.add(TreeNodeWithCustomLabel("Request Template", scanResult.requestTemplate.withBody("").toString()))

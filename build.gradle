@@ -27,7 +27,6 @@ dependencies {
     implementation 'com.formdev:flatlaf:3.4'
     implementation 'com.formdev:flatlaf-extras:3.4'
     implementation 'com.graphql-java:graphql-java:21.5'
-    implementation files('lib/GQLSpektion.jar')
 }
 
 java {

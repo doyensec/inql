@@ -16,7 +16,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
 import inql.InQL
 import inql.Logger
-import inql.graphql.Utils.Companion.isGraphQLRequest
+import inql.graphql.Utils.isGraphQLRequest
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
 import java.awt.Component
