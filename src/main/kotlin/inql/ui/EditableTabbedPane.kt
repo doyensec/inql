@@ -10,9 +10,14 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import com.formdev.flatlaf.extras.components.*
 
-class EditableTabTitle(title: String, val component: Component) : JTextField(title) {
+class EditableTabTitle(title: String, val component: Component, val isDarkMode: Boolean) : JTextField(title) {
     private val changeListeners = ArrayList<(EditableTabTitle) -> Unit>()
     private var valueBeforeChange = this.text
+    private val background = if (this.isDarkMode) {
+                                    Color(61,61,60)
+                                } else {
+                                    Color(230, 230, 230)
+                                }
 
     // A bunch of listeners to handle tab title change (these are fired when the title has been changed, not during editing)
     fun addChangeListener(listener: (EditableTabTitle) -> Unit) {
@@ -21,7 +26,7 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
 
     fun autoSize() {
         val textWidth = this.getFontMetrics(this.font).stringWidth(this.text)
-        this.preferredSize = Dimension(textWidth + 5, this.preferredSize.height)
+        this.preferredSize = Dimension(textWidth + 2, this.preferredSize.height)
         if (parent != null) {
             parent.revalidate()
         }
@@ -57,6 +62,8 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
         this.addFocusListener(FocusHandler())
         // Resize the tab title when the text changes
         this.document.addDocumentListener(AutoSizeListener(this))
+        this.setBackground(background)
+        this.autoSize()
     }
 
     class AutoSizeListener(val title: EditableTabTitle) : DocumentListener {
@@ -131,15 +138,15 @@ class EditableTabTitle(title: String, val component: Component) : JTextField(tit
     }
 }
 
-class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, gap = 0) {
+class EditableTab(val tabTitle: EditableTabTitle, val isDarkMode: Boolean) : BoxPanel(BoxLayout.Y_AXIS, gap = 0) {
     val closeButton = loadSvgIcon("resources/Media/svg/close.svg", 7)?.let { JButton(it) } ?: JButton("⨉")
     val closeListeners = ArrayList<(EditableTab) -> Unit>()
 
     private val cornerRadius = 10 // Adjust the corner radius as needed
     private val bottomBorderColor = Color(255, 102, 51) // Bottom border color
     private val bottomBorderThickness = 2 // Thickness of the bottom border
-    private val background = if (this.isDarkMode()) {
-                                    Color(100,100,100)
+    private val background = if (this.isDarkMode) {
+                                    Color(61,61,60)
                                 } else {
                                     Color(230, 230, 230)
                                 }
@@ -169,9 +176,7 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         g2.dispose()
     }
 
-    private fun isDarkMode(): Boolean {
-        return (JPanel().getBackground().getRGB() == Color(50,51,52).getRGB())
-    }
+    
 
     // Ensures that the preferred size accounts for the border
     override fun getPreferredSize(): Dimension {
@@ -189,7 +194,7 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         this.closeButton.isContentAreaFilled = false
         this.closeButton.isBorderPainted = false
         this.closeButton.iconTextGap = 0
-        this.closeButton.margin = Insets(4, 0, 0, 0)
+        this.closeButton.margin = Insets(4, 4, 0, 0)
         this.closeButton.addActionListener {
             this.closeListeners.forEach { it(this) }
         }
@@ -198,9 +203,8 @@ class EditableTab(val tabTitle: EditableTabTitle) : BoxPanel(BoxLayout.Y_AXIS, g
         upper.isOpaque = false
         upper.add(tabTitle)
         upper.add(this.closeButton)
-        upper.border = BorderFactory.createEmptyBorder(2, 10, 2, 10)
+        upper.border = BorderFactory.createEmptyBorder(3, 14, 3, 14)
         add(upper)
-
     }
 
     fun addCloseListener(listener: (EditableTab) -> Unit) {
@@ -291,9 +295,9 @@ open class EditableTabbedPane : TabbedPane() {
     }
 
     fun insertTab(title: String, component: JComponent, idx: Int) {
-        val editableTitle = EditableTabTitle(title, component)
+        val editableTitle = EditableTabTitle(title, component, this.isDarkMode())
         this.changeListeners.forEach { editableTitle.addChangeListener(it) }
-        val tab = EditableTab(editableTitle)
+        val tab = EditableTab(editableTitle, this.isDarkMode())
         tab.addCloseListener { this.closeTabHandler(it) }
         this.tabbedPane.insertTab(title, null, component, null, idx)
         this.tabbedPane.setTabComponentAt(idx, tab)
@@ -325,6 +329,10 @@ open class EditableTabbedPane : TabbedPane() {
 
     private fun closeTabHandler(tab: EditableTab) {
         this.closeTab(this.tabbedPane.indexOfTabComponent(tab))
+    }
+
+    private fun isDarkMode(): Boolean {
+        return (JPanel().getBackground().getRGB() == Color(50,51,52).getRGB())
     }
 
     open fun closeTab(idx: Int) {
