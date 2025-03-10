@@ -216,6 +216,7 @@ interface ITabComponentFactory {
 open class EditableTabbedPane : TabbedPane() {
     private var tabComponentFactory: ITabComponentFactory? = null
     private val changeListeners = ArrayList<(EditableTabTitle) -> Unit>()
+    private var lastSelectedIndex = 0
     private val tabFactoryInitiated: Boolean
         get() = this.tabComponentFactory != null
     val tabCount: Int
@@ -235,15 +236,19 @@ open class EditableTabbedPane : TabbedPane() {
         }
 
     init {
-        var lastSelectedIndex = 0
-
         tabbedPane.addChangeListener(ChangeListener {
-            val currentIndex = tabbedPane.selectedIndex
-            if (currentIndex != lastSelectedIndex) {
-                (tabbedPane.getTabComponentAt(currentIndex) as? EditableTab)?.isSelected = true
-                (tabbedPane.getTabComponentAt(lastSelectedIndex) as? EditableTab)?.isSelected = false
-                lastSelectedIndex = currentIndex
+            if (tabbedPane.selectedIndex != lastSelectedIndex) {
+                for (i: Int in 0 until tabbedPane.getTabCount()) {
+                    if (i == tabbedPane.selectedIndex) {
+                        (tabbedPane.getTabComponentAt(i) as? EditableTab)?.isSelected = true
+                    } else {
+                        (tabbedPane.getTabComponentAt(i) as? EditableTab)?.isSelected = false
+                    }
+                }
+
+                lastSelectedIndex = tabbedPane.selectedIndex
             }
+
         })
 
         tabbedPane.apply {
