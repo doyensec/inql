@@ -157,7 +157,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
  //           }
  //       }
 
- //       this.scanner.loadFromProjectFile()
- //       this.attacker.loadFromProjectFile()
+        this.scanner.loadFromProjectFile()
+        this.attacker.loadFromProjectFile()
     }
 }

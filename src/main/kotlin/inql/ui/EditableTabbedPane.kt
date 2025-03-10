@@ -1,14 +1,10 @@
 package inql.ui
 
-import inql.Logger
 import java.awt.*
 import java.awt.event.*
 import javax.swing.*
-import javax.swing.event.ChangeEvent
-import javax.swing.event.ChangeListener
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
-import com.formdev.flatlaf.extras.components.*
 
 class EditableTabTitle(title: String, val component: Component) : JTextField(title) {
     private val changeListeners = ArrayList<(EditableTabTitle) -> Unit>()
@@ -263,8 +259,6 @@ open class EditableTabbedPane : TabbedPane() {
     fun setTabComponentFactory(tabFactory: ITabComponentFactory) {
         if (this.tabComponentFactory != null) throw Exception("TabComponentFactory already set")
         this.tabComponentFactory = tabFactory
-        // Add first tab
-        newTab()
     }
 
     override fun addTab(title: String, component: JComponent) {
