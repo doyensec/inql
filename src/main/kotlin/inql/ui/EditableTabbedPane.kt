@@ -222,8 +222,7 @@ open class EditableTabbedPane : TabbedPane() {
         get() = this.tabComponentFactory != null
     val tabCount: Int
         get() {
-            var count = this.tabbedPane.tabCount
-            return count
+            return this.tabbedPane.tabCount
         }
 
     val tabs: List<Component>
@@ -237,7 +236,7 @@ open class EditableTabbedPane : TabbedPane() {
         }
 
     init {
-        tabbedPane.addChangeListener(ChangeListener {
+        tabbedPane.addChangeListener {
             if (tabbedPane.selectedIndex != lastSelectedIndex) {
                 for (i: Int in 0 until tabbedPane.getTabCount()) {
                     if (i == tabbedPane.selectedIndex) {
@@ -250,7 +249,7 @@ open class EditableTabbedPane : TabbedPane() {
                 lastSelectedIndex = tabbedPane.selectedIndex
             }
 
-        })
+        }
 
         tabbedPane.apply {
             setTabAreaInsets(Insets(0, 0, 0, 0))
