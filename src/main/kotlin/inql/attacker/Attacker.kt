@@ -105,21 +105,12 @@ Current limitations: only one placeholder, no variables.
 """)
         editorPane.setEditable(false)
 
-
-
         // Left section
         val leftSection = JSplitPane(
             JSplitPane.VERTICAL_SPLIT,
             JScrollPane(editorPane),
             reqEditorPanel,
         )
-//        val leftSection = BorderPanel(5, 5).also {
-//            it.add(
-//                editorPane,
-//                BorderLayout.NORTH,
-//            )
-//            it.add(reqEditorPanel, BorderLayout.CENTER)
-//        }
 
         Burp.Montoya.userInterface().applyThemeToComponent(leftSection) // TODO: check if necessary
 
