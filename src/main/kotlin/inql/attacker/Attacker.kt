@@ -15,7 +15,6 @@ import inql.savestate.getSaveStateKeys
 import inql.ui.BorderPanel
 import inql.ui.ErrorDialog
 import inql.ui.MessageEditor
-import inql.ui.MultilineLabel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,6 +22,8 @@ import java.awt.BorderLayout
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
 import java.io.File
+import java.awt.Color
+import java.awt.Font
 import java.lang.Integer.max
 import java.lang.Integer.min
 import javax.swing.*
@@ -32,7 +33,13 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private val attacks = ArrayList<Attack>()
     private val urlField = JTextField()
-    private val sendButton = JButton("Send").also { it.addActionListener(this) }
+    private val sendButton = JButton("Send").also { 
+        it.addActionListener(this) 
+        it.background = Color(255, 88, 18)
+        it.foreground = Color.WHITE
+        it.font = it.font.deriveFont(Font.BOLD)
+        it.isBorderPainted = false
+    }
     private val requestEditor = Burp.Montoya.userInterface().createHttpRequestEditor()
     private val historyRequestViewer = MessageEditor(readOnly = true)
     private val historyLog = HistoryLog(this.attacks) { this.historyTableSelectionListener(it) }
@@ -64,25 +71,56 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
             it.add(this.requestEditor.uiComponent(), BorderLayout.CENTER)
         }
 
+        val editorPane = JEditorPane()
+        editorPane.setContentType("text/html")
+        editorPane.setText("""
+<h2>Batch Queries</h2>
+This tab allows sending hundreds of queries inside of a single HTTP request. This may be useful for testing 2FA bypasses, DoSes, and more!
+
+<h2>How to use</h2>
+To send a request with 3 batched queries, use one of the placeholders described below and add them in front of
+the query to send. For example:
+<pre> 
+{
+    "query": "query { $[INT:0:3] verify2FA(code: \"1234\") { status } }"
+}
+</pre>
+
+This will generate and send the following request:
+<pre> 
+{
+    "query": "query { 
+        op0:   verify2FA(code: \"1234\") { status }  
+        op1:   verify2FA(code: \"1234\") { status }  
+        op2:   verify2FA(code: \"1234\") { status }  
+    }"
+}
+</pre>
+
+Supported placeholders:<br/>
+- <b>${'$'}[INT:first:last]</b> - first and last are integers, works like <code>range(first,last)</code> in Python<br/>
+- <b>${'$'}[FILE:path:first:last]</b> - absolute path to a file and the (optional) range of lines (first line is 1 not 0)<br/>
+<br/>
+Current limitations: only one placeholder, no variables.
+""")
+        editorPane.setEditable(false)
+
+
+
         // Left section
-        val leftSection = BorderPanel(5, 5).also {
-            it.add(
-                MultilineLabel(
-                    """
+        val leftSection = JSplitPane(
+            JSplitPane.VERTICAL_SPLIT,
+            JScrollPane(editorPane),
+            reqEditorPanel,
+        )
+//        val leftSection = BorderPanel(5, 5).also {
+//            it.add(
+//                editorPane,
+//                BorderLayout.NORTH,
+//            )
+//            it.add(reqEditorPanel, BorderLayout.CENTER)
+//        }
 
-                Supported placeholders:
-
-                    ${'$'}[INT:first:last] - first and last are integers, both are included in the range
-                    ${'$'}[FILE:path:first:last] - absolute path and the (optional) range of lines (first line is 1 not 0)
-
-                Current limitations: only one placeholder, no variables.
-
-                    """.trimIndent(),
-                ),
-                BorderLayout.NORTH,
-            )
-            it.add(reqEditorPanel, BorderLayout.CENTER)
-        }
         Burp.Montoya.userInterface().applyThemeToComponent(leftSection) // TODO: check if necessary
 
         // Right section
@@ -157,8 +195,8 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
                     // $[INT:first:last]
                     start = args[0].toInt()
                     end = args[1].toInt()
-                    for (n in start..end) {
-                        exploit.append(" op${n + 1}: $leading$n$trailing{$query}$sfx")
+                    for (n in start..<end) {
+                        exploit.append(" op${n}: $leading$trailing{$query}$sfx")
                     }
                 }
 
