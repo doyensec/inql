@@ -1,7 +1,9 @@
 package inql.scanner.scanresults
 
+import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
+import inql.graphql.poi.POIScanner
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
@@ -39,39 +41,37 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         this.add(GQLElementListTreeNode("Subscriptions", gqlSchema.subscriptions.keys.sorted(), GQLSchema.OperationType.SUBSCRIPTION, gqlSchema))
 
 
-        /* TODO: implement PoI
+
         // Add Points of Interest
         if (config.getBoolean("report.poi") == true) {
-            val pois = gqlSchema.getPointsOfInterest()
+            val poiScanner = POIScanner(gqlSchema)
+            val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+
             val poiNode = TreeNodeWithCustomLabel("Points of Interest", pois)
 
             val poiFormat = config.getString("report.poi.format")
             if (poiFormat == "text" || poiFormat == "both") {
-                for ((category, findings) in pois) {
-                    if (findings.isEmpty()) continue
+                for ((category, results) in pois) {
+                    if (results.isEmpty()) continue
+
                     val categoryText = StringBuilder()
-                    for (poi in findings) {
-                        categoryText.appendLine("- ${poi.name()}")
-                        categoryText.appendLine()
-                        if (poi.content().isNotBlank()) {
-                            categoryText.appendLine("  ${poi.content()}")
-                            categoryText.appendLine()
-                            categoryText.appendLine()
-                        }
+                    categoryText.appendLine("- $category")
+
+                    for (poi in results) {
+                        categoryText.appendLine("  ${poi.path}")
                     }
                     val categoryNode = TreeNodeWithCustomLabel(category, categoryText.toString())
                     poiNode.add(categoryNode)
                 }
             }
             if (poiFormat == "json" || poiFormat == "both") {
-                val jsonPoi = gqlSchema.getPointsOfInterestAsJson()
+                val jsonPoi = Gson().toJson(pois)
                 if (!jsonPoi.isNullOrBlank()) {
-                    poiNode.add(TreeNodeWithCustomLabel("PointsOfInterest.json", JsonPrettifier.prettify(jsonPoi)))
+                    poiNode.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi)))
                 }
             }
             this.add(poiNode)
         }
-         */
 
         /* TODO: implement cycle detection
         // Add cycle detection results

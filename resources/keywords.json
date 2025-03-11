@@ -1,0 +1,179 @@
+[
+  {
+    "name": "Auth",
+    "id": "auth",
+    "keywords": [
+      "2fa",
+      "access.?key",
+      "account",
+      "api.?key",
+      "auth",
+      "client.?id",
+      "coordinate",
+      "credential",
+      "first.?factor",
+      "geo.?location",
+      "gps",
+      "ip.?address",
+      "login",
+      "logout",
+      "mfa",
+      "one.?time.?password",
+      "otp",
+      "password",
+      "permission",
+      "pwd",
+      "rbac",
+      "register",
+      "registration",
+      "role",
+      "second.?factor",
+      "secret",
+      "session",
+      "sign.?in",
+      "sign.?out",
+      "token",
+      "two.?factor"
+    ]
+  },
+  {
+    "name": "Priviliged",
+    "id": "priviliged",
+    "keywords": [
+      "access.?control",
+      "access.?level",
+      "admin",
+      "root",
+      "sudo",
+      "super.?user"
+    ]
+  },
+  {
+    "name": "PII",
+    "id": "pii",
+    "keywords": [
+      "address",
+      "birth.?date",
+      "birth.?day",
+      "birth.?month",
+      "birth.?year",
+      "city",
+      "country",
+      "date.?of.?birth",
+      "dob",
+      "driver.?license",
+      "email",
+      "first.?name",
+      "full.?name",
+      "id.?num",
+      "last.?name",
+      "national.?id",
+      "passport",
+      "phone",
+      "postal.?code",
+      "profile",
+      "social.?insurance",
+      "social.?security",
+      "ssn",
+      "state",
+      "tax.?id",
+      "taxpayer.?id",
+      "zip"
+    ]
+  },
+  {
+    "name": "Payment",
+    "id": "payment",
+    "keywords": [
+      "billing",
+      "card.?code",
+      "card.?expiration",
+      "card.?holder",
+      "card.?number",
+      "card.?security",
+      "card.?validation",
+      "card.?verification",
+      "credit.?card",
+      "currency",
+      "cvc2",
+      "cvv2",
+      "debit.?card",
+      "invoice",
+      "payment",
+      "price",
+      "subscription"
+    ]
+  },
+  {
+    "name": "Database",
+    "id": "database",
+    "keywords": [
+      "cassandra",
+      "column",
+      "create",
+      "database",
+      "db",
+      "delete",
+      "document.?db",
+      "drop",
+      "findone",
+      "graph.?db",
+      "insert",
+      "key.?value.?db",
+      "mongodb",
+      "mssql",
+      "mysql",
+      "nosql",
+      "oracle",
+      "postgresql",
+      "rdbms",
+      "record",
+      "redis",
+      "relational.?db",
+      "row",
+      "sql",
+      "sqlite",
+      "table",
+      "update"
+    ]
+  },
+  {
+    "name": "Debugging",
+    "id": "debugging",
+    "keywords": [
+      "audit.?action",
+      "audit.?log",
+      "backup",
+      "debug",
+      "trace"
+    ]
+  },
+  {
+    "name": "Files",
+    "id": "files",
+    "keywords": [
+      "audio",
+      "base.?64",
+      "binary",
+      "document",
+      "file",
+      "image",
+      "media",
+      "upload",
+      "video"
+    ]
+  },
+  {
+    "name": "Deprecated",
+    "id": "deprecated",
+    "keywords": [
+      "deprecat",
+      "legacy",
+      "obsolete",
+      "old",
+      "outdated",
+      "unmaintained",
+      "unsupported"
+    ]
+  }
+]

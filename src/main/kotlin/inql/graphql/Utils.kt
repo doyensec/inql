@@ -4,6 +4,7 @@ import burp.api.montoya.http.message.requests.HttpRequest
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import graphql.schema.GraphQLModifiedType
+import graphql.schema.GraphQLScalarType
 import graphql.schema.GraphQLType
 import inql.utils.get
 
@@ -93,5 +94,11 @@ public fun formatComment(string: String, maxLength: Int = 100): String {
             outputType = outputType.wrappedType
         }
         return outputType
+    }
+
+    public fun isBuiltInScalarType(type: GraphQLScalarType): Boolean {
+        val builtinScalars = arrayOf("Int", "Float", "String", "Boolean", "ID")
+
+        return type.name in builtinScalars
     }
 }
