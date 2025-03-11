@@ -6,7 +6,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.Config
 import inql.Logger
-import inql.graphql.IGQLSchema
 import inql.graphql.formatting.Formatter
 import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
@@ -69,16 +68,17 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 this.payloadView.load(content)
                 this.sendToHandler.setEnabled(false)
             }
-            is IGQLSchema.IGQLElement -> {
+            is GQLQueryElement -> {
+                // If it's a query/mutation/subscription, enable the handler
                 this.payloadView.load(content)
-
-                if (content.type() != IGQLSchema.GQLElementType.MUTATION && content.type() != IGQLSchema.GQLElementType.QUERY) {
-                    this.currentNode = null
-                    this.sendToHandler.setEnabled(false)
-                } else {
-                    this.sendToHandler.setEnabled(true)
-                    this.currentNode = node
-                }
+                this.sendToHandler.setEnabled(true)
+                this.currentNode = node
+            }
+            is ScanResultElement -> {
+                // If it's something else, (PoI, Cycle detection), don't
+                this.payloadView.load(content.content())
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
             }
             else -> Logger.error("Unknown node type selected! ${content.javaClass.name}")
         }
@@ -98,7 +98,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
 
             val node = view.currentNode ?: return null
             val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
-            val nodeContent = node.userObject as IGQLSchema.IGQLElement
+            val nodeContent = node.userObject as ScanResultElement
             var query = nodeContent.content()
 
             if (shouldStripComments == true) {

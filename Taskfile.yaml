@@ -8,13 +8,6 @@ interval: '500ms'
 output: prefixed
 
 tasks:
-  init:
-    label: "Initializing git submodules"
-    cmds:
-      - git submodule update --init --checkout
-    sources:
-      - .gitmodules
-
   web-deps:
     internal: true
     label: "Installing dependencies for {{.APP}}"
@@ -126,7 +119,6 @@ tasks:
   all:
     label: "Run all commands"
     cmds:
-      - task: init
       - task: web
       - task: kotlin
 

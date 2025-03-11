@@ -7,7 +7,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.Logger
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
@@ -41,7 +40,7 @@ import java.util.*
 
 class WebServer {
     public val listeningPort: Int
-    public val server: NettyApplicationEngine
+    public val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>
 
     init {
         this.listeningPort = findAvailablePort()

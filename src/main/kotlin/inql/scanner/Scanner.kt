@@ -13,6 +13,9 @@ import inql.ui.EditableTabbedPane
 import java.net.URI
 import java.net.URISyntaxException
 import javax.swing.BorderFactory
+import javax.swing.SwingUtilities
+import javax.swing.event.ChangeEvent
+import javax.swing.event.ChangeListener
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     private val tabFactory = ScannerTabFactory(this)
@@ -116,23 +119,60 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     }
 
     override fun burpDeserialize(obj: PersistedObject) {
+        val prevTabCnt = this.tabCount
         this.tabFactory.tabIdx = obj.getInteger("tabFactoryIdx")
         val tabIdList = obj.getStringList("tabs")
         if (tabIdList != null) {
-            Logger.error("Loading ${tabIdList.size} tab(s) from project file")
-            if (!tabIdList.isEmpty()) this.removeAll()
+            // Remove pre-existing tabs
+            for (tab in 0..<prevTabCnt) {
+                this.tabbedPane.removeTabAt(tab)
+            }
 
+            Logger.debug("Loading ${tabIdList.size} tab(s) from project file")
+
+            val tabsToFix = mutableSetOf<ScannerTab>()
             for (tabId in tabIdList) {
                 val id = tabId.substring(tabId.lastIndexOf('.') + 1).toInt()
                 Logger.debug("Loading tab with id: $id")
                 val tab = ScannerTab(this, id)
+                tabsToFix.add(tab)
                 if (!tab.loadFromProjectFile()) continue
                 this.addTab(tab.getTabTitle(), tab)
                 tab.setTabTitle(tab.getTabTitle())
             }
-        }
 
-        // Update Introspection Cache
-        this.introspectionCache.populateFromScanner()
+            // Update Introspection Cache
+            this.introspectionCache.populateFromScanner()
+
+            /*
+            The following is needed to fix glitchy UI where the JTree is not rendered correctly when
+            it's created while the Tab is not currently in foreground.
+            We hook a ChangeListener that repaints each affected Tab exactly once.
+            The ChangeListener unhooks itself when there are no more tabs to fix
+             */
+
+            // Add a new tab (needed for the ChangeListener)
+            this.newTab()
+
+            // Add listener to fix glitchy UI
+            class BuggyTreeUIFixer: ChangeListener {
+                override fun stateChanged(e: ChangeEvent?) {
+                    val selectedTab = tabbedPane.selectedComponent as ScannerTab
+                    if (!tabsToFix.contains(selectedTab)) {
+                        return
+                    }
+
+                    SwingUtilities.invokeLater {
+                        selectedTab.scanResultsView.refresh()
+                    }
+
+                    tabsToFix.remove(selectedTab)
+                    if (tabsToFix.isEmpty()) {
+                        tabbedPane.removeChangeListener(this)
+                    }
+                }
+            }
+            this.tabbedPane.addChangeListener(BuggyTreeUIFixer())
+        }
     }
 }

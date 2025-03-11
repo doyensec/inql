@@ -5,27 +5,20 @@ import burp.BurpExtender
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
 import inql.externaltools.ExternalToolsService
-import inql.graphql.gqlspection.IGQLSpection
-import inql.graphql.gqlspection.PyGQLSpection
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
-import inql.savestate.getSaveStateKeys
 import inql.scanner.Scanner
-import inql.ui.*
+import inql.ui.InQLTabbedPane
+import inql.ui.SendToInqlHandler
+import inql.ui.StyledPayloadEditor
 import kotlinx.coroutines.runBlocking
 import java.awt.Component
-import javax.swing.JPanel
 import javax.swing.JTabbedPane
-import javax.swing.SwingUtilities
-import javax.swing.*
-import java.awt.*
-import java.awt.event.*
 
 class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     private val config = Config.getInstance()
     private val profiles = LinkedHashMap<String, Profile>()
-    val gqlspection: IGQLSpection
 
     // main tabs
     val scanner = Scanner(this)
@@ -44,13 +37,6 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
         val logLevel = config.getString("logging.level") ?: "DEBUG"
         Logger.setLevel(logLevel)
-
-        // Initialize PyGQLSpection
-        val pyGQLSpection = PyGQLSpection.getInstance()
-        this.gqlspection = pyGQLSpection
-        runBlocking {
-            pyGQLSpection.setLogLevel(logLevel)
-        }
 
         // Register GraphQL Payload Editor
         Burp.Montoya.userInterface().registerHttpRequestEditorProvider(StyledPayloadEditor.getProvider(this))
@@ -88,7 +74,6 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
-        this@InQL.gqlspection.unload()
     }
 
     fun getAvailableProfileId(name: String): String {
@@ -172,7 +157,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
  //           }
  //       }
 
- //       this.scanner.loadFromProjectFile()
- //       this.attacker.loadFromProjectFile()
+        this.scanner.loadFromProjectFile()
+        this.attacker.loadFromProjectFile()
     }
 }

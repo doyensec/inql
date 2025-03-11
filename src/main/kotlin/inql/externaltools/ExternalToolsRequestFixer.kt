@@ -10,7 +10,7 @@ import inql.Profile
 import inql.externaltools.ExternalToolsService.Companion.INQL_HEADER
 import inql.externaltools.ExternalToolsService.Companion.INTERNAL_INQL_HOST
 import inql.externaltools.ExternalToolsService.Companion.INTERNAL_INQL_ORIGIN
-import inql.graphql.Utils.Companion.getGraphQLQuery
+import inql.graphql.Utils.getGraphQLQuery
 import inql.scanner.IntrospectionCache
 import inql.utils.get
 import inql.utils.withUpsertedHeader
