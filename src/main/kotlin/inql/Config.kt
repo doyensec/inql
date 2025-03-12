@@ -84,7 +84,7 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
+//        Logger.debug(logStr)
         return output
     }
 

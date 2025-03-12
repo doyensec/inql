@@ -3,7 +3,8 @@ package inql.scanner.scanresults
 import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
-import inql.graphql.POIScanner
+import inql.graphql.scanners.CyclesScanner
+import inql.graphql.scanners.POIScanner
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
@@ -73,15 +74,16 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
             this.add(poiNode)
         }
 
-        /* TODO: implement cycle detection
         // Add cycle detection results
         if (config.getBoolean("report.cycles") == true) {
-            val cycleDetectionResults = gqlSchema.getCycleDetectionResultsAsText()
+            val cycleScanner = CyclesScanner(gqlSchema)
+            cycleScanner.detect()
+
+            val cycleDetectionResults = cycleScanner.cyclesAsString()
             if (!cycleDetectionResults.isNullOrBlank()) {
                 this.add(TreeNodeWithCustomLabel("Cycle Detection", cycleDetectionResults))
             }
         }
-         */
 
         // Add request template
         this.add(TreeNodeWithCustomLabel("Request Template", scanResult.requestTemplate.withBody("").toString()))
