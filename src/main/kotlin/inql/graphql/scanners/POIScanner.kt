@@ -27,7 +27,6 @@ class POIScanner(schema: GQLSchema) {
 
     private var regexKeywords = mutableMapOf<String,String>()
     private var defaultKeywords = mutableListOf<String>()
-    private var examinedTypes = mutableListOf<String>()
     private val config = Config.getInstance()
     private val schema = schema
 

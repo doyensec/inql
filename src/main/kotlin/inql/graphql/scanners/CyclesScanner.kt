@@ -1,7 +1,5 @@
 package inql.graphql.scanners
 
-import graphql.language.FieldDefinition
-import graphql.language.ListType
 import graphql.schema.*
 import inql.Logger
 import inql.graphql.GQLSchema
@@ -12,7 +10,7 @@ class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 1
     private var cycles = mutableListOf<List<Pair<String, String?>>>()
 
     fun detect() {
-        var all = schema.queries + schema.mutations + schema.subscriptions
+        val all = schema.queries + schema.mutations + schema.subscriptions
 
         for (q in all) {
             detectCycle(q.key, q.value.type )

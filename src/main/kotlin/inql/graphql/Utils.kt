@@ -50,7 +50,7 @@ object Utils {
     fun isGraphQLRequest(request: HttpRequest): Boolean {
         return getGraphQLQuery(request) != null
     }
-public fun formatComment(string: String, maxLength: Int = 100): String {
+fun formatComment(string: String, maxLength: Int = 100): String {
     val sb = StringBuilder()
     for (line in string.lines()) {
         var currentLine = line
@@ -69,7 +69,7 @@ public fun formatComment(string: String, maxLength: Int = 100): String {
     return sb.toString()
 }
 
-    public fun formatComment(strings: List<String>, maxLength: Int = 100): List<String> {
+    fun formatComment(strings: List<String>, maxLength: Int = 100): List<String> {
         val out = mutableListOf<String>()
         for (line in strings) {
             var currentLine = line
@@ -88,7 +88,7 @@ public fun formatComment(string: String, maxLength: Int = 100): String {
         return out
     }
 
-    public fun unwrapType(type: GraphQLType): GraphQLType {
+    fun unwrapType(type: GraphQLType): GraphQLType {
         var outputType: GraphQLType = type
         while (outputType is GraphQLModifiedType) {
             outputType = outputType.wrappedType
@@ -96,7 +96,7 @@ public fun formatComment(string: String, maxLength: Int = 100): String {
         return outputType
     }
 
-    public fun isBuiltInScalarType(type: GraphQLScalarType): Boolean {
+    fun isBuiltInScalarType(type: GraphQLScalarType): Boolean {
         val builtinScalars = arrayOf("Int", "Float", "String", "Boolean", "ID")
 
         return type.name in builtinScalars
