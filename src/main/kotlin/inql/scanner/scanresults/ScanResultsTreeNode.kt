@@ -3,7 +3,7 @@ package inql.scanner.scanresults
 import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
-import inql.graphql.poi.POIScanner
+import inql.graphql.POIScanner
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode

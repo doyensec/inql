@@ -1,13 +1,11 @@
-package inql.graphql.poi
+package inql.graphql
 
 import inql.Config
-import inql.graphql.GQLSchema
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLScalarType
-import inql.graphql.Utils
 import inql.utils.JsonFileReader
 
 
