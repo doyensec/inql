@@ -11,7 +11,7 @@ import inql.graphql.Utils
 import inql.utils.JsonFileReader
 
 
-public class POIScanner(schema: GQLSchema) {
+class POIScanner(schema: GQLSchema) {
     companion object {
         data class KeywordCategory(
             val name: String,
@@ -22,6 +22,7 @@ public class POIScanner(schema: GQLSchema) {
         data class FieldResult(
             val type: String,
             val path: String,
+            val queryType: String,
             val description: String?
         )
     }
@@ -80,7 +81,15 @@ public class POIScanner(schema: GQLSchema) {
         var finalResults = mutableMapOf<String, MutableList<FieldResult>>()
 
         for (q in queries) {
-            results.addAll(scanField(q.value, "", depth))
+            results.addAll(scanField(q.value, "", "Query", depth))
+        }
+
+        for (q in mutations) {
+            results.addAll(scanField(q.value, "", "Mutation", depth))
+        }
+
+        for (q in subscriptions) {
+            results.addAll(scanField(q.value, "", "Subscription", depth))
         }
 
         for (r in results) {
@@ -94,24 +103,24 @@ public class POIScanner(schema: GQLSchema) {
         return finalResults
     }
 
-    private fun scanField(field: GraphQLFieldDefinition, path: String, depth: Int = 4): List<FieldResult> {
+    private fun scanField(field: GraphQLFieldDefinition, path: String, queryType: String, depth: Int = 4): List<FieldResult> {
         var results = mutableListOf<FieldResult>()
         val newPath = "$path -> ${field.name}"
 
         if (config.getBoolean("report.poi.deprecated")!! && field.isDeprecated) {
-            results.add(FieldResult(type = "deprecated", path = newPath, description = field.description))
+            results.add(FieldResult(type = "deprecated", path = newPath, queryType = queryType, description = field.description))
         }
 
         if (config.getBoolean("report.poi.custom_scalars")!! &&
             field.type is GraphQLScalarType &&
             !Utils.isBuiltInScalarType(field.type as GraphQLScalarType)) {
-            results.add(FieldResult(type = "custom scalar", path = newPath, description = field.description))
+            results.add(FieldResult(type = "custom scalar", path = newPath, queryType = queryType, description = field.description))
         }
 
         for (keywords in regexKeywords) {
             val regex = Regex(keywords.value, RegexOption.IGNORE_CASE)
             if (regex.containsMatchIn(field.name)) {
-                results.add(FieldResult(type = keywords.key, path = newPath, description = field.description))
+                results.add(FieldResult(type = keywords.key, path = newPath, queryType = queryType, description = field.description))
                 break
             }
         }
@@ -131,12 +140,11 @@ public class POIScanner(schema: GQLSchema) {
                 }
 
                 examinedTypes.add(fieldDef.name)
-                results.addAll(scanField(fieldDef, newPath, newDepth))
+                results.addAll(scanField(fieldDef, newPath, queryType, newDepth))
             }
         }
 
         return results
     }
-
 
 }

@@ -58,7 +58,7 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
                     categoryText.appendLine("- $category")
 
                     for (poi in results) {
-                        categoryText.appendLine("  ${poi.path}")
+                        categoryText.appendLine("(${poi.queryType})${poi.path}")
                     }
                     val categoryNode = TreeNodeWithCustomLabel(category, categoryText.toString())
                     poiNode.add(categoryNode)
