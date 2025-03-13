@@ -102,7 +102,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
             is IntValue -> "${value.value}"
             is NullValue -> "null"
             is ObjectValue -> "{${value.objectFields.joinToString(", ") { "${it.name}: ${printLiteralValue(it.value)}" }}}"
-            is ArrayValue -> "[${value.values.joinToString(", ") { printLiteralValue(it) }}"
+            is ArrayValue -> "[${value.values.joinToString(", ") { printLiteralValue(it) }}]"
             else -> value.toString()
         }
     }
