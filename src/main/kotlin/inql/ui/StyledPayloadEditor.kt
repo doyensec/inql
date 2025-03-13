@@ -19,6 +19,7 @@ import inql.Logger
 import inql.graphql.Utils.isGraphQLRequest
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
+import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Font
 import javax.swing.JScrollPane
@@ -87,6 +88,12 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
 
     init {
         this.queryEditor = GraphQLEditor(readOnly)
+        val gqlEditorCard = BorderPanel(0)
+        gqlEditorCard.add(queryEditor, BorderLayout.CENTER)
+        val scrollPane = JScrollPane(gqlEditorCard)
+        scrollPane.verticalScrollBar.setUnitIncrement(10);
+        scrollPane.horizontalScrollBar.setUnitIncrement(10);
+
 
         if (readOnly) {
             this.varsEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
@@ -95,7 +102,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         }
 
         this.component =
-            JSplitPane(JSplitPane.VERTICAL_SPLIT, JScrollPane(this.queryEditor), this.varsEditor.uiComponent())
+            JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollPane, this.varsEditor.uiComponent())
         this.component.setDividerLocation(0.5)
         this.component.resizeWeight = 0.75
         this.component.isOneTouchExpandable = true
