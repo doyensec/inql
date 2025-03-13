@@ -18,6 +18,7 @@ class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 1
             visited.clear()
         }
 
+        // deduplication
         cycles = cycles.distinct().toMutableList()
 
     }
