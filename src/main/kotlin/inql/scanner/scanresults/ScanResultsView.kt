@@ -37,7 +37,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         splitPane.isOneTouchExpandable = true
         splitPane.rightComponent.isVisible = true
         splitPane.setDividerLocation(0.5)
-        splitPane.resizeWeight = 0.4
+        splitPane.resizeWeight = 0.2
 
         this.add(splitPane)
     }
