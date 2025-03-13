@@ -53,7 +53,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
 
         // If we reached maxDepth, just print the field commented out and return
         if (depth > maxDepth) {
-            sb.appendLine("$padding#$name$args {}")
+            sb.appendLine("$padding$name$args # { Truncated by depth limit }")
             return
         }
 
