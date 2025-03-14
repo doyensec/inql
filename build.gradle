@@ -57,7 +57,7 @@ sourceSets {
             srcDir 'kotlin'
         }
         resources {
-            srcDirs = ['resources', 'lib/GQLSpection/src']
+            srcDirs = ['resources']
         }
         output.dir(generatedVersionDir, builtBy: 'generateVersionProperties')
     }
@@ -91,4 +91,5 @@ jar {
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     destinationDirectory = rootDir
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    archiveFileName = "InQL.jar"
 }
