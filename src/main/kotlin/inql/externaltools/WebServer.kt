@@ -7,7 +7,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.Logger
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
@@ -22,8 +21,6 @@ import java.util.*
 
         1. Serving web based GraphQL tools:
             - GraphiQL
-            - GraphQL Playground
-            - Altair
             - GraphQL Voyager
         2. "Send to Repeater/Intruder" webhook endpoints (from GraphiQL & Co)
 
@@ -43,7 +40,7 @@ import java.util.*
 
 class WebServer {
     public val listeningPort: Int
-    public val server: NettyApplicationEngine
+    public val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>
 
     init {
         this.listeningPort = findAvailablePort()
@@ -113,8 +110,8 @@ class WebServer {
         // variables and headers are optional (can be null, not present or {})
         fun deserializeRequest(request: String): HttpRequest {
             val json = Gson().fromJson(request, JsonObject::class.java)
-            val server = json.get("server").asString
-            val path = java.net.URI(server).path
+            val target = json.get("target").asString
+            val path = java.net.URI(target).path
             val query = json.get("query").asString
             val variables = json.get("variables").asJsonObject
             val headers = json.get("headers").asJsonObject
@@ -135,7 +132,7 @@ class WebServer {
             }
 
             // Create HttpRequest object for Burp
-            val service = HttpService.httpService(server)
+            val service = HttpService.httpService(target)
             var httpRequest = HttpRequest.httpRequest()
                 .withService(service)
                 .withPath(path)

@@ -43,9 +43,7 @@ class Introspection {
             val rawResponse = response.bodyToString()
             Logger.debug("Received response: $rawResponse")
 
-            // Note: for now we are only parsing the JSON response to ensure that the server produced a correct value
-            // but we're passing the raw content body to GQLSpection to avoid inconsistencies between de/serialization steps
-            // Try to deserialize to check for errors
+            
             val schema: Map<*, *>
             try {
                 schema = gson.fromJson(rawResponse, Map::class.java)

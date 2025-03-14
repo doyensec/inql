@@ -3,7 +3,6 @@ package inql.scanner.scanresults
 import burp.Burp
 import burp.api.montoya.core.ByteArray
 import burp.api.montoya.ui.editor.EditorOptions
-import inql.graphql.IGQLSchema
 import inql.ui.BorderPanel
 import inql.ui.GraphQLEditor
 import inql.ui.SendFromInqlHandler
@@ -32,8 +31,9 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
 
         // GQLEditor card
         val gqlEditorCard = BorderPanel(0)
-        gqlEditorCard.add(JScrollPane(gqlEditor), BorderLayout.CENTER)
-        this.add(gqlEditorCard, GQL_EDITOR_CARD)
+        gqlEditorCard.add(gqlEditor, BorderLayout.CENTER)
+        val scrollPane = JScrollPane( gqlEditorCard );
+        this.add(scrollPane, GQL_EDITOR_CARD)
 
         this.show(RAW_EDITOR_CARD)
     }
@@ -43,7 +43,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         (this.layout as CardLayout).show(this, card)
     }
 
-    fun load(elem: IGQLSchema.IGQLElement) {
+    fun load(elem: GQLQueryElement) {
         this.gqlEditor.setQuery(elem.content())
         this.show(GQL_EDITOR_CARD)
     }

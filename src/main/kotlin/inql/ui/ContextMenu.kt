@@ -48,22 +48,16 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     ) {
         this.sendRequestToRepeater()
     }
-    protected val sendToInqlScannerAction = MenuAction("Generate queries with InQL Scanner", null) {
+    protected val sendToInqlScannerAction = MenuAction("Generate queries", null) {
         this.sendRequestToInqlScanner()
     }
-    protected val sendToInqlAttackerAction = MenuAction("Batch attack with InQL Attacker", null) {
+    protected val sendToInqlAttackerAction = MenuAction("Batch attack", null) {
         this.sendRequestToInqlAttacker()
     }
-    protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL (GraphQL IDE)", null) {
+    protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL", null) {
         this.sendRequestToGraphiQL()
     }
-    protected val sendToPlaygroundAction = MenuAction("Open in GraphQL PlayGround", null) {
-        this.sendRequestToPlayground()
-    }
-    protected val sendToAltairAction = MenuAction("Open in Altair IDE", null) {
-        this.sendRequestToAltair()
-    }
-    protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager (GraphQL schema visualizer)", null) {
+    protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager", null) {
         this.sendRequestToVoyager()
     }
 
@@ -78,22 +72,14 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     // A list of optional actions to include based on config values:
     //         "integrations.graphiql" to true,
     //         "integrations.voyager" to true,
-    //         "integrations.playground" to false,
-    //         "integrations.altair" to false,
     // Check those with: Config.getInstance().getBoolean("integrations.graphiql")
     protected val sendToEmbeddedToolActions = mutableListOf<MenuAction>().apply {
         val config = Config.getInstance()
         if (config.getBoolean("integrations.graphiql") == true) {
             this.add(sendToGraphiqlAction)
         }
-        if (config.getBoolean("integrations.playground") == true) {
-            this.add(sendToPlaygroundAction)
-        }
         if (config.getBoolean("integrations.voyager") == true) {
             this.add(sendToVoyagerAction)
-        }
-        if (config.getBoolean("integrations.altair") == true) {
-            this.add(sendToAltairAction)
         }
     }
 
@@ -108,9 +94,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendToInqlAttackerAction,
         sendToInqlScannerAction,
         sendToGraphiqlAction,
-        sendToPlaygroundAction,
-        sendToVoyagerAction,
-        sendToAltairAction
+        sendToVoyagerAction
     )
     abstract fun getRequest(): HttpRequest?
     abstract fun getText(): String
@@ -168,16 +152,6 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     private fun sendRequestToGraphiQL() {
         Logger.debug("Send Request to GraphiQL")
         sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_GRAPHIQL)
-    }
-
-    private fun sendRequestToPlayground() {
-        Logger.debug("Send Request to Playground")
-        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_PLAGROUND)
-    }
-
-    private fun sendRequestToAltair() {
-        Logger.debug("Send Request to Altair")
-        sendRequestToEmbeddedTool(this.getRequest(), ExternalToolsService.Companion.TOOL.TOOL_ALTAIR)
     }
 
     private fun sendRequestToVoyager() {

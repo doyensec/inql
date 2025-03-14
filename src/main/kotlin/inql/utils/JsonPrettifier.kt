@@ -9,7 +9,7 @@ class JsonPrettifier {
         fun prettify(src: String): String {
             var json = src
             try {
-                val gson = GsonBuilder().setPrettyPrinting().create()
+                val gson = GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create()
                 val je = JsonParser.parseString(json)
                 json = gson.toJson(je)
             } catch (_: Exception) {

@@ -27,16 +27,12 @@ class ExternalToolsService private constructor(){
 
         public enum class TOOL {
             TOOL_GRAPHIQL,
-            TOOL_ALTAIR,
             TOOL_VOYAGER,
-            TOOL_PLAGROUND,
         }
 
         private val tool_paths = mapOf(
             TOOL.TOOL_GRAPHIQL to "graphiql",
-            TOOL.TOOL_ALTAIR to "altair",
             TOOL.TOOL_VOYAGER to "voyager",
-            TOOL.TOOL_PLAGROUND to "playground",
         )
 
         fun init(inql: InQL) {

@@ -1,33 +1,29 @@
 package inql.scanner.scanresults
 
+import com.google.gson.Gson
 import inql.Config
-import inql.graphql.IGQLSchema
+import inql.graphql.GQLSchema
+import inql.graphql.scanners.CyclesScanner
+import inql.graphql.scanners.POIScanner
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
-import inql.Logger
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import graphql.introspection.IntrospectionResultToSchema
-import graphql.language.Document
-import java.util.HashMap
-import graphql.schema.idl.SchemaPrinter
-
-open class TreeNodeWithCustomLabel(val label: String, obj: Any) : DefaultMutableTreeNode(obj) {
+open class TreeNodeWithCustomLabel(val label: String, obj: Any?) : DefaultMutableTreeNode(obj) {
     override fun toString(): String {
         return this.label
     }
 }
 
-class GQLElementListTreeNode(label: String, val map: Map<String, IGQLSchema.IGQLElement>) :
-    TreeNodeWithCustomLabel(label, map) {
+class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
+    TreeNodeWithCustomLabel(label, null) {
     init {
-        map.keys.toList().sorted().forEach {
-            this.add(DefaultMutableTreeNode(map[it]))
+        list.forEach {
+            this.add(TreeNodeWithCustomLabel(it, GQLQueryElement(it, type, schema)))
         }
     }
 }
+
 
 class ScanResultTreeNode(val scanResult: ScanResult) :
     TreeNodeWithCustomLabel(scanResult.host, scanResult) {
@@ -41,36 +37,38 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         val config = Config.getInstance()
 
         // Add queries and mutations
-        this.add(GQLElementListTreeNode("Queries", gqlSchema.getQueries()))
-        this.add(GQLElementListTreeNode("Mutations", gqlSchema.getMutations()))
+        this.add(GQLElementListTreeNode("Queries", gqlSchema.queries.keys.sorted(), GQLSchema.OperationType.QUERY, gqlSchema))
+        this.add(GQLElementListTreeNode("Mutations", gqlSchema.mutations.keys.sorted(), GQLSchema.OperationType.MUTATION, gqlSchema))
+        this.add(GQLElementListTreeNode("Subscriptions", gqlSchema.subscriptions.keys.sorted(), GQLSchema.OperationType.SUBSCRIPTION, gqlSchema))
+
+
 
         // Add Points of Interest
         if (config.getBoolean("report.poi") == true) {
-            val pois = gqlSchema.getPointsOfInterest()
+            val poiScanner = POIScanner(gqlSchema)
+            val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+
             val poiNode = TreeNodeWithCustomLabel("Points of Interest", pois)
 
             val poiFormat = config.getString("report.poi.format")
             if (poiFormat == "text" || poiFormat == "both") {
-                for ((category, findings) in pois) {
-                    if (findings.isEmpty()) continue
+                for ((category, results) in pois) {
+                    if (results.isEmpty()) continue
+
                     val categoryText = StringBuilder()
-                    for (poi in findings) {
-                        categoryText.appendLine("- ${poi.name()}")
-                        categoryText.appendLine()
-                        if (poi.content().isNotBlank()) {
-                            categoryText.appendLine("  ${poi.content()}")
-                            categoryText.appendLine()
-                            categoryText.appendLine()
-                        }
+                    categoryText.appendLine("- $category")
+
+                    for (poi in results) {
+                        categoryText.appendLine("(${poi.queryType})${poi.path}")
                     }
                     val categoryNode = TreeNodeWithCustomLabel(category, categoryText.toString())
                     poiNode.add(categoryNode)
                 }
             }
             if (poiFormat == "json" || poiFormat == "both") {
-                val jsonPoi = gqlSchema.getPointsOfInterestAsJson()
+                val jsonPoi = Gson().toJson(pois)
                 if (!jsonPoi.isNullOrBlank()) {
-                    poiNode.add(TreeNodeWithCustomLabel("PointsOfInterest.json", JsonPrettifier.prettify(jsonPoi)))
+                    poiNode.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi)))
                 }
             }
             this.add(poiNode)
@@ -78,7 +76,10 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
 
         // Add cycle detection results
         if (config.getBoolean("report.cycles") == true) {
-            val cycleDetectionResults = gqlSchema.getCycleDetectionResultsAsText()
+            val cycleScanner = CyclesScanner(gqlSchema)
+            cycleScanner.detect()
+
+            val cycleDetectionResults = cycleScanner.cyclesAsString()
             if (!cycleDetectionResults.isNullOrBlank()) {
                 this.add(TreeNodeWithCustomLabel("Cycle Detection", cycleDetectionResults))
             }

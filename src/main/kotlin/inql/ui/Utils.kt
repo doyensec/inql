@@ -4,34 +4,20 @@ import burp.Burp
 import burp.api.montoya.ui.editor.EditorOptions
 import burp.api.montoya.ui.editor.HttpRequestEditor
 import burp.api.montoya.ui.editor.HttpResponseEditor
+import com.formdev.flatlaf.extras.FlatSVGIcon
+import com.formdev.flatlaf.extras.components.FlatStyleableComponent
+import com.formdev.flatlaf.extras.components.FlatTabbedPane
 import inql.Logger
 import java.awt.*
 import java.awt.event.ItemListener
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.io.InputStream
 import javax.swing.*
 import javax.swing.event.ChangeListener
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 import kotlin.math.min
-import javax.swing.ImageIcon;
-import java.awt.Image;
-import java.awt.image.BufferedImage;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import com.formdev.flatlaf.extras.FlatSVGIcon
-import javax.swing.JButton
-import java.lang.ClassLoader.getSystemResourceAsStream
-import java.awt.Dimension
-import java.awt.FlowLayout
-import javax.swing.JLabel
-import kotlin.math.*
-import com.formdev.flatlaf.ui.FlatTabbedPaneUI
-import javax.swing.plaf.ComponentUI
-import com.formdev.flatlaf.FlatLightLaf
-import com.formdev.flatlaf.FlatClientProperties
-import com.formdev.flatlaf.extras.components.*
-import java.io.InputStream
 
 class Label(text: String, bold: Boolean = false, big: Boolean = false) : JLabel(text) {
     init {
@@ -318,7 +304,7 @@ fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
 }
 
 class SettingsTabButton() : JPanel() {
-    val text = "InQL Settings"
+    val text = "Settings"
     val resourcePath = "resources/Media/svg/settings.svg"
 
     init {
