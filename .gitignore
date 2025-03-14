@@ -403,3 +403,5 @@ resources/static/
 
 # Taskfile
 .task/
+
+.kotlin
