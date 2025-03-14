@@ -1,6 +1,7 @@
 package inql.ui
 
 import burp.Burp
+import burp.api.montoya.ui.editor.RawEditor
 import inql.Config
 import inql.Logger
 import inql.graphql.formatting.Formatter
@@ -10,30 +11,18 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.commons.text.StringEscapeUtils
+import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.Font
+import java.awt.event.ComponentAdapter
 import java.util.concurrent.CancellationException
-import javax.swing.JEditorPane
+import javax.swing.*
+import javax.swing.text.SimpleAttributeSet
+import java.awt.event.ComponentEvent
+import javax.swing.text.AttributeSet
 import javax.swing.text.StyleConstants
-import javax.swing.text.html.HTMLDocument
 
-class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = false) : JEditorPane("text/html", "") {
-    companion object {
-        fun stripHTML(content: String): String {
-            return StringEscapeUtils.unescapeHtml4(content.replace(Regex("<([^>]+)>"), ""))
-        }
-
-        private fun getHTML(content: String = "") =
-            """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                </head>
-                <body>
-                <pre id="content">$content</pre>
-                </body>
-                </html>
-            """.trimIndent()
-    }
+class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = false) : JPanel(BorderLayout()) {
 
     private val formatter = Formatter(false, 4, asHTML = true, isIntrospection = isIntrospection)
     private val formattingCoroutineScope = CoroutineScope(Dispatchers.Default)
@@ -41,42 +30,62 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
 
+    private val normalTextStyle = SimpleAttributeSet()
+
+    private val textPane = JTextPane().also {
+        it.isEditable = !readOnly
+        it.editorKit = WrapEditorKit()
+    }
+
+    private val textPaneContainer = JPanel().also {
+        it.layout = BoxLayout(it, BoxLayout.PAGE_AXIS)
+        it.border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
+        it.add(textPane, BorderLayout.CENTER)
+    }
+
+    private val scrollPane = JScrollPane(textPaneContainer).also {
+        it.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
+        it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+    }
+
+    class TextPaneComponentAdapter(val callback: ()->Unit): ComponentAdapter() {
+        override fun componentResized(e: ComponentEvent?) {
+            callback()
+        }
+    }
+
+    private fun updateComponentSize() {
+        this.textPaneContainer.preferredSize = Dimension(this.scrollPane.width, textPane.preferredSize.height)
+    }
+
     init {
-        this.putClientProperty(HONOR_DISPLAY_PROPERTIES, true)
-        this.text = getHTML()
-        if (readOnly) this.isEditable = false
-
-        val doc = this.document as HTMLDocument
-        doc.styleSheet.addRule(Style.getStyleCSS())
-        Burp.Montoya.userInterface().applyThemeToComponent(this)
-
-        // Copy Burp's editor background
-        val raw = Burp.Montoya.userInterface().createRawEditor().getTextAreaComponent()
-        this.background = raw.background
+        this.scrollPane.addComponentListener(TextPaneComponentAdapter { this.updateComponentSize() })
+        this.add(scrollPane)
     }
 
     fun setFontInHTML(f: Font) {
         this.font = f
-        val doc = this.document as HTMLDocument
-        val rule = doc.styleSheet.getRule("body")
-        StyleConstants.setFontFamily(rule, f.family)
-        StyleConstants.setFontSize(rule, f.size)
+        val doc = this.textPane.styledDocument
+        val newFont = SimpleAttributeSet().also {
+            StyleConstants.setFontFamily(it, f.family)
+            StyleConstants.setFontSize(it, f.size)
+        }
+
+        doc.setCharacterAttributes(0, doc.length, newFont, false)
     }
 
     fun getQuery(): String {
-        val doc = this.document as HTMLDocument
-        val pre = doc.getElement("content")
-        val content = doc.getText(pre.startOffset, pre.endOffset - pre.startOffset)
-        return stripHTML(content)
+        val doc = this.textPane.styledDocument
+        val content = doc.getText(0, doc.length)
+        return content
     }
 
-    private fun setHTML(content: String) {
+    fun setHTML(content: String) {
         try {
-            this.text = getHTML(content)
+            this.textPane.styledDocument.insertString(0, content, normalTextStyle)
         } catch (e: OutOfMemoryError) {
-            this.text = getHTML("Request too large to display. Out of memory: ${e.message}")
+            this.textPane.styledDocument.insertString(0,"Request too large to display. Out of memory: ${e.message}", normalTextStyle)
         }
-        this.caretPosition = 0
     }
 
     fun setQuery(s: String) {
@@ -105,7 +114,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
         delay(150)
         if (mutex.tryLock()) { // If the mutex is already locked, abort as something else is being written already
             if (job.isActive) {
-                this.setHTML(s)
+                this.textPane.styledDocument.insertString(0, s, normalTextStyle)
             }
             mutex.unlock()
         }
@@ -113,9 +122,10 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
 
     suspend fun format(s: String) {
         try {
-            val text = formatter.format(s)
+            val text = formatter.formatAsStyledDoc(s)
             mutex.withLock {
-                this.setHTML(text)
+                this.textPane.styledDocument = text
+                this.setFontInHTML(Burp.Montoya.userInterface().createRawEditor().getTextAreaComponent().font)
                 this.runningJob = null
             }
         } catch (e: CancellationException) {

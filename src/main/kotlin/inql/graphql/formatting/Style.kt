@@ -2,6 +2,7 @@ package inql.graphql.formatting
 
 import burp.Burp
 import burp.api.montoya.ui.Theme
+import java.awt.Color
 
 class Style {
     companion object {
@@ -108,6 +109,44 @@ class Style {
                 "alias" to "#1CA89D",
                 "directive" to "#a5b125",
             ),
+        )
+
+        val darkAttributeSetThemeStyle = mapOf(
+                "string" to Color(146, 197, 99),
+                "number" to Color(249, 155, 86),
+                "comment" to Color(192, 192, 192),
+                "symbol" to Color(32,32,32),
+                "field" to Color(233, 191, 99),
+                "type" to Color(117, 181, 223),
+                "argument" to Color(144, 238, 144),
+                "keyword" to Color(255, 255, 255),
+                "fragment" to Color(255, 140, 0),
+                "value" to Color(249, 155, 86),
+                "object" to Color(233, 191, 99),
+                "variable" to Color(247, 146, 218),
+                "opName" to Color(255, 140, 0),
+                "operation" to Color(255, 255, 255),
+                "alias" to Color(36, 214, 199),
+                "directive" to Color(255, 239, 159),
+            )
+
+        val lightAttributeSetThemeStyle = mapOf(
+            "string" to Color(27, 141, 26),
+            "number" to Color(28, 28, 255),
+            "comment" to Color(192, 192, 192),
+            "symbol" to Color(32,32,32),
+            "field" to Color(203, 153, 33),
+            "type" to Color(32, 159, 243),
+            "argument" to Color(56, 142, 56),
+            "keyword" to Color(32, 32, 32),
+            "fragment" to Color(255, 131, 11),
+            "value" to Color(28, 28, 255),
+            "object" to Color(56, 142, 56),
+            "variable" to Color(243, 75, 195),
+            "opName" to Color(255, 131, 11),
+            "operation" to Color(32, 32, 32),
+            "alias" to Color(28, 168, 157),
+            "directive" to Color(165, 177, 37),
         )
 
         fun getStyleCSS(): String {

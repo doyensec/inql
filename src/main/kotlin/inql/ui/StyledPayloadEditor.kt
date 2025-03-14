@@ -90,9 +90,9 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         this.queryEditor = GraphQLEditor(readOnly)
         val gqlEditorCard = BorderPanel(0)
         gqlEditorCard.add(queryEditor, BorderLayout.CENTER)
-        val scrollPane = JScrollPane(gqlEditorCard)
-        scrollPane.verticalScrollBar.setUnitIncrement(10);
-        scrollPane.horizontalScrollBar.setUnitIncrement(10);
+//        val scrollPane = JScrollPane(gqlEditorCard)
+//        scrollPane.verticalScrollBar.setUnitIncrement(10);
+//        scrollPane.horizontalScrollBar.setUnitIncrement(10);
 
 
         if (readOnly) {
@@ -102,7 +102,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         }
 
         this.component =
-            JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollPane, this.varsEditor.uiComponent())
+            JSplitPane(JSplitPane.VERTICAL_SPLIT, gqlEditorCard, this.varsEditor.uiComponent())
         this.component.setDividerLocation(0.5)
         this.component.resizeWeight = 0.75
         this.component.isOneTouchExpandable = true
@@ -135,7 +135,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
             this.varsState.error = true
 
             // Show the message about an error:
-            this.queryEditor.text = "There was an error during JSON deserialization."
+            this.queryEditor.setHTML("There was an error during JSON deserialization.")
             this.vars = null
             return
         }

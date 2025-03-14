@@ -1,6 +1,10 @@
 package inql.graphql.formatting
 
 import org.apache.commons.text.StringEscapeUtils
+import java.awt.Color
+import javax.swing.JPanel
+import javax.swing.text.SimpleAttributeSet
+import javax.swing.text.StyleConstants
 
 class Token(var type: Type, var text: String) {
 
@@ -37,6 +41,22 @@ class Token(var type: Type, var text: String) {
 
     fun asHTML(): String {
         return """<span class="${Style.getClass(this)}">${StringEscapeUtils.escapeHtml4(this.text)}</span>"""
+    }
+
+    private fun isDarkMode(): Boolean {
+        return (JPanel().getBackground().getRGB() == Color(50,51,52).getRGB())
+    }
+
+    fun getStyle(): SimpleAttributeSet {
+        return SimpleAttributeSet().also {
+            val color = if (isDarkMode()) {
+                Style.darkAttributeSetThemeStyle[Style.getClass(this)]
+            } else {
+                Style.lightAttributeSetThemeStyle[Style.getClass(this)]
+            }
+
+            StyleConstants.setForeground(it, color)
+        }
     }
 
     fun print(asHTML: Boolean): String {
