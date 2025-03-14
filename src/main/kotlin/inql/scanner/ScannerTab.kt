@@ -225,7 +225,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             }
         }
 
-        // Invoke GQLSpection to analyze GraphQL schema
+        
         val schemaToParse = jsonSchema ?: sdlSchema
         val schema: GQLSchema?
         try {
