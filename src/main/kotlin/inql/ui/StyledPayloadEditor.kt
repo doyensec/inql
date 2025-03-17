@@ -103,8 +103,8 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         this.component.isOneTouchExpandable = true
 
         // Add context menu handler
-        this.contextMenu.addRightClickHandler(this.queryEditor)
-        this.contextMenu.addKeyboardShortcutHandler(this.queryEditor)
+        this.contextMenu.addRightClickHandler(this.queryEditor.textPane)
+        this.contextMenu.addKeyboardShortcutHandler(this.queryEditor.textPane)
     }
 
     override fun setRequestResponse(requestResponse: HttpRequestResponse) {
