@@ -1,5 +1,6 @@
 package inql.scanner.scanresults
 
+import inql.Logger
 import inql.ui.BorderPanel
 import java.awt.BorderLayout
 import javax.swing.JScrollPane
@@ -58,7 +59,11 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     }
 
     override fun valueChanged(e: TreeSelectionEvent) {
-        this.tree.repaint() // For some reason, sometimes the UI doesn't update
+        try {
+            this.tree.repaint() // For some reason, sometimes the UI doesn't update
+        } catch (e: Exception) {
+            Logger.warning("Caught exception while repainting tree")
+        }
         val node = (this.tree.lastSelectedPathComponent ?: return) as DefaultMutableTreeNode
         if (!node.isLeaf) return // We don't care about folders
         this.view.selectionChangeListener(node)
