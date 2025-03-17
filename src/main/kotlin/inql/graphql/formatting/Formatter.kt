@@ -13,7 +13,7 @@ class Formatter(
 ) {
     companion object {
         private val globalCache = HashMap<String, HashMap<Long, String>>()
-        private val styleCache = HashMap<Long, List<StyleMetadata>>()
+        private val styleCache = HashMap<String, HashMap<Long, List<StyleMetadata>>>()
 
         private fun getQueryHash(query: String): Long {
             /*
@@ -31,6 +31,7 @@ class Formatter(
     init {
         if (!globalCache.containsKey(this.cacheKey)) {
             globalCache[this.cacheKey] = HashMap()
+            styleCache[this.cacheKey] = HashMap()
         }
     }
 
@@ -41,13 +42,13 @@ class Formatter(
 
     private fun getStyleCache(query: String): List<StyleMetadata> {
         val hash = getQueryHash(query)
-        return styleCache[hash]!!
+        return styleCache[cacheKey]!![hash]!!
     }
 
     private fun setCache(query: String, formatted: String, style: List<StyleMetadata>) {
         val hash = getQueryHash(query)
         globalCache[this.cacheKey]!![hash] = formatted
-        styleCache[hash] = style
+        styleCache[this.cacheKey]!![hash] = style
     }
 
     private fun makeIndent(level: Int): String {
