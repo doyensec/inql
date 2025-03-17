@@ -395,3 +395,13 @@ inql/__version__.py
 # Gradle
 .gradle
 bin/
+
+# Ignore compiled JavaScript files from React apps
+lib/**/build/
+lib/**/node_modules/
+resources/static/
+
+# Taskfile
+.task/
+
+.kotlin

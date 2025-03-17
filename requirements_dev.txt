@@ -1,9 +1,0 @@
-# Just to be clear, it is ok to install and run these dev tools from Python 3 venv
-
-# The last isort version to support Python 2.7
-isort>=4,<5
-
-# Pylint is the best linter for Python 2.7, AFAIK
-pylint>=1,<2
-
-pre-commit

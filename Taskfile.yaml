@@ -1,0 +1,127 @@
+version: '3'
+
+env:
+  GENERATE_SOURCEMAP: false
+  DISABLE_ESLINT_PLUGIN: true
+
+interval: '500ms'
+output: prefixed
+
+tasks:
+  web-deps:
+    internal: true
+    label: "Installing dependencies for {{.APP}}"
+    prefix: "deps-{{.APP}}"
+    dir: lib/{{.APP}}
+    cmds:
+      - yarn --no-progress --non-interactive --silent install --mutex file:../../yarn.mutex
+    sources:
+      - package.json
+    generates:
+      - build/index.html
+
+  web-build:
+    label: "Building web app: {{.APP}}"
+    internal: true
+    prefix: "build-{{.APP}}"
+    dir: 'lib/{{.APP}}'
+    cmds:
+      - yarn --no-progress --non-interactive --silent build
+
+  web-copy:
+    label: "Copying web app resources: {{.APP}}"
+    internal: true
+    prefix: "copy-{{.APP}}"
+    cmds:
+      - 'rm -rf resources/static/{{.APP}}'
+      - 'mv lib/{{.APP}}/build/ resources/static/{{.APP}}/'
+
+  web-cleanup:
+    label: "Cleaning up: {{.APP}}"
+    internal: true
+    prefix: "cleanup-{{.APP}}"
+    ignore_error: true
+    cmds:
+      - 'rm -rf lib/{{.APP}}/node_modules/'
+
+  web-item:
+    label: "Build and copy webapp: {{.APP}}"
+    internal: true
+    cmds:
+      - task: web-deps
+        vars: { APP: '{{.APP}}' }
+      - task: web-build
+        vars: { APP: '{{.APP}}' }
+      - task: web-copy
+        vars: { APP: '{{.APP}}' }
+      - task: web-cleanup
+        vars: { APP: '{{.APP}}' }
+    sources:
+      - 'lib/{{.APP}}/src/**/*.json'
+      - 'lib/{{.APP}}/src/**/*.js'
+      - 'lib/{{.APP}}/src/**/*.ts'
+      - 'lib/{{.APP}}/src/**/*.css'
+      - 'lib/{{.APP}}/src/**/*.html'
+      - 'lib/{{.APP}}/src/**/*.svg'
+      - 'lib/{{.APP}}/src/**/*.png'
+      - 'lib/{{.APP}}/src/**/*.ico'
+      - 'lib/{{.APP}}/src/**/*.txt'
+      - 'lib/{{.APP}}/src/**/*.md'
+      - 'lib/{{.APP}}/src/**/*.woff2'
+    generates:
+      - 'resources/static/{{.APP}}/index.html'
+
+  create-resources-folder:
+    label: "Make sure resources/static/ exists"
+    internal: true
+    cmds:
+      - mkdir -p resources/static/
+    generates:
+      - resources/static/
+    status:
+      - test -d resources/static
+
+  web-apps:
+    label: "Build web apps"
+    internal: true
+    deps:
+      - task: web-item
+        vars: { APP: 'graphiql' }
+      - task: web-item
+        vars: { APP: 'voyager' }
+
+
+  web:
+    cmds:
+      - task: create-resources-folder
+      - task: web-apps
+
+  kotlin:
+    label: "Build kotlin app"
+    cmds:
+      - ./gradlew build
+    sources:
+      - build.gradle
+      - src/**/*.kt
+      - resources/**/*.js
+      - resources/**/*.json
+      - resources/**/*.css
+      - resources/**/*.html
+      - resources/**/*.png
+      - resources/**/*.svg
+      - resources/**/*.ico
+      - resources/**/*.txt
+      - resources/**/*.md
+      - resources/**/*.woff2
+    generates:
+      - InQL.jar
+
+  all:
+    label: "Run all commands"
+    cmds:
+      - task: web
+      - task: kotlin
+
+  default:
+    cmds:
+      - task: all
