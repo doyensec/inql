@@ -5,6 +5,7 @@ import burp.api.montoya.ui.editor.EditorOptions
 import burp.api.montoya.ui.editor.HttpRequestEditor
 import burp.api.montoya.ui.editor.HttpResponseEditor
 import com.formdev.flatlaf.extras.FlatSVGIcon
+import com.formdev.flatlaf.extras.FlatSVGIcon.ColorFilter
 import com.formdev.flatlaf.extras.components.FlatStyleableComponent
 import com.formdev.flatlaf.extras.components.FlatTabbedPane
 import inql.Logger
@@ -289,6 +290,15 @@ open class MessageEditor(val readOnly: Boolean = false) : JTabbedPane() {
     }
 }
 
+/*
+    Simple SVG Color Filter that makes SVG the specified color on Dark mode
+ */
+class DarkModeFilter(darkModeColor: Color): ColorFilter() {
+    init {
+        this.setMapper { color -> if (Burp.isDarkMode()) return@setMapper darkModeColor else color }
+    }
+}
+
 fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
     // Attempt to get the resource as a stream; if null, return null early.
     val stream: InputStream = FlatSVGIcon::class.java.classLoader.getResourceAsStream(resourcePath) ?: return null
@@ -300,6 +310,7 @@ fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
     val scalingFactor = height.toFloat() / svgIcon.iconHeight.toFloat()
 
     // Return a new svgIcon derived with the scaling factor, or null if the original icon had a height of 0 to prevent division by zero.
+    svgIcon.colorFilter
     return if (svgIcon.iconHeight > 0) svgIcon.derive(scalingFactor) else null
 }
 
@@ -328,6 +339,7 @@ class SettingsTabButton() : JPanel() {
         icon?.let {
             val iconLabel = JLabel(it)
             clickablePart.add(iconLabel)
+            it.colorFilter = DarkModeFilter(Color.LIGHT_GRAY)
         }
 
         // Add the text label

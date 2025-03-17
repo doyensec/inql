@@ -1,7 +1,5 @@
 package inql.graphql.formatting
 
-import org.apache.commons.text.StringEscapeUtils
-
 class Token(var type: Type, var text: String) {
 
     var subtype: Subtype = Subtype.NONE
@@ -35,15 +33,5 @@ class Token(var type: Type, var text: String) {
         return this.text
     }
 
-    fun asHTML(): String {
-        return """<span class="${Style.getClass(this)}">${StringEscapeUtils.escapeHtml4(this.text)}</span>"""
-    }
-
-    fun print(asHTML: Boolean): String {
-        return if (asHTML) {
-            this.asHTML()
-        } else {
-            this.toString()
-        }
-    }
+    val styleClass: Style.StyleClass get() = Style.getClass(this)
 }

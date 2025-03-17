@@ -87,11 +87,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
         private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
-        private val stripCommentsFormatter = Formatter(minimized = false, spaces = 4, stripComments = true, asHTML = false, isIntrospection = true)
+        private val stripCommentsFormatter = Formatter(minimized = false, spaces = 4, stripComments = true, isIntrospection = true)
 
         private fun stripComments(query: String): String {
             Logger.warning("STRIPPING COMMENTS")
-            return this.stripCommentsFormatter.format(query);
+            return this.stripCommentsFormatter.format(query).first;
         }
         override fun getRequest(): HttpRequest? {
             Logger.warning("VALUE: $shouldStripComments")

@@ -2,6 +2,7 @@ package inql.ui
 
 import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
+import burp.api.montoya.ui.contextmenu.AuditIssueContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
 import inql.Config
@@ -204,13 +205,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     private fun requestFromContext(event: ContextMenuEvent): HttpRequest? {
         val invocationType = event.invocationType()
-        if (invocationType.containsScanIssues()) {
-            val issues = event.selectedIssues()
-            if (issues.size != 1) return null
-            val requestResponses = issues[0].requestResponses()
-            if (requestResponses.isEmpty()) return null
-            return requestResponses[0].request()
-        } else if (invocationType.containsHttpRequestResponses()) {
+        if (invocationType.containsHttpRequestResponses()) {
             val requestResponses = event.selectedRequestResponses()
             if (requestResponses.size != 1) return null
             return requestResponses[0].request()
@@ -221,8 +216,26 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         return null
     }
 
+    private fun requestFromIssues(event: AuditIssueContextMenuEvent): HttpRequest? {
+        val invocationType = event.invocationType()
+        if (invocationType.containsScanIssues()) {
+            val issues = event.selectedIssues()
+            if (issues.size != 1) return null
+            val requestResponses = issues[0].requestResponses()
+            if (requestResponses.isEmpty()) return null
+            return requestResponses[0].request()
+        }
+        return null
+    }
+
     override fun provideMenuItems(event: ContextMenuEvent): MutableList<JMenuItem>? {
         this.request = this.requestFromContext(event) ?: return null
+        return this.sendToInqlComponents()
+    }
+
+    override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<JMenuItem> {
+        if (event == null) return mutableListOf()
+        this.request = this.requestFromIssues(event) ?: return mutableListOf()
         return this.sendToInqlComponents()
     }
 
