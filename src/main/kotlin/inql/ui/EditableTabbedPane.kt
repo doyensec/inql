@@ -1,6 +1,5 @@
 package inql.ui
 
-import com.formdev.flatlaf.extras.FlatSVGIcon.ColorFilter
 import java.awt.*
 import java.awt.event.*
 import javax.swing.*
@@ -137,9 +136,7 @@ class EditableTabTitle(title: String, val component: Component, val isDarkMode: 
 
 class EditableTab(val tabTitle: EditableTabTitle, val isDarkMode: Boolean) : BoxPanel(BoxLayout.Y_AXIS, gap = 0) {
     private val closeIcon = loadSvgIcon("resources/Media/svg/close.svg", 8)?.also {
-        it.colorFilter = ColorFilter().also { filter ->
-            filter.setMapper { color -> if (isDarkMode) return@setMapper Color.WHITE else color }
-        }
+        it.colorFilter = DarkModeFilter(Color.WHITE)
     }
     val closeButton = if (closeIcon != null) JButton(closeIcon) else JButton("⨉")
     val closeListeners = ArrayList<(EditableTab) -> Unit>()
@@ -275,7 +272,9 @@ open class EditableTabbedPane : TabbedPane() {
                 add(FlowPanel(FlowLayout.LEFT, 0).apply {
                     val panel = JPanel()
 
-                    val icon = loadSvgIcon("resources/Media/svg/add.svg", 17)
+                    val icon = loadSvgIcon("resources/Media/svg/add.svg", 18)?.also {
+                        it.colorFilter = DarkModeFilter(Color.WHITE)
+                    }
                     icon?.let {
                         panel.add(JLabel(icon))
                     } ?: panel.add(JLabel("+"))

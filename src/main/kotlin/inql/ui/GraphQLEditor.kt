@@ -1,7 +1,6 @@
 package inql.ui
 
 import burp.Burp
-import burp.api.montoya.ui.Theme
 import inql.Config
 import inql.Logger
 import inql.graphql.formatting.Formatter
@@ -27,7 +26,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private var runningJob: Job? = null
     private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
-    private val backgroundColor = if (Burp.Montoya.userInterface().currentTheme() == Theme.DARK) Color(43, 43, 43) else Color.WHITE
+    private val backgroundColor = if (Burp.isDarkMode()) Color(43, 43, 43) else Color.WHITE
 
     private var normalTextStyle = SimpleAttributeSet().also {
         val editorFont = Burp.Montoya.userInterface().currentEditorFont()
