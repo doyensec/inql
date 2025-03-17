@@ -22,7 +22,6 @@ import inql.utils.getTextAreaComponent
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Font
-import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 
 class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
@@ -115,7 +114,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
     private fun refreshFont() {
         // This is needed because we take the font from the varsEditor and
         //  Burp doesn't set the correct font until the editor needs to be displayed
-        this.queryEditor.setFontInHTML(this.editorFont)
+        this.queryEditor.setEditorFont(this.editorFont)
     }
 
     override fun setRequestResponse(requestResponse: HttpRequestResponse) {
@@ -135,7 +134,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
             this.varsState.error = true
 
             // Show the message about an error:
-            this.queryEditor.setHTML("There was an error during JSON deserialization.")
+            this.queryEditor.setPlaintext("There was an error during JSON deserialization.")
             this.vars = null
             return
         }
