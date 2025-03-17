@@ -54,6 +54,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private val scrollPane = JScrollPane(textPaneContainer).also {
         it.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
         it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS
+        it.verticalScrollBar.unitIncrement = 16
     }
 
     private fun updateComponentSize() {
