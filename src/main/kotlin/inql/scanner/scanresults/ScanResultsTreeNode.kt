@@ -9,14 +9,19 @@ import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
 
-open class TreeNodeWithCustomLabel(val label: String, obj: Any?) : DefaultMutableTreeNode(obj) {
+open class TreeNodeWithCustomLabel(val label: String, obj: Any?, val forceDirectory: Boolean = false) : DefaultMutableTreeNode(obj) {
     override fun toString(): String {
         return this.label
+    }
+
+    override fun isLeaf(): Boolean {
+        if (forceDirectory) return false
+        return super.isLeaf()
     }
 }
 
 class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
-    TreeNodeWithCustomLabel(label, null) {
+    TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
     init {
         list.forEach {
             this.add(TreeNodeWithCustomLabel(it, GQLQueryElement(it, type, schema)))

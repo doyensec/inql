@@ -10,7 +10,6 @@ import inql.utils.getTextAreaComponent
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import javax.swing.JPanel
-import javax.swing.JScrollPane
 
 class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
     companion object {
@@ -32,8 +31,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         // GQLEditor card
         val gqlEditorCard = BorderPanel(0)
         gqlEditorCard.add(gqlEditor, BorderLayout.CENTER)
-        val scrollPane = JScrollPane( gqlEditorCard );
-        this.add(scrollPane, GQL_EDITOR_CARD)
+        this.add(gqlEditorCard, GQL_EDITOR_CARD)
 
         this.show(RAW_EDITOR_CARD)
     }
@@ -69,7 +67,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
     fun setContextMenuHandler(handler: SendFromInqlHandler) {
         handler.addRightClickHandler(rawEditor.getTextAreaComponent())
         handler.addKeyboardShortcutHandler(rawEditor.getTextAreaComponent())
-        handler.addRightClickHandler(gqlEditor)
-        handler.addKeyboardShortcutHandler(gqlEditor)
+        handler.addRightClickHandler(gqlEditor.textPane)
+        handler.addKeyboardShortcutHandler(gqlEditor.textPane)
     }
 }
