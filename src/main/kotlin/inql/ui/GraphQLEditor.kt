@@ -1,18 +1,18 @@
 package inql.ui
 
 import burp.Burp
+import burp.api.montoya.ui.Theme
 import inql.Config
 import inql.Logger
 import inql.graphql.formatting.Formatter
 import inql.graphql.formatting.Style
 import inql.graphql.formatting.StyleMetadata
-import inql.utils.getTextAreaComponent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Dimension
-import java.awt.Font
 import java.util.concurrent.CancellationException
 import javax.swing.*
 import javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES
@@ -27,21 +27,24 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private var runningJob: Job? = null
     private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
+    private val backgroundColor = if (Burp.Montoya.userInterface().currentTheme() == Theme.DARK) Color(43, 43, 43) else Color.WHITE
 
     private var normalTextStyle = SimpleAttributeSet().also {
-        val editorFont = Burp.Montoya.userInterface().createRawEditor().getTextAreaComponent().font
+        val editorFont = Burp.Montoya.userInterface().currentEditorFont()
         StyleConstants.setFontFamily(it, editorFont.family)
         StyleConstants.setFontSize(it, editorFont.size)
+        StyleConstants.setForeground(it, Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!![Style.StyleClass.NONE])
     }
 
     private var styleMap = Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!!.entries.associate {
         it.key to SimpleAttributeSet().also { style -> StyleConstants.setForeground(style, it.value) }
     }
 
-    private val textPane = JTextPane().also {
+    val textPane = JTextPane().also {
         it.isEditable = !readOnly
         it.putClientProperty(HONOR_DISPLAY_PROPERTIES, true)
         it.editorKit = WrapEditorKit()
+        it.background = backgroundColor
     }
 
     private val textPaneContainer = JPanel(BorderLayout()).also {
@@ -65,19 +68,6 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
 
     init {
         this.add(scrollPane, BorderLayout.CENTER)
-        Burp.Montoya.userInterface().applyThemeToComponent(this)
-        Burp.Montoya.userInterface().applyThemeToComponent(textPane)
-    }
-
-    fun setEditorFont(f: Font) {
-        textPane.font = f
-        this.normalTextStyle = SimpleAttributeSet().also {
-            StyleConstants.setFontFamily(it, f.family)
-            StyleConstants.setFontSize(it, f.size)
-        }
-        styleMap = Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!!.entries.associate {
-            it.key to SimpleAttributeSet(normalTextStyle).also { style -> StyleConstants.setForeground(style, it.value) }
-        }
     }
 
     fun getQuery(): String {

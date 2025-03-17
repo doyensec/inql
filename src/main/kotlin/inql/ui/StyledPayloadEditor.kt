@@ -89,10 +89,6 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         this.queryEditor = GraphQLEditor(readOnly)
         val gqlEditorCard = BorderPanel(0)
         gqlEditorCard.add(queryEditor, BorderLayout.CENTER)
-//        val scrollPane = JScrollPane(gqlEditorCard)
-//        scrollPane.verticalScrollBar.setUnitIncrement(10);
-//        scrollPane.horizontalScrollBar.setUnitIncrement(10);
-
 
         if (readOnly) {
             this.varsEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
@@ -111,14 +107,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         this.contextMenu.addKeyboardShortcutHandler(this.queryEditor)
     }
 
-    private fun refreshFont() {
-        // This is needed because we take the font from the varsEditor and
-        //  Burp doesn't set the correct font until the editor needs to be displayed
-        this.queryEditor.setEditorFont(this.editorFont)
-    }
-
     override fun setRequestResponse(requestResponse: HttpRequestResponse) {
-        refreshFont()
         this.request = requestResponse.request()
         lateinit var body: JsonObject
         val json_body = requestResponse.request().bodyToString()
