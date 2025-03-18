@@ -3,7 +3,6 @@ package burp
 import burp.api.montoya.BurpExtension
 import burp.api.montoya.MontoyaApi
 import burp.api.montoya.extension.ExtensionUnloadingHandler
-import com.formdev.flatlaf.extras.FlatInspector
 import inql.InQL
 import java.io.PrintWriter
 
@@ -65,8 +64,6 @@ class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
 
         inql = InQL()
         montoyaApi.extension().registerUnloadingHandler(this)
-
-        FlatInspector.install( "ctrl shift alt X" );
     }
 
     override fun extensionUnloaded() {
