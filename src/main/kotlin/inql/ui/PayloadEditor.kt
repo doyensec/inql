@@ -64,7 +64,7 @@ class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
         get() = this.queryEditor.contents.toString()
         set(s) {
             runBlocking {
-                this@PayloadEditor.queryEditor.contents = ByteArray.byteArray(formatter.format(s))
+                this@PayloadEditor.queryEditor.contents = ByteArray.byteArray(formatter.format(s).first)
             }
         }
     var vars: JsonObject?

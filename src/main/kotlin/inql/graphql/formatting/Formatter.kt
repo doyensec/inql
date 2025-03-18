@@ -9,11 +9,11 @@ class Formatter(
     val minimized: Boolean = false,
     val spaces: Short = 4,
     val stripComments: Boolean = false,
-    val asHTML: Boolean = false,
     val isIntrospection: Boolean = false,
 ) {
     companion object {
         private val globalCache = HashMap<String, HashMap<Long, String>>()
+        private val styleCache = HashMap<String, HashMap<Long, List<StyleMetadata>>>()
 
         private fun getQueryHash(query: String): Long {
             /*
@@ -21,20 +21,17 @@ class Formatter(
              */
             return MurmurHash3.hash128(query.toByteArray())[0]
         }
-        fun format(query: String, minimized: Boolean = false, spaces: Short = 4, asHTML: Boolean = false): String {
-            return Formatter(minimized, spaces, asHTML).format(query)
-        }
-
-        fun formatAsHTML(query: String, minimized: Boolean = false, spaces: Short = 4): String {
-            return Formatter(minimized, spaces, true).format(query)
+        fun format(query: String, minimized: Boolean = false, spaces: Short = 4): Pair<String, List<StyleMetadata>> {
+            return Formatter(minimized, spaces).format(query)
         }
     }
 
-    private val cacheKey = "$minimized$spaces$stripComments$asHTML$isIntrospection"
+    private val cacheKey = "$minimized$spaces$stripComments$isIntrospection"
 
     init {
         if (!globalCache.containsKey(this.cacheKey)) {
             globalCache[this.cacheKey] = HashMap()
+            styleCache[this.cacheKey] = HashMap()
         }
     }
 
@@ -43,19 +40,26 @@ class Formatter(
         return globalCache[this.cacheKey]!![hash]
     }
 
-    private fun setCache(query: String, formatted: String) {
+    private fun getStyleCache(query: String): List<StyleMetadata> {
+        val hash = getQueryHash(query)
+        return styleCache[cacheKey]!![hash]!!
+    }
+
+    private fun setCache(query: String, formatted: String, style: List<StyleMetadata>) {
         val hash = getQueryHash(query)
         globalCache[this.cacheKey]!![hash] = formatted
+        styleCache[this.cacheKey]!![hash] = style
     }
 
     private fun makeIndent(level: Int): String {
         return " ".repeat(level * this.spaces)
     }
 
-    fun format(query: String): String {
+    fun format(query: String): Pair<String, List<StyleMetadata>> {
         val cached = this.getCache(query)
         if (cached != null) {
-            return cached
+            val cachedStyle = this.getStyleCache(query)
+            return Pair(cached, cachedStyle)
         }
 
         var tokens = Tokenizer(query).tokenize()
@@ -63,16 +67,29 @@ class Formatter(
         if (stripComments) {
             tokens = tokens.filter { it.type != Token.Type.COMMENT }
         }
-        val formatted = this.format(tokens)
-        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, formatted) } // We don't need to wait for this
-        return formatted
+        val (formattedStr, formattedStyle) = this.format(tokens)
+        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, formattedStr, formattedStyle) } // We don't need to wait for this
+        return Pair(formattedStr, formattedStyle)
     }
 
-    private fun format(tokens: List<Token>): String {
+    private fun format(tokens: List<Token>): Pair<String, List<StyleMetadata>> {
         val result = StringBuilder()
+        val highlightInfo = ArrayList<StyleMetadata>()
         var indentLevel = 0
         var firstTopLevelToken: Token? = null
         var newline = false
+
+        fun appendToken(token: Token) {
+            if (token.styleClass != Style.StyleClass.NONE) {
+                highlightInfo.add(StyleMetadata(result.length, token.text.length, token.styleClass))
+            }
+            result.append(token.text)
+        }
+
+        fun newLine(indentLevel: Int) {
+            result.append("\n")
+            result.append(makeIndent(indentLevel))
+        }
 
         // Count the depth of complex inputs
         var complexInputLevel = 0
@@ -90,12 +107,11 @@ class Formatter(
              */
             if (indentLevel == 0) {
                 if (firstTopLevelToken == null) {
-                    result.append("\n\n")
-
                     firstTopLevelToken = token
 
                     if (setOf("query", "mutation", "subscription").contains(token.text)) {
-                        result.append("${token.print(this.asHTML)} ")
+                        appendToken(token)
+                        result.append(" ")
                         newline = false
                         continue
                     }
@@ -103,9 +119,13 @@ class Formatter(
                     if (token.text == "fragment") {
                         // fragment A on B { ... }
                         if (index + 3 < tokens.size && tokens[index + 2].text == "on") {
-                            result.append(
-                                "${token.print(this.asHTML)} ${tokens[index + 1].print(this.asHTML)} ${tokens[index + 2].print(this.asHTML)} ${tokens[index + 3].print(this.asHTML)}",
-                            )
+                            appendToken(token)
+                            result.append(" ")
+                            appendToken(tokens[index + 1])
+                            result.append(" ")
+                            appendToken(tokens[index + 2])
+                            result.append(" ")
+                            appendToken(tokens[index + 3])
                             index += 3
                             newline = false
                             continue
@@ -121,21 +141,23 @@ class Formatter(
                 // '{' is also used for complex input variables and it shouldn't be followed by newline in that case
                 if (complexInputLevel > 0) {
                     complexInputLevel++
-                    result.append("${token.print(this.asHTML)} ")
+                    appendToken(token)
+                    result.append(" ")
                     newline = false
                     continue
                 }
 
                 if (index > 0 && setOf(":", "=").contains(tokens[index - 1].text)) {
                     complexInputLevel = 1
-                    result.append("${token.print(this.asHTML)} ")
+                    appendToken(token)
+                    result.append(" ")
                     newline = false
                     continue
                 }
 
                 if (index > 0 && tokens[index - 1].text[0] == '#') {
                     // if the previous line was a comment, we need to add a newline before the block
-                    result.append("\n${makeIndent(indentLevel)}")
+                    newLine(indentLevel)
                 }
 
                 indentLevel++
@@ -145,28 +167,33 @@ class Formatter(
                     result.append(" ")
                 }
 
-                result.append("${token.print(this.asHTML)}\n${makeIndent(indentLevel)}")
+                appendToken(token)
+                newLine(indentLevel)
                 newline = false
                 continue
             } else if (token.text == "}") {
                 if (complexInputLevel > 0) {
                     complexInputLevel--
-                    result.append(" ${token.print(this.asHTML)}")
+                    result.append(" ")
+                    appendToken(token)
                     newline = false
                     continue
                 }
                 indentLevel--
-                result.append("\n${makeIndent(indentLevel)}${token.print(this.asHTML)}")
+                newLine(indentLevel)
+                appendToken(token)
                 newline = true
                 continue
             } else if (setOf(",", ":").contains(token.text)) {
                 // check for the tokens that has to be followed by a space
-                result.append("${token.print(this.asHTML)} ")
+                appendToken(token)
+                result.append(" ")
                 newline = false
                 continue
             } else if (token.text[0] == '@') {
                 // check for the tokens that has to be preceded by a space
-                result.append(" ${token.print(this.asHTML)}")
+                result.append(" ")
+                appendToken(token)
                 newline = false
                 continue
             } else if (token.text == "...") {
@@ -178,31 +205,36 @@ class Formatter(
                    ...UserFragment
                  */
                 if (newline) {
-                    result.append("\n${makeIndent(indentLevel)}")
+                    newLine(indentLevel)
                 }
                 newline = false
                 if (tokens.size > index + 1 && tokens[index + 1].text == "on") {
-                    result.append("${token.print(this.asHTML)} ${tokens[index + 1].print(this.asHTML)} ")
+                    appendToken(token)
+                    result.append(" ")
+                    appendToken(tokens[index + 1])
+                    result.append(" ")
                     index++
                     continue
                 } else {
-                    result.append(token.print(this.asHTML))
+                    appendToken(token)
                     continue
                 }
             } else if (setOf("=", "|").contains(token.text)) {
                 // tokens that need to be surrounded by spaces
-                result.append(" ${token.print(this.asHTML)} ")
+                result.append(" ")
+                appendToken(token)
+                result.append(" ")
                 newline = false
                 continue
             } else if (setOf("$", "!", "(", "[", "]").contains(token.text)) {
                 // tokens that are used as is (no spaces)
-                result.append(token.print(this.asHTML))
+                appendToken(token)
                 newline = false
                 continue
             } else if (token.text == ")") {
                 // ')' needs special handling - it doesn't need a space, but it could indicate the end of a line
                 newline = true
-                result.append(token.print(this.asHTML))
+                appendToken(token)
                 continue
             } else if (token.text[0] == '#') {
                 // newline at the end of the comment is a hack to signalize that it's a whole line comment
@@ -211,30 +243,34 @@ class Formatter(
                     if (newline) {
                         if (result.isNotEmpty() && result.last() != '\n') {
                             // whole line comment, add a newline before
-                            result.append("\n${makeIndent(indentLevel)}${token.print(this.asHTML)}")
+                            newLine(indentLevel)
+                            appendToken(token)
                         } else {
                             // whole line comment, but there is a newline already
-                            result.append("${makeIndent(indentLevel)}${token.print(this.asHTML)}")
+                            result.append(makeIndent(indentLevel))
+                            appendToken(token)
                         }
                     } else {
-                        result.append(token.print(this.asHTML))
+                        appendToken(token)
                     }
                 } else {
                     // inline comment, no newline but add a space before
-                    result.append(" ${token.print(this.asHTML)}")
+                    result.append(" ")
+                    appendToken(token)
                 }
                 newline = true
                 continue
             } else {
                 if (newline) {
-                    result.append("\n${makeIndent(indentLevel)}${token.print(this.asHTML)}")
+                    newLine(indentLevel)
+                    appendToken(token)
                 } else {
-                    result.append(token.print(this.asHTML))
+                    appendToken(token)
                 }
                 newline = true
                 continue
             }
         }
-        return result.toString().trim()
+        return Pair(result.toString(), highlightInfo.toList())
     }
 }

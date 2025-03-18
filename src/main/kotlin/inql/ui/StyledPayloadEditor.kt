@@ -22,7 +22,6 @@ import inql.utils.getTextAreaComponent
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Font
-import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 
 class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
@@ -90,10 +89,6 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         this.queryEditor = GraphQLEditor(readOnly)
         val gqlEditorCard = BorderPanel(0)
         gqlEditorCard.add(queryEditor, BorderLayout.CENTER)
-        val scrollPane = JScrollPane(gqlEditorCard)
-        scrollPane.verticalScrollBar.setUnitIncrement(10);
-        scrollPane.horizontalScrollBar.setUnitIncrement(10);
-
 
         if (readOnly) {
             this.varsEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
@@ -102,24 +97,17 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
         }
 
         this.component =
-            JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollPane, this.varsEditor.uiComponent())
+            JSplitPane(JSplitPane.VERTICAL_SPLIT, gqlEditorCard, this.varsEditor.uiComponent())
         this.component.setDividerLocation(0.5)
         this.component.resizeWeight = 0.75
         this.component.isOneTouchExpandable = true
 
         // Add context menu handler
-        this.contextMenu.addRightClickHandler(this.queryEditor)
-        this.contextMenu.addKeyboardShortcutHandler(this.queryEditor)
-    }
-
-    private fun refreshFont() {
-        // This is needed because we take the font from the varsEditor and
-        //  Burp doesn't set the correct font until the editor needs to be displayed
-        this.queryEditor.setFontInHTML(this.editorFont)
+        this.contextMenu.addRightClickHandler(this.queryEditor.textPane)
+        this.contextMenu.addKeyboardShortcutHandler(this.queryEditor.textPane)
     }
 
     override fun setRequestResponse(requestResponse: HttpRequestResponse) {
-        refreshFont()
         this.request = requestResponse.request()
         lateinit var body: JsonObject
         val json_body = requestResponse.request().bodyToString()
@@ -135,7 +123,7 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
             this.varsState.error = true
 
             // Show the message about an error:
-            this.queryEditor.text = "There was an error during JSON deserialization."
+            this.queryEditor.setPlaintext("There was an error during JSON deserialization.")
             this.vars = null
             return
         }
