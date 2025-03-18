@@ -12,7 +12,6 @@ buildscript {
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
-    id("com.palantir.git-version") version "3.0.0"
 }
 
 dependencies {
@@ -49,8 +48,6 @@ repositories {
     mavenCentral()
 }
 
-def generatedVersionDir = layout.buildDirectory.dir("generated-version").get().asFile.path
-
 sourceSets {
     main {
         java {
@@ -59,23 +56,8 @@ sourceSets {
         resources {
             srcDirs = ['resources']
         }
-        output.dir(generatedVersionDir, builtBy: 'generateVersionProperties')
     }
 }
-
-tasks.register('generateVersionProperties') {
-    def propertiesFile = file "$generatedVersionDir/version.properties"
-    propertiesFile.parentFile.mkdirs()
-    def properties = new Properties()
-    def details = versionDetails()
-    version(details.lastTag)
-    println "Version from git tag: $version"
-    properties.setProperty("version", details.lastTag.toString())
-    propertiesFile.withWriter { properties.store(it, null) }
-}
-
-processResources.dependsOn generateVersionProperties
-
 
 build {
     dependsOn(clean, processResources)

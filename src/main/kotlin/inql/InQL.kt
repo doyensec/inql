@@ -1,7 +1,6 @@
 package inql
 
 import burp.Burp
-import burp.BurpExtender
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
 import inql.externaltools.ExternalToolsService
@@ -25,7 +24,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     val attacker = Attacker(this)
 
     init {
-        Burp.Montoya.logging().raiseInfoEvent("InQL ${BurpExtender.version} Started")
+        Burp.Montoya.logging().raiseInfoEvent("InQL Started")
         config.dumpContents()
 
         // Cleanup from previous versions
