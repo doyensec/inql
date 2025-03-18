@@ -25,14 +25,6 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     init {
         Burp.Montoya.logging().raiseInfoEvent("InQL Started")
-        config.dumpContents()
-
-        // Cleanup from previous versions
-        // FIXME: Remove this once this is exposed through Settings UI
-        config.delete("logging.level", Config.Scope.PROJECT)
-        config.delete("codegen.depth", Config.Scope.PROJECT)
-        config.delete("codegen.pad", Config.Scope.PROJECT)
-        config.delete("ScannerPanel", Config.Scope.GLOBAL)
 
         val logLevel = config.getString("logging.level") ?: "DEBUG"
         Logger.setLevel(logLevel)

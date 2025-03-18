@@ -239,17 +239,17 @@ class Config private constructor() {
     }
 
     fun dumpContents() {
-        Logger.info("PROJECT SETTINGS:")
+        Logger.debug("PROJECT SETTINGS:")
         this.items(Scope.PROJECT).forEach {
-            Logger.info("${it.key} -> ${it.value}")
+            Logger.debug("${it.key} -> ${it.value}")
         }
-        Logger.info("GLOBAL SETTINGS:")
+        Logger.debug("GLOBAL SETTINGS:")
         this.items(Scope.GLOBAL).forEach {
-            Logger.info("${it.key} -> ${it.value}")
+            Logger.debug("${it.key} -> ${it.value}")
         }
-        Logger.info("DEFAULT SETTINGS:")
+        Logger.debug("DEFAULT SETTINGS:")
         this.items(Scope.DEFAULT).forEach {
-            Logger.info("${it.key} -> ${it.value}")
+            Logger.debug("${it.key} -> ${it.value}")
         }
     }
 }
