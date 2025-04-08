@@ -82,7 +82,7 @@ To send a request with 3 batched queries, use one of the placeholders described 
 the query to send. For example:
 <pre> 
 {
-    "query": "query { $[INT:0:3] verify2FA(code: \"1234\") { status } }"
+    "query": "query { $[INT:0:3] verify2FA(code: \"${'$'}INT\") { status } }"
 }
 </pre>
 
@@ -90,16 +90,16 @@ This will generate and send the following request:
 <pre> 
 {
     "query": "query { 
-        op0:   verify2FA(code: \"1234\") { status }  
-        op1:   verify2FA(code: \"1234\") { status }  
-        op2:   verify2FA(code: \"1234\") { status }  
+        op0:   verify2FA(code: \"0\") { status }  
+        op1:   verify2FA(code: \"1\") { status }  
+        op2:   verify2FA(code: \"2\") { status }  
     }"
 }
 </pre>
 
 Supported placeholders:<br/>
-- <b>${'$'}[INT:first:last]</b> - first and last are integers, works like <code>range(first,last)</code> in Python<br/>
-- <b>${'$'}[FILE:path:first:last]</b> - absolute path to a file and the (optional) range of lines (first line is 1 not 0)<br/>
+- <b>${'$'}[INT:first:last]</b> with variable <b>${'$'}INT</b> - first and last are integers, works like <code>range(first,last)</code> in Python<br/>
+- <b>${'$'}[FILE:path:first:last]</b> with variable <b>${'$'}FILE</b> - absolute path to a file and the (optional) range of lines (first line is 1 not 0)<br/>
 <br/>
 Current limitations: only one placeholder, no variables.
 """)
@@ -187,7 +187,8 @@ Current limitations: only one placeholder, no variables.
                     start = args[0].toInt()
                     end = args[1].toInt()
                     for (n in start..<end) {
-                        exploit.append(" op${n}: $leading$trailing{$query}$sfx")
+                        val tmpQuery = query.replace("\$INT", n.toString())
+                        exploit.append(" op${n}: $leading$trailing{$tmpQuery}$sfx")
                     }
                 }
 
@@ -199,11 +200,12 @@ Current limitations: only one placeholder, no variables.
                     start = 1
                     end = lines.size
                     if (args.size == 3) {
-                        start = min(args[1].toInt() - 1, 1)
-                        end = max(args[2].toInt() - 1, lines.size)
+                        start = max(args[1].toInt(), 1)
+                        end = min(args[2].toInt(), lines.size)
                     }
-                    for (n in start..end) {
-                        exploit.append("op$n: $leading${lines[n - 1]}$trailing{$query}$sfx")
+                    for (n in start..<end) {
+                        val tmpQuery = query.replace("\$FILE", lines[n - 1])
+                        exploit.append(" op$n: $leading$trailing{$tmpQuery}$sfx")
                     }
                 }
 

@@ -1,7 +1,6 @@
 package inql
 
 import burp.Burp
-import burp.BurpExtender
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
 import inql.externaltools.ExternalToolsService
@@ -25,15 +24,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     val attacker = Attacker(this)
 
     init {
-        Burp.Montoya.logging().raiseInfoEvent("InQL ${BurpExtender.version} Started")
-        config.dumpContents()
-
-        // Cleanup from previous versions
-        // FIXME: Remove this once this is exposed through Settings UI
-        config.delete("logging.level", Config.Scope.PROJECT)
-        config.delete("codegen.depth", Config.Scope.PROJECT)
-        config.delete("codegen.pad", Config.Scope.PROJECT)
-        config.delete("ScannerPanel", Config.Scope.GLOBAL)
+        Burp.Montoya.logging().raiseInfoEvent("InQL Started")
 
         val logLevel = config.getString("logging.level") ?: "DEBUG"
         Logger.setLevel(logLevel)

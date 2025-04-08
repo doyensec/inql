@@ -5,16 +5,10 @@ import burp.api.montoya.MontoyaApi
 import burp.api.montoya.extension.ExtensionUnloadingHandler
 import inql.InQL
 import java.io.PrintWriter
-import java.util.*
-import com.formdev.flatlaf.extras.FlatInspector
 
 @Suppress("unused")
 class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
 
-    companion object {
-        val version =
-            Properties().also { it.load(this::class.java.getResourceAsStream("/version.properties")) }.getProperty("version") ?: ""
-    }
     private lateinit var callbacks: IBurpExtenderCallbacks
     private lateinit var inql: InQL
 
@@ -70,8 +64,6 @@ class BurpExtender : IBurpExtender, ExtensionUnloadingHandler, BurpExtension {
 
         inql = InQL()
         montoyaApi.extension().registerUnloadingHandler(this)
-
-        FlatInspector.install( "ctrl shift alt X" );
     }
 
     override fun extensionUnloaded() {
