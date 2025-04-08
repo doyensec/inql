@@ -203,7 +203,7 @@ Current limitations: only one placeholder, no variables.
                         start = max(args[1].toInt(), 1)
                         end = min(args[2].toInt(), lines.size)
                     }
-                    for (n in start..<end) {
+                    for (n in start..end) {
                         val tmpQuery = query.replace("\$FILE", lines[n - 1])
                         exploit.append(" op$n: $leading$trailing{$tmpQuery}$sfx")
                     }
