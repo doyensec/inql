@@ -17,6 +17,7 @@ import com.google.gson.JsonSyntaxException
 import inql.InQL
 import inql.Logger
 import inql.graphql.Utils.isGraphQLRequest
+import inql.utils.GraphQLEditorSearchPanel
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
 import java.awt.BorderLayout
@@ -88,7 +89,10 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
     init {
         this.queryEditor = GraphQLEditor(readOnly)
         val gqlEditorCard = BorderPanel(0)
+        val gqlEditorSearchPanel = GraphQLEditorSearchPanel(this.queryEditor.textPane)
+
         gqlEditorCard.add(queryEditor, BorderLayout.CENTER)
+        gqlEditorCard.add(gqlEditorSearchPanel, BorderLayout.SOUTH)
 
         if (readOnly) {
             this.varsEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
