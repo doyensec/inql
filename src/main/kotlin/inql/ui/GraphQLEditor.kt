@@ -15,8 +15,8 @@ import java.awt.Dimension
 import java.util.concurrent.CancellationException
 import javax.swing.*
 import javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES
-import javax.swing.text.SimpleAttributeSet
-import javax.swing.text.StyleConstants
+import javax.swing.text.*
+
 
 class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = false) : JPanel(BorderLayout()) {
 
@@ -25,6 +25,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private val watchdogCouroutingScope = CoroutineScope(Dispatchers.Default)
     private var runningJob: Job? = null
     private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
+    private val shouldWordWrap = Config.getInstance().getBoolean("editor.formatting.wordwrap")
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
     private val backgroundColor = if (Burp.isDarkMode()) Color(43, 43, 43) else Color.WHITE
 
@@ -53,13 +54,16 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
 
     private val scrollPane = JScrollPane(textPaneContainer).also {
         it.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
-        it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS
+        it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         it.verticalScrollBar.unitIncrement = 16
     }
 
     private fun updateComponentSize() {
         try {
-            this.textPaneContainer.preferredSize = Dimension(this.scrollPane.width, textPane.preferredSize.height)
+            if (shouldWordWrap == true) {
+                this.textPaneContainer.preferredSize = Dimension(this.scrollPane.preferredSize.width, textPane.preferredSize.height)
+            }
+            scrollPane.horizontalScrollBar?.unitIncrement = 16
         } catch (e: Exception) {
             Logger.error("Exception caught while resizing JTextPane")
         }

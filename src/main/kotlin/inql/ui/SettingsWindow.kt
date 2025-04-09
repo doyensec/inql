@@ -128,6 +128,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 Spinner("Formatting timeout (ms)", 0, 10000)
             ),
             SettingsElement(
+                "editor.formatting.wordwrap",
+                CheckBox("Enable word wrap in the GraphQL editor")
+            ),
+            SettingsElement(
                 "editor.send_to.strip_comments",
                 CheckBox("Strip GraphQL comments from the Scanner result tab when sending a request to another tool")
             ),
