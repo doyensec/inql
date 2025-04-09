@@ -6,6 +6,7 @@ import burp.api.montoya.ui.editor.EditorOptions
 import inql.ui.BorderPanel
 import inql.ui.GraphQLEditor
 import inql.ui.SendFromInqlHandler
+import inql.utils.GraphQLEditorSearchPanel
 import inql.utils.getTextAreaComponent
 import java.awt.BorderLayout
 import java.awt.CardLayout
@@ -30,7 +31,9 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
 
         // GQLEditor card
         val gqlEditorCard = BorderPanel(0)
+        val gqlEditorSearchPanel = GraphQLEditorSearchPanel(this.gqlEditor.textPane)
         gqlEditorCard.add(gqlEditor, BorderLayout.CENTER)
+        gqlEditorCard.add(gqlEditorSearchPanel, BorderLayout.SOUTH)
         this.add(gqlEditorCard, GQL_EDITOR_CARD)
 
         this.show(RAW_EDITOR_CARD)
