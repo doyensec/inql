@@ -9,7 +9,7 @@ import inql.graphql.Utils
 import inql.utils.JsonFileReader
 
 
-class POIScanner(schema: GQLSchema) {
+class POIScanner(private val schema: GQLSchema) {
     companion object {
         data class KeywordCategory(
             val name: String,
@@ -28,7 +28,6 @@ class POIScanner(schema: GQLSchema) {
     private var regexKeywords = mutableMapOf<String,String>()
     private var defaultKeywords = mutableListOf<String>()
     private val config = Config.getInstance()
-    private val schema = schema
 
     init {
         val jsonString = JsonFileReader.readJsonFile("keywords.json")
@@ -76,6 +75,7 @@ class POIScanner(schema: GQLSchema) {
         val subscriptions = schema.subscriptions
         val results = mutableListOf<FieldResult>()
         val finalResults = mutableMapOf<String, MutableList<FieldResult>>()
+        val tmpResultsCache = mutableMapOf<String, MutableList<String>>() // for de-duplication
 
         for (q in queries) {
             results.addAll(scanField(q.value.type, "", "Query", depth))
@@ -92,8 +92,12 @@ class POIScanner(schema: GQLSchema) {
         for (r in results.distinct().toMutableList()) {
             if (r.type !in finalResults) {
                 finalResults[r.type] = mutableListOf(r)
+                tmpResultsCache[r.type] = mutableListOf(r.path)
             } else {
-                finalResults[r.type]!!.add(r)
+                if (r.path !in tmpResultsCache[r.type]!!) {
+                    finalResults[r.type]!!.add(r)
+                    tmpResultsCache[r.type]!!.add(r.path)
+                }
             }
         }
 
@@ -191,7 +195,7 @@ class POIScanner(schema: GQLSchema) {
 
         // Check field name against regex keywords
         for ((keywordName, regexPattern) in regexKeywords) {
-            if (Regex(regexPattern, RegexOption.IGNORE_CASE).containsMatchIn(field.name)) {
+            if (Regex("(\\\\W|^|_)($regexPattern)(\\\\W|\$|_)", RegexOption.IGNORE_CASE).containsMatchIn(field.name)) {
                 results.add(FieldResult(
                     type = keywordName,
                     path = path,
