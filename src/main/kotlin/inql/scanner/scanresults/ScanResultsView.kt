@@ -11,6 +11,7 @@ import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
 import inql.ui.SendFromInqlHandler
+import inql.utils.QueryToRequestConverter
 import javax.swing.JSplitPane
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -95,6 +96,9 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         }
         override fun getRequest(): HttpRequest? {
             Logger.warning("VALUE: $shouldStripComments")
+            Logger.warning(view.currentNode.toString())
+            val qtrc = QueryToRequestConverter(view.scannerTab.scanResults.last())
+            var q = qtrc.convert(view.currentNode.toString(), view.currentNode?.parent.toString())
 
             val node = view.currentNode ?: return null
             val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
@@ -105,7 +109,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 query = stripComments(query)
             }
 
-            return view.generateRequest(requestTemplate, query)
+            return view.generateRequest(requestTemplate, q)
         }
 
         override fun getText(): String {
