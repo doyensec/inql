@@ -2,15 +2,14 @@ package inql.scanner.scanresults
 
 import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.Config
 import inql.Logger
-import inql.graphql.formatting.Formatter
 import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
 import inql.ui.SendFromInqlHandler
+import inql.utils.QueryToRequestConverter
 import javax.swing.JSplitPane
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -59,7 +58,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         reqData.addProperty("query", query)
         return requestTemplate
             .withService(HttpService.httpService(requestTemplate.url()))
-            .withBody(Gson().toJson(reqData))
+            .withBody(query)
     }
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
@@ -87,23 +86,15 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
         private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
-        private val stripCommentsFormatter = Formatter(minimized = false, spaces = 4, stripComments = true, isIntrospection = true)
 
-        private fun stripComments(query: String): String {
-            Logger.warning("STRIPPING COMMENTS")
-            return this.stripCommentsFormatter.format(query).first;
-        }
         override fun getRequest(): HttpRequest? {
             Logger.warning("VALUE: $shouldStripComments")
 
+            val converter = QueryToRequestConverter(view.scannerTab.scanResults.last())
+            val query = converter.convert(view.currentNode.toString(), view.currentNode?.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
+
             val node = view.currentNode ?: return null
             val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
-            val nodeContent = node.userObject as ScanResultElement
-            var query = nodeContent.content()
-
-            if (shouldStripComments == true) {
-                query = stripComments(query)
-            }
 
             return view.generateRequest(requestTemplate, query)
         }
