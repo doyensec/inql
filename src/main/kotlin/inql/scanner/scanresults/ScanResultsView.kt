@@ -60,7 +60,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         reqData.addProperty("query", query)
         return requestTemplate
             .withService(HttpService.httpService(requestTemplate.url()))
-            .withBody(Gson().toJson(reqData))
+            .withBody(query)
     }
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
@@ -88,28 +88,17 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
         private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
-        private val stripCommentsFormatter = Formatter(minimized = false, spaces = 4, stripComments = true, isIntrospection = true)
 
-        private fun stripComments(query: String): String {
-            Logger.warning("STRIPPING COMMENTS")
-            return this.stripCommentsFormatter.format(query).first;
-        }
         override fun getRequest(): HttpRequest? {
             Logger.warning("VALUE: $shouldStripComments")
-            Logger.warning(view.currentNode.toString())
-            val qtrc = QueryToRequestConverter(view.scannerTab.scanResults.last())
-            var q = qtrc.convert(view.currentNode.toString(), view.currentNode?.parent.toString())
+
+            val converter = QueryToRequestConverter(view.scannerTab.scanResults.last())
+            val query = converter.convert(view.currentNode.toString(), view.currentNode?.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
 
             val node = view.currentNode ?: return null
             val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
-            val nodeContent = node.userObject as ScanResultElement
-            var query = nodeContent.content()
 
-            if (shouldStripComments == true) {
-                query = stripComments(query)
-            }
-
-            return view.generateRequest(requestTemplate, q)
+            return view.generateRequest(requestTemplate, query)
         }
 
         override fun getText(): String {
