@@ -2,11 +2,9 @@ package inql.scanner.scanresults
 
 import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.Config
 import inql.Logger
-import inql.graphql.formatting.Formatter
 import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel

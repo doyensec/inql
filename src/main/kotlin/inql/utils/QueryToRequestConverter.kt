@@ -1,8 +1,6 @@
 package inql.utils
 
-import burp.api.montoya.http.message.requests.HttpRequest
 import graphql.schema.*
-import inql.Logger
 import inql.scanner.ScanResult
 
 data class QueryWithVariables(
@@ -341,7 +339,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             is Number -> value.toString()
             is Boolean -> value.toString()
             is Map<*, *> -> {
-                val entries = (value as Map<*, *>).entries.joinToString(", ") { (k, v) ->
+                val entries = value.entries.joinToString(", ") { (k, v) ->
                     "\"$k\": ${formatVariablesToJson(v!!)}"
                 }
                 "{$entries}"
