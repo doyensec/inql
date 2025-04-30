@@ -187,8 +187,9 @@ Current limitations: only one placeholder, no variables.
                     start = args[0].toInt()
                     end = args[1].toInt()
                     for (n in start..<end) {
-                        val tmpQuery = query.replace("\$INT", n.toString())
-                        exploit.append(" op${n}: $leading$trailing{$tmpQuery}$sfx")
+                        var tmpQuery = " op${n}: $leading$trailing{$query}$sfx"
+                        tmpQuery = tmpQuery.replace("\$INT", n.toString())
+                        exploit.append(tmpQuery)
                     }
                 }
 
@@ -204,8 +205,9 @@ Current limitations: only one placeholder, no variables.
                         end = min(args[2].toInt(), lines.size)
                     }
                     for (n in start..end) {
-                        val tmpQuery = query.replace("\$FILE", lines[n - 1])
-                        exploit.append(" op$n: $leading$trailing{$tmpQuery}$sfx")
+                        var tmpQuery = " op$n: $leading$trailing{$query}$sfx"
+                        tmpQuery = tmpQuery.replace("\$FILE", lines[n - 1])
+                        exploit.append(tmpQuery)
                     }
                 }
 
