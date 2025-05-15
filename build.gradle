@@ -26,6 +26,10 @@ dependencies {
     implementation 'com.formdev:flatlaf:3.4'
     implementation 'com.formdev:flatlaf-extras:3.4'
     implementation 'com.graphql-java:graphql-java:21.5'
+    implementation "org.jetbrains:markdown:0.7.3"
+    implementation "com.vladsch.flexmark:flexmark-all:0.64.0"
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "org.json:json:20250107"
 }
 
 java {
