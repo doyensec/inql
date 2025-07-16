@@ -14,7 +14,7 @@ internal object MarkdownToHtmlConverter {
         val client = OkHttpClient()
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("Failed to fetch: ${response.code}")
+            if (!response.isSuccessful) throw Exception("Failed to fetch ${url}: ${response.code}")
             return response.body?.string() ?: throw Exception("Empty response body")
         }
     }

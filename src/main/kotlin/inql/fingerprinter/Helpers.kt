@@ -78,7 +78,7 @@ class Helpers {
             ),
             "graphql-go" to EngineDetails(
             "graphql-go -GraphQL for Go",
-            "https://raw.githubusercontent.com/graphql-go/graphql",
+            "https://github.com/graphql-go/graphql",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/graphql-go.md",
             listOf("Go")
             ),
@@ -102,25 +102,25 @@ class Helpers {
             ),
             "flutter" to EngineDetails(
             "Flutter - GraphQL for Dart",
-            "https://raw.githubusercontent.com/zino-app/graphql-flutter",
+            "https://github.com/zino-app/graphql-flutter",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/gql-dart.md",
             listOf("Dart")
             ),
             "dianajl" to EngineDetails(
             "Diana.jl - GraphQL for Julia",
-            "https://raw.githubusercontent.com/neomatrixcode/Diana.jl",
+            "https://github.com/neomatrixcode/Diana.jl",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/diana.md",
             listOf("Julia")
             ),
             "strawberry" to EngineDetails(
             "Strawberry - GraphQL for Python",
-            "https://raw.githubusercontent.com/strawberry-graphql/strawberry",
+            "https://github.com/strawberry-graphql/strawberry",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/strawberry.md",
             listOf("Python")
             ),
             "tartiflette" to EngineDetails(
             "tartiflette - GraphQL for Python",
-            "https://raw.githubusercontent.com/tartiflette/tartiflette",
+            "https://github.com/tartiflette/tartiflette",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/tartiflette.md",
             listOf("Python")
             ),
@@ -138,61 +138,61 @@ class Helpers {
             ),
             "graphql_yoga" to EngineDetails(
             "GraphQL Yoga",
-            "https://raw.githubusercontent.com/dotansimha/graphql-yoga",
+            "https://github.com/dotansimha/graphql-yoga",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/graphql-yoga.md",
             listOf("TypeScript")
             ),
             "lighthouse" to EngineDetails(
             "Lighthouse",
-            "https://raw.githubusercontent.com/nuwave/lighthouse",
+            "https://github.com/nuwave/lighthouse",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/lighthouse.md",
             listOf("PHP")
             ),
             "agoo" to EngineDetails(
             "Agoo",
-            "https://raw.githubusercontent.com/ohler55/agoo",
+            "https://github.com/ohler55/agoo",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/agoo.md",
             listOf("Ruby")
             ),
             "mercurius" to EngineDetails(
             "mercurius",
-            "https://raw.githubusercontent.com/mercurius-js/mercurius",
+            "https://github.com/mercurius-js/mercurius",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/mercurius.md",
             listOf("JavaScript", "Node.js", "TypeScript")
             ),
             "morpheus-graphql" to EngineDetails(
             "morpheus-graphql",
-            "https://raw.githubusercontent.com/morpheusgraphql/morpheus-graphql",
+            "https://github.com/morpheusgraphql/morpheus-graphql",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/morpheus-graphql.md",
             listOf("Haskell")
             ),
             "lacinia" to EngineDetails(
             "lacinia",
-            "https://raw.githubusercontent.com/walmartlabs/lacinia",
+            "https://github.com/walmartlabs/lacinia",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/lacinia.md",
             listOf("Clojure")
             ),
             "caliban" to EngineDetails(
             "caliban",
-            "https://raw.githubusercontent.com/ghostdogpr/caliban",
+            "https://github.com/ghostdogpr/caliban",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/caliban.md",
             listOf("Scala")
             ),
             "jaal" to EngineDetails(
             "jaal",
-            "https://raw.githubusercontent.com/appointy/jaal",
+            "https://github.com/appointy/jaal",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/jaal",
             listOf("Golang")
             ),
             "absinthe-graphql" to EngineDetails(
             "absinthe-graphql",
-            "https://raw.githubusercontent.com/absinthe-graphql/absinthe",
+            "https://github.com/absinthe-graphql/absinthe",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/absinthe-graphql.md",
             listOf("Elixir")
             ),
             "graphql-dotnet" to EngineDetails(
             "graphql-dotnet",
-            "https://raw.githubusercontent.com/graphql-dotnet/graphql-dotnet",
+            "https://github.com/graphql-dotnet/graphql-dotnet",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/graphql-dotnet.md",
             listOf("C#", ".NET")
             ),
@@ -222,7 +222,7 @@ class Helpers {
             ),
             "ballerina" to EngineDetails(
             "ballerina",
-            "https://raw.githubusercontent.com/ballerina-platform/module-ballerina-graphql",
+            "https://github.com/ballerina-platform/module-ballerina-graphql",
             "https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/ballerina.md",
             listOf("Ballerina", "Java")
             ),

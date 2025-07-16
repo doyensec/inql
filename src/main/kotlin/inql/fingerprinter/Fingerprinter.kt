@@ -71,7 +71,15 @@ class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
         editorPane.setContentType("text/html")
         editorPane.setText("""
 <h2>Engine Fingerprinter</h2>
-TODO
+This tab allows fingerprinting engine used by the GraphQL server. It works by sending various types of requests, including malformed ones, and comparing the responses with those typically returned by known engines. 
+<br/>
+When a match is found, it displays the server’s security features based on data from the GraphQL Threat Matrix.
+<br/><br/>
+This feature is inspired by the graphw00f CLI tool.
+<br/>
+<h2>References</h2>
+- https://github.com/dolevf/graphw00f<br/>
+- https://github.com/nicholasaleks/graphql-threat-matrix<br/>
 """)
         editorPane.setEditable(false)
 
@@ -82,12 +90,10 @@ TODO
             reqEditorPanel,
         )
 
-        Burp.Montoya.userInterface().applyThemeToComponent(leftSection)
-
         markdownEditorPane.setContentType("text/html")
         markdownEditorPane.setText("""
 <h2>Engine Fingerprinter</h2>
-TODO
+The results will appear here
 """)
         markdownEditorPane.setEditable(false)
         markdownEditorPane.addHyperlinkListener { e ->
@@ -105,9 +111,9 @@ TODO
             markdownEditorPane,
         )
         rightSection.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
-        rightSection.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS
-        rightSection.horizontalScrollBar.unitIncrement = 16
-        rightSection.verticalScrollBar.unitIncrement = 16
+        rightSection.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+
+
 
         // Main layout
         val horizontalSplit = JSplitPane(
@@ -116,9 +122,8 @@ TODO
             rightSection,
         )
         horizontalSplit.resizeWeight = 0.4
+        Burp.Montoya.userInterface().applyThemeToComponent(horizontalSplit)
         this.add(horizontalSplit)
-
-//        setMarkdownFromUrl("https://raw.githubusercontent.com/nicholasaleks/graphql-threat-matrix/refs/heads/master/implementations/graphene.md")
     }
 
     private fun setMarkdown(markdown: String ) {
@@ -128,18 +133,9 @@ TODO
     <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; padding: 12px; background-color: #f4f4f4; }
-          h1, h2, h3 { color: #333; }
-          code { background: #eee; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
-          pre { background: #eee; padding: 8px; border-radius: 4px; overflow-x: auto; }
-          a { color: #1a0dab; text-decoration: none; }
-          a:hover { text-decoration: underline; }
           ul { margin-left: 20px; }
           table { border-collapse: collapse; width: 100%; margin: 16px 0; font-family: Arial, sans-serif; }
           th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-          th { background-color: #f0f0f0; }
-          tr:nth-child(even) { background-color: #fafafa; }
-          tr:hover { background-color: #f1f1f1; }
         </style>
       </head>
       <body>
@@ -152,19 +148,31 @@ TODO
         markdownEditorPane.setCaretPosition(0) // Scroll to top
     }
 
-    private fun setMarkdownFromUrl(url: String) {
+    private fun setMarkdownFromUrl(enginedetails: Helpers.Companion.EngineDetails) {
         val markdown = try {
-            MarkdownToHtmlConverter.downloadMarkdown(url)
+            MarkdownToHtmlConverter.downloadMarkdown(enginedetails.ref)
         } catch (e: Exception) {
-            "Error when fetching information"
+            "**Name**: ${enginedetails.name}<br/>"+
+            "**Url**: [${enginedetails.url}](${enginedetails.url})<br/>" +
+            "**Matrix Reference**: [${enginedetails.ref}](${enginedetails.ref})<br/>" +
+            "**Technologies**: ${enginedetails.technology.toString()}<br/><br />" +
+            "Unable to retrieve GraphQL Threat Matrix data for this engine. The issue is likely external and not caused by InQL."
         }
 
-        setMarkdown("# Server Engine Found:\n$markdown")
+        setMarkdown("# Server Engine Found: ${enginedetails.name}\n$markdown")
     }
 
     override fun actionPerformed(e: ActionEvent?) {
         Logger.debug("Initiate Attack handler fired")
+        setMarkdownInprogress()
         this.coroutineScope.launch { run() }
+    }
+
+    private fun setMarkdownInprogress() {
+        markdownEditorPane.setText("""
+<h2>Engine Fingerprinter</h2>
+Fingerprinting...
+""")
     }
 
     private fun run() {
@@ -172,7 +180,7 @@ TODO
             val engine = execute()
             Logger.debug(engine.toString())
             if (engine != null) {
-                Helpers.engines[engine]?.let { setMarkdownFromUrl(it.ref) }
+                Helpers.engines[engine]?.let { setMarkdownFromUrl(it) }
             } else {
                 setMarkdown("# Couldn't fingerprint server engine")
             }
@@ -215,7 +223,6 @@ TODO
             engineAwsAppSync() -> "aws-appsync"
             engineHasura() -> "hasura"
             engineWpGraphql() -> "wpgraphql"
-            engineGraphqlApiForWp() -> "graphql-api-for-wp"
             engineGraphqlJava() -> "graphql-java"
             engineHypergraphql() -> "hypergraphql"
             engineRuby() -> "ruby-graphql"
@@ -255,15 +262,22 @@ TODO
     }
 
     private fun errorContains(resp: JSONObject, msg: String): Boolean {
-        return resp.optJSONArray("errors")?.let { errors ->
-            for (i in 0 until errors.length()) {
-                if (errors.getJSONObject(i).toString().contains(msg)) return true
-            }
-            return false
-        } ?: false
+        if (resp.optJSONArray("errors") != null) {
+            return resp.optJSONArray("errors")?.let { errors ->
+                for (i in 0 until errors.length()) {
+                    if (errors.getJSONObject(i).toString().contains(msg)) return true
+                }
+                return false
+            } ?: false
+        } else if (resp.optString("error") != null) {
+            return resp.toString().contains(msg)
+        }
+
+        return false
     }
 
     private fun engineGraphqlYoga(): Boolean {
+      Logger.debug("engineGraphqlYoga")
         val query = """
       subscription {
          __typename
@@ -274,6 +288,7 @@ TODO
     }
 
     private fun engineApollo(): Boolean {
+      Logger.debug("engineApollo")
         var query = """
       query @skip {
         __typename
@@ -293,16 +308,19 @@ TODO
         return errorContains(resp, "Directive \\\"@deprecated\\\" may not be used on QUERY.")
     }
     private fun engineAwsAppSync(): Boolean {
+      Logger.debug("engineAwsAppSync")
         val query = "query @skip { __typename }".trimIndent()
         val resp = graphQuery(query)
         return errorContains(resp, "MisplacedDirective")
     }
     private fun engineGraphene(): Boolean {
+      Logger.debug("engineGraphene")
         val query = """aaa""".trimIndent()
         val resp = graphQuery(query)
         return errorContains(resp, "Syntax Error GraphQL (1:1)")
     }
     private fun engineHasura(): Boolean {
+      Logger.debug("engineHasura")
         var query = """
       query @cached {
         __typename
@@ -344,6 +362,7 @@ TODO
     }
 
     private fun engineGraphqlPhp(): Boolean {
+      Logger.debug("engineGraphqlPhp")
         var query = """
       query ! {
         __typename
@@ -364,6 +383,7 @@ TODO
     }
 
     private fun engineRuby(): Boolean {
+      Logger.debug("engineRuby")
         var query = """
      query @skip {
        __typename
@@ -404,6 +424,7 @@ TODO
     }
 
     private fun engineHypergraphql(): Boolean {
+      Logger.debug("engineHypergraphql")
         var query = """
      zzz {
         __typename
@@ -423,6 +444,7 @@ TODO
     }
 
     private fun engineGraphqlJava(): Boolean {
+      Logger.debug("engineGraphqlJava")
         var query = """
      queryy  {
         __typename
@@ -447,6 +469,7 @@ TODO
     }
 
     private fun engineAriadne(): Boolean {
+      Logger.debug("engineAriadne")
         var query = """
       query {
         __typename @abc
@@ -462,58 +485,11 @@ TODO
         return errorContains(resp, "The query must be a string.")
     }
 
-    private fun engineGraphqlApiForWp(): Boolean {
-        var query = """
-     query {
-       alias1$1:__typename
-     }
-    """.trimIndent()
-        var resp = graphQuery(query)
-        var data = resp.optJSONObject("data")
-
-        if (data != null) {
-            if (data.optString("alias1\$1") != null && data.optString("alias1\$1") == "QueryRoot") {
-                return true
-            }
-        }
-
-
-        query = """query aa#aa { __typename }"""
-        resp = graphQuery(query)
-
-        if (errorContains(resp, "Unexpected token \"END\"")) {
-            return true
-        }
-
-        query = """
-      query @skip {
-        __typename
-      }
-    """.trimIndent()
-        resp = graphQuery(query)
-        if (errorContains(resp, "Argument 'if' cannot be empty, so directive 'skip' has been ignored")) {
-            return true
-        }
-
-        query = """
-      query @doesnotexist {
-        __typename
-      }
-    """.trimIndent()
-        resp = graphQuery(query)
-        if (errorContains(resp, "No DirectiveResolver resolves directive with name 'doesnotexist'")) {
-            return true
-        }
-
-        query = ""
-        resp = graphQuery(query)
-        return errorContains(resp, "The query in the body is empty")
-    }
-
     private fun engineWpGraphql(): Boolean {
+      Logger.debug("engineWpGraphql")
         var query = ""
         var resp = graphQuery(query)
-        if (errorContains(resp, "GraphQL Request must include at least one of those two parameters: \"query\" or \"queryId\"")) {
+        if (errorContains(resp, "GraphQL Request must include at least one of those two parameters: \\\"query\\\" or \\\"queryId\\\"")) {
             return true
         }
 
@@ -538,6 +514,7 @@ TODO
     }
 
     private fun engineGqlGen(): Boolean {
+      Logger.debug("engineGqlGen")
         var query = """
       query  {
       __typename {
@@ -558,6 +535,7 @@ TODO
         return errorContains(resp, "Expected Name, found <Invalid>")
     }
     private fun engineGraphqlGo(): Boolean {
+      Logger.debug("engineGraphqlGo")
         var query = """
       query {
       __typename {
@@ -587,6 +565,7 @@ TODO
     }
 
     private fun engineJuniper(): Boolean {
+      Logger.debug("engineJuniper")
         var query = """
       queryy {
         __typename
@@ -603,6 +582,7 @@ TODO
         return errorContains(resp, "Unexpected end of input")
     }
     private fun engineSangria(): Boolean {
+      Logger.debug("engineSangria")
         val query = """
       queryy {
         __typename
@@ -615,6 +595,7 @@ TODO
     }
 
     private fun engineFlutter(): Boolean {
+      Logger.debug("engineFlutter")
         val query = """
       query {
         __typename @deprecated
@@ -625,21 +606,24 @@ TODO
     }
 
     private fun engineDianaJl(): Boolean {
+      Logger.debug("engineDianaJl")
         val query = """queryy { __typename }""".trimIndent()
         val resp = graphQuery(query)
-        return errorContains(resp, "Syntax Error GraphQL request (1:1) Unexpected Name \"queryy\"")
+        return errorContains(resp, "Syntax Error GraphQL request (1:1) Unexpected Name \"queryy\"") || errorContains(resp, "Syntax Error GraphQL request (1:1) Unexpected Name \\\"queryy\\\"")
     }
 
     private fun engineStrawberry(): Boolean {
+      Logger.debug("engineStrawberry")
         val query = """
       query @deprecated {
         __typename
       }""".trimIndent()
         val resp = graphQuery(query)
-        return (errorContains(resp, "Directive '@deprecated' may not be used on query.")  && resp.optJSONObject("data") != null)
+        return (errorContains(resp, "Directive '@deprecated' may not be used on query.")  && resp.keySet().contains("data"))
     }
 
     private fun engineTartiflette(): Boolean {
+      Logger.debug("engineTartiflette")
         var query = """
       query @a { __typename }
     """.trimIndent()
@@ -684,6 +668,7 @@ TODO
     }
 
     private fun engineTailcall(): Boolean {
+      Logger.debug("engineTailcall")
         val query = """
       aa {
         __typename
@@ -695,6 +680,7 @@ TODO
     }
 
     private fun engineDgraph(): Boolean {
+      Logger.debug("engineDgraph")
         var query = """
       query {
         __typename @cascade
@@ -717,6 +703,7 @@ TODO
     }
 
     private fun engineDirectus(): Boolean {
+      Logger.debug("engineDirectus")
         val query = ""
 
         val resp = graphQuery(query)
@@ -725,6 +712,7 @@ TODO
     }
 
     private fun engineLighthouse(): Boolean {
+      Logger.debug("engineLighthouse")
         val query = """
       query {
         __typename @include(if: falsee)
@@ -739,6 +727,7 @@ TODO
     }
 
     private fun engineAgoo(): Boolean {
+      Logger.debug("engineAgoo")
         val query = """
       query {
         zzz
@@ -748,12 +737,14 @@ TODO
         return errorContains(resp, "eval error")
     }
     private fun engineMercurius(): Boolean {
+      Logger.debug("engineMercurius")
         val query = ""
         val resp = graphQuery(query)
 
-        return errorContains(resp, "Unknown query")
+        return errorContains(resp, "Unknown query") || errorContains(resp, "MER_ERR_GQL_VALIDATION")
     }
     private fun engineMorpheus(): Boolean {
+      Logger.debug("engineMorpheus")
         val query = """
       queryy {
           __typename
@@ -764,6 +755,7 @@ TODO
         return (errorContains(resp, "expecting white space") || errorContains(resp, "offset"))
     }
     private fun engineLacinia(): Boolean {
+      Logger.debug("engineLacinia")
         val query = """
       query {
         inql
@@ -787,6 +779,7 @@ TODO
 //    }
 
   private fun engineCaliban(): Boolean {
+    Logger.debug("engineCaliban")
     val query = """
         query {
             __typename
@@ -805,6 +798,7 @@ TODO
 }
 
   private fun engineAbsinthe(): Boolean {
+    Logger.debug("engineAbsinthe")
     val query = """
         query {
             inql
@@ -816,18 +810,21 @@ TODO
     return errorContains(resp, "Cannot query field \\\"inql\\\" on type \\\"RootQueryType\\\".")
 }
   private fun engineGraphqlDotNet(): Boolean {
+    Logger.debug("engineGraphqlDotNet")
     val query = "query @skip { __typename }".trimIndent()
     val resp = graphQuery(query)
     return errorContains(resp, "Directive 'skip' may not be used on Query.")
   }
 
   private fun enginePgGraphql(): Boolean {
+    Logger.debug("enginePgGraphql")
     val query = """query { __typename @skip(aa:true) }""".trimIndent()
     val resp = graphQuery(query)
     return errorContains(resp, "Unknown argument to @skip: aa")
   }
 
   private fun engineHotChocolate(): Boolean {
+    Logger.debug("engineHotChocolate")
     var query = """
         queryy  {
             __typename
@@ -848,17 +845,18 @@ TODO
   }
 
   private fun engineInigo(): Boolean {
+    Logger.debug("engineInigo")
       val query = """
         query  {
             __typename
         }
         """.trimIndent()
       val resp = graphQuery(query)
-
-      return resp.optJSONArray("extensions") != null && "indigo" in resp.optJSONArray("extensions")
+      return resp.optJSONObject("extensions") != null && resp.optJSONObject("extensions").keySet().contains("inigo")
   }
 
   private fun engineBallerina(): Boolean {
+    Logger.debug("engineBallerina")
     val query = """
         query {
             __typename
