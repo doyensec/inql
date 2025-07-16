@@ -7,7 +7,6 @@ import com.google.gson.JsonObject
 import org.json.JSONObject
 import inql.InQL
 import inql.Logger
-import inql.attacker.Attack
 import inql.ui.BorderPanel
 import inql.utils.MarkdownToHtmlConverter
 import kotlinx.coroutines.CoroutineScope

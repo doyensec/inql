@@ -1,11 +1,7 @@
 package inql.utils
 
-import org.intellij.markdown.MarkdownElementTypes
-import org.intellij.markdown.flavours.commonmark.CommonMarkFlavourDescriptor
-import org.intellij.markdown.ast.ASTNode
 import com.vladsch.flexmark.parser.Parser
 import com.vladsch.flexmark.html.HtmlRenderer
-import org.intellij.markdown.parser.MarkdownParser
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
