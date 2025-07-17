@@ -33,7 +33,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
         val editorFont = Burp.Montoya.userInterface().currentEditorFont()
         StyleConstants.setFontFamily(it, editorFont.family)
         StyleConstants.setFontSize(it, editorFont.size)
-        StyleConstants.setForeground(it, Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!![Style.StyleClass.NONE])
+        StyleConstants.setForeground(it, Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!![Style.StyleClass.KEYWORD])
     }
 
     private var styleMap = Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!!.entries.associate {
@@ -99,13 +99,15 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
         }
     }
 
-    private fun setFormatted(content: String, styleMetadata: List<StyleMetadata>) {
+    private fun setFormatted(content: String, styleMetadata: List<StyleMetadata>?) {
         SwingUtilities.invokeLater {
             this.clear()
             try {
                 this.textPane.styledDocument.insertString(0, content, normalTextStyle)
-                for (styledToken in styleMetadata) {
-                    this.textPane.styledDocument.setCharacterAttributes(styledToken.start, styledToken.length, styleMap[styledToken.styleClass], false)
+                if (styleMetadata != null) {
+                    for (styledToken in styleMetadata) {
+                        this.textPane.styledDocument.setCharacterAttributes(styledToken.start, styledToken.length, styleMap[styledToken.styleClass], false)
+                    }
                 }
             } catch (e: OutOfMemoryError) {
                 this.clear()
@@ -151,8 +153,12 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
             }
         } catch (e: CancellationException) {
             Logger.debug("Formatting job cancelled")
-        } catch (e: Exception) {
+        } catch (e: Exception) { // display without formating
             Logger.warning("Formatting job produced an exception: ${e.message}")
+            mutex.withLock {
+                this.setFormatted(s, null)
+                this.runningJob = null
+            }
         }
     }
 }
