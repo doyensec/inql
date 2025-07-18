@@ -7,6 +7,8 @@ import burp.api.montoya.persistence.PersistedObject
 import com.google.gson.Gson
 import inql.Logger
 import inql.Profile
+import inql.bruteforcer.Bruteforcer
+import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
 import inql.savestate.SavesAndLoadData
@@ -157,6 +159,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 
+    fun launchBruteforcer() {
+        if (this.scanConfigView.verifyAndReturnUrl() == null) return
+        this.normalizeHeaders()
+        this.scanConfigView.setBusy(true)
+        CoroutineScope(Dispatchers.IO).launch {
+            this@ScannerTab.bruteforce()
+        }
+    }
+
     private fun normalizeHeaders() {
         val headers = this.requestTemplate.headers()
         if (headers.isEmpty()) return
@@ -191,7 +202,42 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 
-    private suspend fun analyze() {
+    private fun bruteforce() {
+        var schemaToParse: String? = null
+        val schema: GQLSchema?
+
+        try {
+            schemaToParse = Bruteforcer(this.inql).startFromRequest(this.requestTemplate)
+        } catch (e: EmptyOrIncorrectWordlistException) {
+            scanFailed(e.toString())
+            return
+        } catch (e: Exception) {
+            scanFailed("Failed to bruteforce schema")
+            Logger.debug(e.stackTraceToString())
+            return
+        }
+
+        try {
+            schema = GQLSchema(schemaToParse!!)
+        } catch (e: Exception) {
+            scanFailed("Failed to deserialize JSON schema")
+            return
+        }
+
+        // Create a scan result
+        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+
+        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
+        // and multiple scans at the same time for the same ScannerTab are not allowed
+        this.scanResults.add(sr)
+
+        // Update this tab in burp's project file
+        this.setTabTitle(host!!)
+        this.scanner.updateChildObjectAsync(this)
+        this.scanCompleted()
+    }
+
+    private fun analyze() {
         // Get the schema
         var jsonSchema: String? = null
         var sdlSchema: String? = null

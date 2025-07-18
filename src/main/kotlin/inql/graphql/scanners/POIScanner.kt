@@ -6,7 +6,7 @@ import com.google.gson.reflect.TypeToken
 import graphql.schema.*
 import inql.graphql.GQLSchema
 import inql.graphql.Utils
-import inql.utils.JsonFileReader
+import inql.utils.ResourceFileReader
 
 
 class POIScanner(private val schema: GQLSchema) {
@@ -30,7 +30,7 @@ class POIScanner(private val schema: GQLSchema) {
     private val config = Config.getInstance()
 
     init {
-        val jsonString = JsonFileReader.readJsonFile("keywords.json")
+        val jsonString = ResourceFileReader.readFile("keywords.json")
         val gson = Gson()
 
         val type = object : TypeToken<List<KeywordCategory>>() {}.type

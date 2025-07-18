@@ -195,6 +195,13 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.poi.custom_keywords", TextArea("Custom keywords for points of interest", 6, 20)),
         )
 
+        val bruteforcerSection = SettingsSection(
+            "Schema bruteforcer",
+            "Use these settings to configure schema bruteforcer feature.",
+            SettingsElement("bruteforcer.bucket_size", Spinner("Number of fields used in a single query", 1, 128)),
+            SettingsElement("bruteforcer.custom_wordlist", TextField("Custom wordlist for guessing types and fields")),
+        )
+
         val loggingLevelSection = SettingsSection(
             "Logging options",
             "Use these settings to configure the logging level of the extension.",
@@ -213,6 +220,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             featuresSection,
             JSeparator(JSeparator.HORIZONTAL),
             integrationsSection,
+            JSeparator(JSeparator.HORIZONTAL),
+            bruteforcerSection,
             JSeparator(JSeparator.HORIZONTAL),
             reportSection,
             JSeparator(JSeparator.HORIZONTAL),
