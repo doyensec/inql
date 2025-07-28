@@ -10,7 +10,6 @@ import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
 import inql.ui.BoxPanel
 import inql.ui.Label
-import inql.ui.MultilineLabel
 import inql.utils.getTextAreaComponent
 import inql.utils.withUpsertedHeaders
 import java.awt.BorderLayout
@@ -26,6 +25,7 @@ import java.net.URISyntaxException
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
+
 
 class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     companion object {
@@ -60,12 +60,15 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.addKeyListener(UrlFieldKeyListener(this))
         it.addFocusListener(urlChangeListener)
     }
+    private val urlLabel = Label("GraphQL Endpoint URL", big = true).withPanel(5).also {
+        toolTipText = "Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"
+    }
 
     // File Section
     private val fileChooser = ScannerFileChooser(this)
     private val fileField = JTextField().also {
         it.isFocusable = true
-        it.putClientProperty("JTextField.placeholderText", "GraphQL introspection schema in JSON format")
+        it.putClientProperty("JTextField.placeholderText", "[Optional] Schema File (.json / .graphql)")
         it.putClientProperty("JTextField.showClearButton", true)
         it.addFocusListener(fileChooser)
         it.maximumSize = it.preferredSize
@@ -73,6 +76,13 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.preferredSize = Dimension(500, it.preferredSize.height)
         it.document.addDocumentListener(TextFieldClearListener(this))
     }
+
+    private val fileLabel = Label("GraphQL Schema", big = true).withPanel(5).also {
+        toolTipText = "InQL can query schema directly from GraphQL server. " +
+                        "If a server does not allow introspection functionality, provide schema as a file (in JSON or SDL format). " +
+                        "URL still needs to be provided to generate sample queries."
+    }
+
     private val selectFileButton = JButton("Select File").also {
         it.addActionListener(this.fileChooser)
     }
@@ -106,6 +116,9 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.addActionListener {
             this.deleteSelectedProfile()
         }
+    }
+    private val requestTemplateLabel = Label("Request Template", big = true).withPanel(5).also {
+        toolTipText ="Template of the HTTP request that will be used to send requests to the endpoint"
     }
 
     // - Request stuff
@@ -143,8 +156,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 1. First block concerning URL
         rootContainer.let {
             //  1.1.1 First line, left - a big text label
-            it.add(Label("URL of the GraphQL endpoint", big = true).withPanel(5))
-            it.add(MultilineLabel("Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"))
+            it.add(urlLabel)
 
             //  1.2 Second line - just a single Text field for URL
             it.add(BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) })
@@ -155,17 +167,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         rootContainer.add(BorderPanel(3).also { it.add(separator) })
 
         // 2. Second block concerning file input
-        rootContainer.let {
-            // 2.1 First line - a big text label
-            it.add(Label("(Optional) GraphQL schema file (JSON or SDL format)", big = true).withPanel(5))
-            it.add(
-                MultilineLabel(
-                    "InQL can query schema directly from GraphQL server. " +
-                        "If a server does not allow introspection functionality, provide schema as a file (in JSON or SDL format). " +
-                        "URL still needs to be provided to generate sample queries.",
-                ),
-            )
-        }
+        rootContainer.add(fileLabel) // 2.1 First line - a big text label
 
         val fileInputPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
             it.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
@@ -183,11 +185,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         rootContainer.add(BorderPanel(3).also { it.add(separator) })
 
         // 3. Third block with request template
-        rootContainer.let {
-            // 2.1 First line - a big text label
-            it.add(Label("Request Template", big = true).withPanel(5))
-            it.add(MultilineLabel("Template of the HTTP request that will be used to send requests to the endpoint"))
-        }
+        rootContainer.add(requestTemplateLabel)  // 2.1 First line - a big text label
 
         val profileLabelPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
             it.add(JLabel("Current Profile:"))
