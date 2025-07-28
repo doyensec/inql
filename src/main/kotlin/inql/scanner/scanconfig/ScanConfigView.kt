@@ -143,7 +143,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 1. First block concerning URL
         rootContainer.let {
             //  1.1.1 First line, left - a big text label
-            it.add(Label("1. URL of the GraphQL endpoint", big = true).withPanel(5))
+            it.add(Label("URL of the GraphQL endpoint", big = true).withPanel(5))
             it.add(MultilineLabel("Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"))
 
             //  1.2 Second line - just a single Text field for URL
@@ -157,7 +157,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 2. Second block concerning file input
         rootContainer.let {
             // 2.1 First line - a big text label
-            it.add(Label("2. (Optional) GraphQL schema file (JSON or SDL format)", big = true).withPanel(5))
+            it.add(Label("(Optional) GraphQL schema file (JSON or SDL format)", big = true).withPanel(5))
             it.add(
                 MultilineLabel(
                     "InQL can query schema directly from GraphQL server. " +
@@ -185,7 +185,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 3. Third block with request template
         rootContainer.let {
             // 2.1 First line - a big text label
-            it.add(Label("3. Request Template", big = true).withPanel(5))
+            it.add(Label("Request Template", big = true).withPanel(5))
             it.add(MultilineLabel("Template of the HTTP request that will be used to send requests to the endpoint"))
         }
 
