@@ -95,4 +95,8 @@ object Style {
         Theme.DARK to darkAttributeSetThemeStyle,
         Theme.LIGHT to lightAttributeSetThemeStyle
     )
+
+    object ThemeColors {
+        val Accent = Color(216, 101, 51)
+    }
 }

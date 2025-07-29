@@ -5,6 +5,7 @@ import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
 import inql.Logger
 import inql.Profile
+import inql.graphql.formatting.Style
 import inql.scanner.Scanner
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
@@ -151,7 +152,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     }
     private val startScanBtn = JButton("Analyze").also {
         it.foreground = Color.WHITE
-        it.background = Color(255, 88, 18)
+        it.background = Style.ThemeColors.Accent
         it.font = it.font.deriveFont(Font.BOLD)
         it.isBorderPainted = false
         it.addActionListener { this.startScan() }

@@ -9,6 +9,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
 import inql.InQL
 import inql.Logger
+import inql.graphql.formatting.Style
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
@@ -35,7 +36,7 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
     private val urlField = JTextField()
     private val sendButton = JButton("Send").also { 
         it.addActionListener(this) 
-        it.background = Color(255, 88, 18)
+        it.background = Style.ThemeColors.Accent
         it.foreground = Color.WHITE
         it.font = it.font.deriveFont(Font.BOLD)
         it.isBorderPainted = false
