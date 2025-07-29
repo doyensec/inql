@@ -193,7 +193,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         rootContainer.add(fileLabel) // 2.1 First line - a big text label
 
         val fileInputPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
-            it.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            //it.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
             // 2.3.1 File field on the left
             it.add(this.selectFileButton)
             it.add(Box.createRigidArea(Dimension(10, 0)))
@@ -201,7 +201,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(this.fileField)
             it.add(Box.createHorizontalGlue())
         }
-        rootContainer.add(fileInputPanel)
+        rootContainer.add(BorderPanel(5, 10).also { it.add(fileInputPanel) })
 
         // A horizontal separator line between the blocks
         separator = JSeparator().also { it.orientation = SwingConstants.HORIZONTAL }
@@ -210,6 +210,8 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 3. Third block with request template
         rootContainer.add(requestTemplateLabel)  // 2.1 First line - a big text label
 
+        // Profile UI elements commented out. Needs rework.
+        /*
         val profileLabelPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
             it.add(JLabel("Current Profile:"))
             it.add(Box.createRigidArea(Dimension(5, 0)))
@@ -218,8 +220,10 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(profileIdLabel)
         }
         rootContainer.add(BorderPanel(0, 5).also { it.add(profileLabelPanel) })
+        */
 
         val buttonPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
+            /*
             it.add(this.profilesComboBox)
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.loadFromProfileBtn)
@@ -228,9 +232,10 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.deleteProfileBtn)
             it.add(Box.createHorizontalGlue())
-            it.add(this.updateHeadersBtn)
-            it.add(Box.createRigidArea(Dimension(10, 0)))
+            */
             it.add(startScanBtn)
+            it.add(Box.createRigidArea(Dimension(10, 0)))
+            it.add(updateHeadersBtn)
         }
         rootContainer.add(BorderPanel(10).also { it.add(buttonPanel) })
 
