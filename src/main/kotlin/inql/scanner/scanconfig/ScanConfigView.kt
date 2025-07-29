@@ -23,6 +23,7 @@ import java.awt.event.KeyEvent
 import java.net.URI
 import java.net.URISyntaxException
 import javax.swing.*
+import javax.swing.border.LineBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
@@ -53,13 +54,18 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
 
     // Url Section
     private var urlChangeListener = UrlUnfocusListener(this)
+
     val urlField = JTextField().also {
         it.isFocusable = true
         it.putClientProperty("JTextField.placeholderText", "https://example.com/graphql")
         it.putClientProperty("JTextField.showClearButton", true)
         it.addKeyListener(UrlFieldKeyListener(this))
         it.addFocusListener(urlChangeListener)
+        it.document.addUndoableEditListener { this.validateSelectFileInput() }
     }
+
+    private val urlTextField = BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) }
+
     private val urlLabel = Label("GraphQL Endpoint URL", big = true).withPanel(5).also {
         toolTipText = "Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"
     }
@@ -75,6 +81,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.minimumSize = Dimension(500, it.preferredSize.height)
         it.preferredSize = Dimension(500, it.preferredSize.height)
         it.document.addDocumentListener(TextFieldClearListener(this))
+        it.document.addUndoableEditListener { this.validateSelectFileInput() }
     }
 
     private val fileLabel = Label("GraphQL Schema", big = true).withPanel(5).also {
@@ -85,6 +92,21 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
 
     private val selectFileButton = JButton("Select File").also {
         it.addActionListener(this.fileChooser)
+    }
+
+    private fun validateSelectFileInput () {
+        if (urlField.text.isNullOrBlank() && !fileField.text.isNullOrBlank()) {
+            // make border red preserving padding
+            urlField.border = BorderFactory.createCompoundBorder(
+                LineBorder(Color.RED),
+                BorderFactory.createEmptyBorder(2, 4, 2, 4))
+            // add tooltip to the field
+            urlField.toolTipText = "This field cannot be empty"
+        } else {
+            // restore default border
+            urlField.border = UIManager.getBorder("TextField.border")
+            urlField.toolTipText = null
+        }
     }
 
     // Request Template Section
@@ -159,7 +181,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(urlLabel)
 
             //  1.2 Second line - just a single Text field for URL
-            it.add(BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) })
+            it.add(urlTextField)
         }
 
         // A horizontal separator line between the blocks
