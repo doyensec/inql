@@ -24,10 +24,12 @@ import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
 import java.io.File
 import java.awt.Color
+import java.awt.Dimension
 import java.awt.Font
 import java.lang.Integer.max
 import java.lang.Integer.min
 import javax.swing.*
+import javax.swing.border.EmptyBorder
 
 class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAndLoadData {
 
@@ -65,7 +67,10 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
         val urlFieldPanel = BorderPanel().also {
             it.add(JLabel("Target: "), BorderLayout.WEST)
             it.add(this.urlField, BorderLayout.CENTER)
-            it.add(sendButton, BorderLayout.EAST)
+            it.add(BorderPanel().apply {
+                border = EmptyBorder(0, 10, 0, 0)
+                add(sendButton, BorderLayout.CENTER)
+            }, BorderLayout.EAST)
         }
         val reqEditorPanel = BorderPanel().also {
             it.add(urlFieldPanel, BorderLayout.NORTH)
