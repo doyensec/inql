@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpHeader
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.persistence.PersistedObject
 import com.google.gson.Gson
+import graphql.schema.idl.errors.SchemaProblem
 import inql.Logger
 import inql.Profile
 import inql.graphql.GQLSchema
@@ -191,7 +192,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 
-    private suspend fun analyze() {
+    private fun analyze() {
         // Get the schema
         var jsonSchema: String? = null
         var sdlSchema: String? = null
@@ -230,8 +231,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val schema: GQLSchema?
         try {
             schema = GQLSchema(schemaToParse!!)
+        } catch (e: SchemaProblem) {
+            val detailedErrors = e.errors.joinToString("\n") { "- ${it.message}" }
+            Logger.error("Failed to validate schema:\n$detailedErrors")
+            scanFailed("Failed to validate schema, see error log for details", false)
+            return
         } catch (e: Exception) {
-            scanFailed("Failed to deserialize JSON schema")
+            Logger.error("Failed to deserialize schema with error: ${e.message}")
+            scanFailed("Failed to deserialize schema, see error log for details", false)
             return
         }
 
@@ -255,8 +262,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
     }
 
-    private fun scanFailed(reason: String?) {
-        if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason")
+    private fun scanFailed(reason: String?, logToError: Boolean = true) {
+        if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
         this.scanConfigView.setBusy(false)
     }
 
