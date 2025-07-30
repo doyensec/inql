@@ -143,7 +143,6 @@ Current limitations: only one placeholder, no variables.
         try {
             parsed = Gson().fromJson(body, JsonElement::class.java)
         } catch (_: JsonSyntaxException) {
-            Logger.error("Failed parsing request body as JSON")
             ErrorDialog("Failed parsing request body as JSON")
             return null
         }
