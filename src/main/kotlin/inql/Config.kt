@@ -54,6 +54,7 @@ class Config private constructor() {
         "editor.formatting.enabled" to true,
         "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
         "editor.send_to.strip_comments" to true,
+        "editor.formatting.cache_size_kb" to 102400, // 100 MB Default
     )
 
     private val hooks = hashMapOf<String, (Any) -> Unit>(

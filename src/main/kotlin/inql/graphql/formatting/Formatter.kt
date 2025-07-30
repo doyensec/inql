@@ -1,5 +1,7 @@
 package inql.graphql.formatting
 
+import inql.Config
+import inql.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,23 +28,67 @@ class Formatter(
         }
     }
 
+    fun estimateGlobalCacheSize(): Long {
+        var total = 0L
+        for ((key, innerMap) in globalCache) {
+            total += key.length * 2 + 64 // String + map overhead
+            for ((k, v) in innerMap) {
+                total += 8 + (v.length * 2) + 48 // Long + String + entry overhead
+            }
+        }
+        return total
+    }
+
+    fun estimateStyleCacheSize(): Long {
+        var total = 0L
+        for ((key, innerMap) in styleCache) {
+            total += key.length * 2 + 64 // String + map overhead
+            for ((k, list) in innerMap) {
+                total += 8 + 40 // Long + map entry overhead (estimate)
+                total += 24 + list.size * 8 // List overhead + references (assuming 64-bit JVM)
+                for (style in list) {
+                    total += estimateStyleMetadataSize(style)
+                }
+            }
+        }
+        return total
+    }
+
+    fun estimateStyleMetadataSize(style: StyleMetadata) = 32
+
     private val cacheKey = "$minimized$spaces$stripComments$isIntrospection"
 
     init {
+        val maxBytes = Config.getInstance().getInt("editor.formatting.cache_size_kb") ?: 102400
         if (!globalCache.containsKey(this.cacheKey)) {
-            globalCache[this.cacheKey] = HashMap()
-            styleCache[this.cacheKey] = HashMap()
+            globalCache[this.cacheKey] = SizedLRUCache<Long, String>(
+               1024L * maxBytes
+            ) { key, value ->
+                8L + value.length * 2L + 40L // key(long) + value(String) + overhead
+            }
+
+            styleCache[this.cacheKey] = SizedLRUCache<Long, List<StyleMetadata>>(
+               1024L * maxBytes
+            ) { key, value ->
+                8L + value.size * 32L + 24L // key(long) + list(StyleMetadata) + overhead
+            }
         }
     }
 
     private fun getCache(query: String): String? {
         val hash = getQueryHash(query)
+        Logger.warning("Size of globalCache: ${globalCache[this.cacheKey]?.size}")
+        Logger.warning("Calculated size: ${estimateGlobalCacheSize()}")
+
         return globalCache[this.cacheKey]!![hash]
     }
 
-    private fun getStyleCache(query: String): List<StyleMetadata> {
+    private fun getStyleCache(query: String): List<StyleMetadata>? {
         val hash = getQueryHash(query)
-        return styleCache[cacheKey]!![hash]!!
+        Logger.warning("Size of styleCache: ${styleCache.size}")
+        Logger.warning("Calculated size: ${estimateStyleCacheSize()}")
+
+        return styleCache[cacheKey]!![hash]
     }
 
     private fun setCache(query: String, formatted: String, style: List<StyleMetadata>) {
@@ -59,7 +105,9 @@ class Formatter(
         val cached = this.getCache(query)
         if (cached != null) {
             val cachedStyle = this.getStyleCache(query)
-            return Pair(cached, cachedStyle)
+            if(cachedStyle != null) {
+                return Pair(cached, cachedStyle)
+            }
         }
 
         var tokens = Tokenizer(query).tokenize()

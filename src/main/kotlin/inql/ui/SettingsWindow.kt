@@ -128,6 +128,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 Spinner("Formatting timeout (ms)", 0, 10000)
             ),
             SettingsElement(
+                "editor.formatting.cache_size_kb",
+                Spinner("Cache Size in Kb", 0, 1073741824)
+            ),
+            SettingsElement(
                 "editor.send_to.strip_comments",
                 CheckBox("Strip GraphQL comments from the Scanner result tab when sending a request to another tool")
             ),
