@@ -62,7 +62,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.putClientProperty("JTextField.showClearButton", true)
         it.addKeyListener(UrlFieldKeyListener(this))
         it.addFocusListener(urlChangeListener)
-        it.document.addUndoableEditListener { this.validateSelectFileInput() }
+        it.document.addUndoableEditListener { this.validateUrlAndFileInput() }
     }
 
     private val urlTextField = BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) }
@@ -82,7 +82,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.minimumSize = Dimension(500, it.preferredSize.height)
         it.preferredSize = Dimension(500, it.preferredSize.height)
         it.document.addDocumentListener(TextFieldClearListener(this))
-        it.document.addUndoableEditListener { this.validateSelectFileInput() }
+        it.document.addUndoableEditListener { this.validateUrlAndFileInput() }
     }
 
     private val fileLabel = Label("GraphQL Schema", big = true).withPanel(5).also {
@@ -95,16 +95,32 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         it.addActionListener(this.fileChooser)
     }
 
-    private fun validateSelectFileInput () {
-        if (urlField.text.isNullOrBlank() && !fileField.text.isNullOrBlank()) {
-            // make border red preserving padding
+    fun isValidUrl(urlText: String): Boolean {
+        return try {
+            val uri = URI(urlText)
+            uri.scheme != null && uri.host != null && uri.toURL() != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun validateUrlAndFileInput() {
+        val urlText = urlField.text
+        val isFileSelected = !fileField.text.isNullOrBlank()
+        val isUrlEmpty = urlText.isNullOrBlank()
+        val isUrlInvalid =  !isUrlEmpty && !isValidUrl(urlText)
+
+        if ((isFileSelected && isUrlEmpty) || isUrlInvalid) {
             urlField.border = BorderFactory.createCompoundBorder(
                 LineBorder(Color.RED),
-                BorderFactory.createEmptyBorder(2, 4, 2, 4))
-            // add tooltip to the field
-            urlField.toolTipText = "This field cannot be empty"
+                BorderFactory.createEmptyBorder(2, 4, 2, 4)
+            )
+            urlField.toolTipText = if (isUrlEmpty) {
+                "This field cannot be empty"
+            } else {
+                "Invalid URL format"
+            }
         } else {
-            // restore default border
             urlField.border = UIManager.getBorder("TextField.border")
             urlField.toolTipText = null
         }
