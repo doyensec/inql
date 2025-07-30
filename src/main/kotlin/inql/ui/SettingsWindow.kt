@@ -129,7 +129,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             ),
             SettingsElement(
                 "editor.formatting.cache_size_kb",
-                Spinner("Cache Size in Kb", 0, 1073741824)
+                Spinner("Approximate max cache size in Kb (requires reload)", 0, 1073741824)
             ),
             SettingsElement(
                 "editor.send_to.strip_comments",

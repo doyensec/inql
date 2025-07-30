@@ -27,26 +27,6 @@ class Formatter(
         }
     }
 
-    fun estimateGlobalCacheSize(): Long {
-        var total = 0L
-        for ((outerKey, innerMap) in globalCache) {
-            total += outerKey.length * 2L + 64L // outer String key + map overhead
-            for ((innerKey, pair) in innerMap) {
-                val stringPart = pair.first
-                val styleList = pair.second
-
-                total += 8L                      // innerKey: Long
-                total += 16L                     // Pair object overhead (2 refs)
-                total += stringPart.length * 2L // String character data
-                total += 40L                     // String object overhead
-                total += 24L                     // List object overhead
-                total += styleList.size * 32L   // StyleMetadata items (~32B each)
-                total += 48L                     // entry overhead (Map.Entry)
-            }
-        }
-        return total
-    }
-
     private val cacheKey = "$minimized$spaces$stripComments$isIntrospection"
 
     init {
@@ -71,12 +51,34 @@ class Formatter(
     }
 
     private fun setCache(query: String, element: Pair<String, List<StyleMetadata>>) {
-        Logger.warning("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
+        // Logger.debug("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
         val hash = getQueryHash(query)
 
         globalCache[this.cacheKey]!![hash] = element
     }
+   /*
+    debug function kept for reference
 
+    fun estimateGlobalCacheSize(): Long {
+        var total = 0L
+        for ((outerKey, innerMap) in globalCache) {
+            total += outerKey.length * 2L + 64L // outer String key + map overhead
+            for ((innerKey, pair) in innerMap) {
+                val stringPart = pair.first
+                val styleList = pair.second
+
+                total += 8L                      // innerKey: Long
+                total += 16L                     // Pair object overhead (2 refs)
+                total += stringPart.length * 2L // String character data
+                total += 40L                     // String object overhead
+                total += 24L                     // List object overhead
+                total += styleList.size * 32L   // StyleMetadata items (~32B each)
+                total += 48L                     // entry overhead (Map.Entry)
+            }
+        }
+        return total
+    }
+    */
     private fun makeIndent(level: Int): String {
         return " ".repeat(level * this.spaces)
     }
