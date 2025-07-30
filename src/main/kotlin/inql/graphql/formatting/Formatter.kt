@@ -14,8 +14,7 @@ class Formatter(
     val isIntrospection: Boolean = false,
 ) {
     companion object {
-        private val globalCache = HashMap<String, HashMap<Long, String>>()
-        private val styleCache = HashMap<String, HashMap<Long, List<StyleMetadata>>>()
+        private val globalCache = HashMap<String, HashMap<Long, Pair<String, List<StyleMetadata>>>>()
 
         private fun getQueryHash(query: String): Long {
             /*
@@ -30,71 +29,52 @@ class Formatter(
 
     fun estimateGlobalCacheSize(): Long {
         var total = 0L
-        for ((key, innerMap) in globalCache) {
-            total += key.length * 2 + 64 // String + map overhead
-            for ((k, v) in innerMap) {
-                total += 8 + (v.length * 2) + 48 // Long + String + entry overhead
+        for ((outerKey, innerMap) in globalCache) {
+            total += outerKey.length * 2L + 64L // outer String key + map overhead
+            for ((innerKey, pair) in innerMap) {
+                val stringPart = pair.first
+                val styleList = pair.second
+
+                total += 8L                      // innerKey: Long
+                total += 16L                     // Pair object overhead (2 refs)
+                total += stringPart.length * 2L // String character data
+                total += 40L                     // String object overhead
+                total += 24L                     // List object overhead
+                total += styleList.size * 32L   // StyleMetadata items (~32B each)
+                total += 48L                     // entry overhead (Map.Entry)
             }
         }
         return total
     }
-
-    fun estimateStyleCacheSize(): Long {
-        var total = 0L
-        for ((key, innerMap) in styleCache) {
-            total += key.length * 2 + 64 // String + map overhead
-            for ((k, list) in innerMap) {
-                total += 8 + 40 // Long + map entry overhead (estimate)
-                total += 24 + list.size * 8 // List overhead + references (assuming 64-bit JVM)
-                for (style in list) {
-                    total += estimateStyleMetadataSize(style)
-                }
-            }
-        }
-        return total
-    }
-
-    fun estimateStyleMetadataSize(style: StyleMetadata) = 32
 
     private val cacheKey = "$minimized$spaces$stripComments$isIntrospection"
 
     init {
         val maxBytes = Config.getInstance().getInt("editor.formatting.cache_size_kb") ?: 102400
         if (!globalCache.containsKey(this.cacheKey)) {
-            globalCache[this.cacheKey] = SizedLRUCache<Long, String>(
+            globalCache[this.cacheKey] = SizedLRUCache<Long, Pair<String, List<StyleMetadata>>>(
                1024L * maxBytes
             ) { key, value ->
-                8L + value.length * 2L + 40L // key(long) + value(String) + overhead
-            }
-
-            styleCache[this.cacheKey] = SizedLRUCache<Long, List<StyleMetadata>>(
-               1024L * maxBytes
-            ) { key, value ->
-                8L + value.size * 32L + 24L // key(long) + list(StyleMetadata) + overhead
+                8L +                        // key: Long
+                16L +                       // Pair object overhead (object header + 2 refs)
+                value.first.length * 2L +   // String character data
+                40L +                       // String object + internal overhead
+                24L +                       // List object + internal structure
+                value.second.size * 32L     // Each StyleMetadata ~32 bytes
             }
         }
     }
 
-    private fun getCache(query: String): String? {
+    private fun getCache(query: String): Pair<String, List<StyleMetadata>>? {
         val hash = getQueryHash(query)
-        Logger.warning("Size of globalCache: ${globalCache[this.cacheKey]?.size}")
-        Logger.warning("Calculated size: ${estimateGlobalCacheSize()}")
-
         return globalCache[this.cacheKey]!![hash]
     }
 
-    private fun getStyleCache(query: String): List<StyleMetadata>? {
+    private fun setCache(query: String, element: Pair<String, List<StyleMetadata>>) {
+        Logger.warning("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
         val hash = getQueryHash(query)
-        Logger.warning("Size of styleCache: ${styleCache.size}")
-        Logger.warning("Calculated size: ${estimateStyleCacheSize()}")
 
-        return styleCache[cacheKey]!![hash]
-    }
-
-    private fun setCache(query: String, formatted: String, style: List<StyleMetadata>) {
-        val hash = getQueryHash(query)
-        globalCache[this.cacheKey]!![hash] = formatted
-        styleCache[this.cacheKey]!![hash] = style
+        globalCache[this.cacheKey]!![hash] = element
     }
 
     private fun makeIndent(level: Int): String {
@@ -104,10 +84,7 @@ class Formatter(
     fun format(query: String): Pair<String, List<StyleMetadata>> {
         val cached = this.getCache(query)
         if (cached != null) {
-            val cachedStyle = this.getStyleCache(query)
-            if(cachedStyle != null) {
-                return Pair(cached, cachedStyle)
-            }
+            return cached
         }
 
         var tokens = Tokenizer(query).tokenize()
@@ -115,9 +92,10 @@ class Formatter(
         if (stripComments) {
             tokens = tokens.filter { it.type != Token.Type.COMMENT }
         }
-        val (formattedStr, formattedStyle) = this.format(tokens)
-        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, formattedStr, formattedStyle) } // We don't need to wait for this
-        return Pair(formattedStr, formattedStyle)
+
+        val result: Pair<String, List<StyleMetadata>> = this.format(tokens)
+        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, result) } // We don't need to wait for this
+        return result
     }
 
     private fun format(tokens: List<Token>): Pair<String, List<StyleMetadata>> {
