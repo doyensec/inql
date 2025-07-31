@@ -35,7 +35,9 @@ class Logger {
             when (level.uppercase()) {
                 "DEBUG" -> Level.DEBUG
                 "INFO" -> Level.INFO
-                "WARN" -> Level.WARNING
+                "WARNING" -> Level.WARNING
+                "ERROR" -> Level.ERROR
+                "CRITICAL" -> Level.CRITICAL
                 else -> Level.DEBUG
             },
         )
