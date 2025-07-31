@@ -97,7 +97,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
 
     fun isValidUrl(urlText: String): Boolean {
         return try {
-            val uri = URI(urlText)
+            val uri = URI(urlText.trim())
             uri.scheme != null && uri.host != null && uri.toURL() != null
         } catch (e: Exception) {
             false
@@ -410,15 +410,8 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     }
 
     fun verifyAndReturnUrl(): URI? {
-        try {
-            var textUrl = this.urlField.text
-            if (textUrl.trim().isBlank()) return null
-            if (!textUrl.matches(Regex("^https?://.*"))) {
-                textUrl = "https://$textUrl"
-                this.urlField.text = textUrl
-            }
-            return URI.create(textUrl)
-        } catch (_: URISyntaxException) {
+        val textUrl = this.urlField.text.trim()
+        if (!isValidUrl(textUrl)) {
             JOptionPane.showMessageDialog(
                 Burp.Montoya.userInterface().swingUtils().suiteFrame(),
                 "Error parsing the target URL, make sure it's correctly formatted",
@@ -428,6 +421,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             )
             return null
         }
+        return URI.create(textUrl)
     }
 
     fun updateRequestFromUrlField() {
@@ -442,6 +436,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     }
 
     fun updateUrlFieldFromRequest() {
+        if(this.urlField.text.isBlank()) return
         this.urlField.text = this.requestTemplate.url()
     }
 

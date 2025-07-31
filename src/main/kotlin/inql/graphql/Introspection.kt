@@ -32,6 +32,9 @@ class Introspection {
             Logger.debug("Introspection query about to be sent with version '$version' to '${request.url()}'.")
             val body = gson.toJson(mapOf("query" to IntrospectionQuery.get(version)))
             Logger.debug("Acquired introspection query body")
+            // TODO: Think of a way to handle exception for the following LoC.
+            //  It can throw an UnknownHostException inside internal Burp thread and cannot be caught before it unwraps
+            //  on error logs
             val response = Burp.Montoya.http().sendRequest(request.withBody(body)).response()
             Logger.debug("Sent the request and got the response")
 
