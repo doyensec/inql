@@ -17,7 +17,7 @@ import java.util.LinkedHashMap
 class SizedLRUCache<K, V>(
     maxBytes: Long,
     private val estimateEntrySize: (K, V) -> Long
-) : LinkedHashMap<K, V>(16, 0.75f, true) {
+) : LinkedHashMap<K, V>(16, 0.75f, false) {
 
     var maxBytes: Long = maxBytes
         set(value) {
@@ -38,7 +38,7 @@ class SizedLRUCache<K, V>(
         if (oldValue != null) {
             currentSize -= estimateEntrySize(key, oldValue)
         }
-        // evictIfNeeded()
+        evictIfNeeded()
         return oldValue
     }
 
@@ -52,10 +52,6 @@ class SizedLRUCache<K, V>(
             currentSize -= estimateEntrySize(key, removed)
         }
         return removed
-    }
-
-    public override fun removeEldestEntry(eldest: Map.Entry<K?, V?>?): Boolean {
-        return currentSize > maxBytes
     }
 
     /**

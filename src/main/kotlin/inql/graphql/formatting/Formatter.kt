@@ -14,7 +14,7 @@ class Formatter(
     val isIntrospection: Boolean = false,
 ) {
     companion object {
-        private val globalCache = HashMap<String, HashMap<Long, Pair<String, List<StyleMetadata>>>>()
+        val globalCache = HashMap<String, HashMap<Long, Pair<String, List<StyleMetadata>>>>()
 
         private fun getQueryHash(query: String): Long {
             /*
@@ -51,14 +51,14 @@ class Formatter(
     }
 
     private fun setCache(query: String, element: Pair<String, List<StyleMetadata>>) {
-        // Logger.debug("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
+        Logger.debug("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
         val hash = getQueryHash(query)
 
         globalCache[this.cacheKey]!![hash] = element
     }
    /*
     debug function kept for reference
-
+*/
     fun estimateGlobalCacheSize(): Long {
         var total = 0L
         for ((outerKey, innerMap) in globalCache) {
@@ -78,7 +78,7 @@ class Formatter(
         }
         return total
     }
-    */
+
     private fun makeIndent(level: Int): String {
         return " ".repeat(level * this.spaces)
     }
