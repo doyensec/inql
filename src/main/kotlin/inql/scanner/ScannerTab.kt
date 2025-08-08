@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import inql.Logger
 import inql.Profile
 import inql.bruteforcer.Bruteforcer
+import inql.bruteforcer.Bruteforcer2
 import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
@@ -202,12 +203,12 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 
-    private fun bruteforce() {
+    private suspend fun bruteforce() {
         var schemaToParse: String? = null
         val schema: GQLSchema?
 
         try {
-            schemaToParse = Bruteforcer(this.inql).startFromRequest(this.requestTemplate)
+            schemaToParse = Bruteforcer2(this.inql).startFromRequest(this.requestTemplate)
         } catch (e: EmptyOrIncorrectWordlistException) {
             scanFailed(e.toString())
             return
@@ -237,7 +238,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         this.scanCompleted()
     }
 
-    private fun analyze() {
+    private suspend fun analyze() {
         // Get the schema
         var jsonSchema: String? = null
         var sdlSchema: String? = null

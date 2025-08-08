@@ -22,7 +22,7 @@ class Bruteforcer(private val inql: InQL) {
     private var wordlist: List<String> = emptyList()
 
     companion object {
-        private val NAME_REGEX = Regex("^[_A-Za-z][_0-9A-Za-z]*$")
+        val NAME_REGEX = Regex("^[_A-Za-z][_0-9A-Za-z]*$")
     }
 
     enum class FuzzingContext(val value: String) {
