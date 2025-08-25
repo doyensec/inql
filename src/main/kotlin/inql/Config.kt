@@ -4,6 +4,7 @@ import burp.Burp
 import burp.api.montoya.core.HighlightColor
 import inql.graphql.formatting.Formatter
 import inql.graphql.formatting.SizedLRUCache
+import kotlin.collections.set
 
 class Config private constructor() {
     companion object {
@@ -40,6 +41,8 @@ class Config private constructor() {
         "report.poi" to true,
         "report.poi.depth" to 2,
         "report.poi.format" to "text",
+
+        // hooks on POIScanner.kt
         "report.poi.auth" to true,
         "report.poi.privileged" to true,
         "report.poi.pii" to true,
@@ -47,8 +50,10 @@ class Config private constructor() {
         "report.poi.database" to true,
         "report.poi.debugging" to true,
         "report.poi.files" to true,
+
         "report.poi.deprecated" to true,
         "report.poi.custom_scalars" to true,
+        "report.poi.show_custom_keywords" to true,
         "report.poi.custom_keywords" to "",
         "logging.level" to "WARNING",
         "proxy.highlight_enabled" to true,
@@ -61,7 +66,7 @@ class Config private constructor() {
 
     val hooks = hashMapOf<String, (Any) -> Unit>(
         "logging.level" to { level ->
-                Logger.setLevel(level.toString())
+            Logger.setLevel(level.toString())
         },
         "editor.formatting.cache_size_kb" to { cacheSize ->
             val size = (cacheSize as? Number)?.toLong()
@@ -73,16 +78,17 @@ class Config private constructor() {
                 Logger.warning("Invalid type for 'editor.formatting.cache_size_kb': $cacheSize")
             }
         },
+        "proxy.highlight_enabled" to { enabled ->
+            if (enabled as Boolean) {
+                ProxyRequestHighlighter.start()
+            } else {
+                ProxyRequestHighlighter.stop()
+            }
+        }
     )
 
     fun registerHook(key: String, hook: (Any) -> Unit) {
         hooks[key] = hook
-    }
-
-    fun triggerAllHooks() {
-        hooks.keys.forEach { key ->
-            triggerHook(key)
-        }
     }
 
     fun triggerHook(key: String) {
@@ -115,7 +121,7 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
+//        Logger.debug(logStr)
         return output
     }
 
@@ -143,7 +149,7 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
+//        Logger.debug(logStr)
         return output
     }
 
@@ -172,7 +178,7 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
+//        Logger.debug(logStr)
         return output
     }
 

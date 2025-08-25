@@ -2,6 +2,12 @@ package inql.ui
 
 import burp.api.montoya.core.HighlightColor
 import inql.Config
+import inql.Logger
+import inql.graphql.formatting.Style
+import inql.scanner.scanresults.ScanResultsView
+import java.awt.Color
+import java.awt.Dimension
+import java.awt.Font
 import javax.swing.*
 
 class SettingsWindow private constructor() : Window("InQL Settings") {
@@ -88,6 +94,40 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
             this.add(outerBox)
         }
+    }
+
+    val restartScanButton = JButton("Restart Scans").also {
+        it.foreground = Color.WHITE
+        it.background = Style.ThemeColors.Accent
+        it.font = it.font.deriveFont(Font.BOLD)
+        it.isBorderPainted = false
+        it.addActionListener {
+            Logger.info("Restarting POI scan")
+            restartScans()
+        }
+    }
+
+    fun restartScans() {
+        restartScanButton.isEnabled = false
+        restartScanButton.text = "Scanning..."
+
+        object : SwingWorker<Unit, Unit>() {
+            override fun doInBackground() {
+                val instances = ScanResultsView.getAllInstances()
+                Logger.info("Number of instances: ${instances.size}")
+                instances.parallelStream().forEach { instance ->
+                    Logger.debug("Scanning")
+                    instance.refresh()
+                    Logger.debug("Done scanning")
+                }
+            }
+
+            override fun done() {
+                Logger.info("Scan done")
+                restartScanButton.text = "Restart Scans"
+                restartScanButton.isEnabled = true
+            }
+        }.execute()
     }
 
     init {
@@ -191,6 +231,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.poi.files", CheckBox("Report points of interest that deal with file management")),
             SettingsElement("report.poi.deprecated", CheckBox("Report deprecated functionality")),
             SettingsElement("report.poi.custom_scalars", CheckBox("Report custom scalars")),
+            SettingsElement("report.poi.show_custom_keywords",CheckBox("Report custom keywords")),
             null,
             SettingsElement("report.poi.custom_keywords", TextArea("Custom keywords for points of interest", 6, 20)),
         )
@@ -217,6 +258,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             reportSection,
             JSeparator(JSeparator.HORIZONTAL),
             poiSection,
+            restartScanButton,
+            Box.createRigidArea(Dimension(0, 10)),
             JSeparator(JSeparator.HORIZONTAL),
             loggingLevelSection,
             JSeparator(JSeparator.HORIZONTAL),
