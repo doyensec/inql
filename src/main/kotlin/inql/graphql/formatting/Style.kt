@@ -4,7 +4,7 @@ import burp.api.montoya.ui.Theme
 import java.awt.Color
 
 object Style {
-    public enum class StyleClass {
+    enum class StyleClass {
         STRING,
         NUMBER,
         COMMENT,

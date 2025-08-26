@@ -19,7 +19,7 @@ import javax.swing.event.ChangeListener
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     private val tabFactory = ScannerTabFactory(this)
-    public val introspectionCache = IntrospectionCache(this.inql)
+    val introspectionCache = IntrospectionCache(this.inql)
 
     companion object {
         fun fetchHeadersForHost(

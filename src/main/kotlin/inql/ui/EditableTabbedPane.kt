@@ -249,12 +249,8 @@ open class EditableTabbedPane : TabbedPane() {
     init {
         tabbedPane.addChangeListener {
             if (tabbedPane.selectedIndex != lastSelectedIndex) {
-                for (i: Int in 0 until tabbedPane.getTabCount()) {
-                    if (i == tabbedPane.selectedIndex) {
-                        (tabbedPane.getTabComponentAt(i) as? EditableTab)?.isSelected = true
-                    } else {
-                        (tabbedPane.getTabComponentAt(i) as? EditableTab)?.isSelected = false
-                    }
+                for (i: Int in 0 until tabbedPane.tabCount) {
+                    (tabbedPane.getTabComponentAt(i) as? EditableTab)?.isSelected = i == tabbedPane.selectedIndex
                 }
 
                 lastSelectedIndex = tabbedPane.selectedIndex
@@ -337,7 +333,7 @@ open class EditableTabbedPane : TabbedPane() {
     }
 
     private fun isDarkMode(): Boolean {
-        return (JPanel().getBackground().getRGB() == Color(50,51,52).getRGB())
+        return (JPanel().getBackground().rgb == Color(50,51,52).rgb)
     }
 
     open fun closeTab(idx: Int) {

@@ -79,37 +79,37 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
 
         val editorPane = JEditorPane()
         editorPane.setContentType("text/html")
-        editorPane.setText("""
-<h2>Batch Queries</h2>
-This tab allows sending hundreds of queries inside of a single HTTP request. This may be useful for testing 2FA bypasses, DoSes, and more!
-
-<h2>How to use</h2>
-To send a request with 3 batched queries, use one of the placeholders described below and add them in front of
-the query to send. For example:
-<pre> 
-{
-    "query": "query { $[INT:0:3] verify2FA(code: \"${'$'}INT\") { status } }"
-}
-</pre>
-
-This will generate and send the following request:
-<pre> 
-{
-    "query": "query { 
-        op0:   verify2FA(code: \"0\") { status }  
-        op1:   verify2FA(code: \"1\") { status }  
-        op2:   verify2FA(code: \"2\") { status }  
-    }"
-}
-</pre>
-
-Supported placeholders:<br/>
-- <b>${'$'}[INT:first:last]</b> with variable <b>${'$'}INT</b> - first and last are integers, works like <code>range(first,last)</code> in Python<br/>
-- <b>${'$'}[FILE:path:first:last]</b> with variable <b>${'$'}FILE</b> - absolute path to a file and the (optional) range of lines (first line is 1 not 0)<br/>
-<br/>
-Current limitations: only one placeholder, no variables.
-""")
-        editorPane.setEditable(false)
+        editorPane.text = """
+    <h2>Batch Queries</h2>
+    This tab allows sending hundreds of queries inside of a single HTTP request. This may be useful for testing 2FA bypasses, DoSes, and more!
+    
+    <h2>How to use</h2>
+    To send a request with 3 batched queries, use one of the placeholders described below and add them in front of
+    the query to send. For example:
+    <pre> 
+    {
+        "query": "query { $[INT:0:3] verify2FA(code: \"${'$'}INT\") { status } }"
+    }
+    </pre>
+    
+    This will generate and send the following request:
+    <pre> 
+    {
+        "query": "query { 
+            op0:   verify2FA(code: \"0\") { status }  
+            op1:   verify2FA(code: \"1\") { status }  
+            op2:   verify2FA(code: \"2\") { status }  
+        }"
+    }
+    </pre>
+    
+    Supported placeholders:<br/>
+    - <b>${'$'}[INT:first:last]</b> with variable <b>${'$'}INT</b> - first and last are integers, works like <code>range(first,last)</code> in Python<br/>
+    - <b>${'$'}[FILE:path:first:last]</b> with variable <b>${'$'}FILE</b> - absolute path to a file and the (optional) range of lines (first line is 1 not 0)<br/>
+    <br/>
+    Current limitations: only one placeholder, no variables.
+    """
+        editorPane.isEditable = false
 
         // Left section
         val leftSection = JSplitPane(

@@ -17,14 +17,14 @@ import java.lang.reflect.Type
 /*
     Simple wrapper class around GraphQLSchema that adds a few convenience methods
  */
-public class GQLSchema(jsonOrSdlSchema: String) {
-    public enum class OperationType {
+class GQLSchema(jsonOrSdlSchema: String) {
+    enum class OperationType {
         QUERY, MUTATION, SUBSCRIPTION
     }
 
     private var _jsonSchema: String? = null
     private var _sdlSchema: String? = null
-    public val schema: GraphQLSchema
+    val schema: GraphQLSchema
 
     init {
         val schemaParser = SchemaParser()
@@ -69,12 +69,12 @@ public class GQLSchema(jsonOrSdlSchema: String) {
         this.schema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, RuntimeWiring.MOCKED_WIRING)
     }
 
-    public val queries = schema.queryType.fields.associateBy { it.name }
-    public val mutations = if (schema.isSupportingMutations) schema.mutationType.fields.associateBy { it.name } else emptyMap()
-    public val subscriptions = if (schema.isSupportingSubscriptions) schema.subscriptionType.fields.associateBy { it.name } else emptyMap()
+    val queries = schema.queryType.fields.associateBy { it.name }
+    val mutations = if (schema.isSupportingMutations) schema.mutationType.fields.associateBy { it.name } else emptyMap()
+    val subscriptions = if (schema.isSupportingSubscriptions) schema.subscriptionType.fields.associateBy { it.name } else emptyMap()
     private val queriesSdlCache = mutableMapOf<String, String>()
 
-    public val sdlSchema: String get() {
+    val sdlSchema: String get() {
         if (_sdlSchema == null) {
             val printer = SchemaPrinter()
             _sdlSchema = printer.print(schema)
@@ -82,7 +82,7 @@ public class GQLSchema(jsonOrSdlSchema: String) {
         return _sdlSchema!!
     }
 
-    public val jsonSchema: String get() {
+    val jsonSchema: String get() {
         if (_jsonSchema == null) {
             // Simulate an Introspection query to get the JSON schema
             val graphQL = GraphQL.newGraphQL(schema).build()
@@ -111,7 +111,7 @@ public class GQLSchema(jsonOrSdlSchema: String) {
         return sdl
     }
 
-    public fun getOperationAsText(operationName: String, type: OperationType, skipCache: Boolean = false): String {
+    fun getOperationAsText(operationName: String, type: OperationType, skipCache: Boolean = false): String {
         val operation = when(type) {
             OperationType.QUERY -> this.queries[operationName]
             OperationType.MUTATION -> this.mutations[operationName]
@@ -121,10 +121,10 @@ public class GQLSchema(jsonOrSdlSchema: String) {
         return getOperationAsText(operation!!, type, skipCache)
     }
 
-    public fun getQueryAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
+    fun getQueryAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
         OperationType.QUERY, skipCache)
-    public fun getMutationAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
+    fun getMutationAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
         OperationType.MUTATION, skipCache)
-    public fun getSubscriptionAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
+    fun getSubscriptionAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,
         OperationType.SUBSCRIPTION, skipCache)
 }

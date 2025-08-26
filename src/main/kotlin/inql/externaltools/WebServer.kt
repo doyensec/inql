@@ -39,8 +39,8 @@ import java.util.*
  */
 
 class WebServer {
-    public val listeningPort: Int
-    public val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>
+    val listeningPort: Int
+    val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>
 
     init {
         this.listeningPort = findAvailablePort()
@@ -52,7 +52,7 @@ class WebServer {
                 post("/send-to-repeater") {
                     val request = call.receiveText()
                     try {
-                        val httpRequest = WebServer.deserializeRequest(request)
+                        val httpRequest = deserializeRequest(request)
                         Burp.Montoya.repeater().sendToRepeater(httpRequest)
                         call.response.status(HttpStatusCode.OK)
                     } catch (e: Exception) {
@@ -66,7 +66,7 @@ class WebServer {
                 post("/send-to-intruder") {
                     val request = call.receiveText()
                     try {
-                        val httpRequest = WebServer.deserializeRequest(request)
+                        val httpRequest = deserializeRequest(request)
                         Burp.Montoya.intruder().sendToIntruder(httpRequest)
                         call.response.status(HttpStatusCode.OK)
                     } catch (e: Exception) {

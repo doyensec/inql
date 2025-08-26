@@ -63,7 +63,7 @@ class Formatter(
         var total = 0L
         for ((outerKey, innerMap) in globalCache) {
             total += outerKey.length * 2L + 64L // outer String key + map overhead
-            for ((innerKey, pair) in innerMap) {
+            for ((_, pair) in innerMap) {
                 val stringPart = pair.first
                 val styleList = pair.second
 
