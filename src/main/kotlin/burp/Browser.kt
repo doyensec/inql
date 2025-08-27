@@ -127,7 +127,9 @@ class Browser {
             if (File(extDir).isDirectory) {
                 args.add("--load-extension=$extDir")
             }
-
+            if (System.getProperty("user.name") == "root") {
+                args.add("--no-sandbox")
+            }
             return args
         }
 
