@@ -105,7 +105,6 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
                     for ((category, results) in pois) {
                         if (results.isEmpty()) continue
                         val categoryText = buildString {
-                            appendLine("- $category")
                             for (poi in results) {
                                 appendLine("(${poi.queryType})${poi.path}")
                             }
