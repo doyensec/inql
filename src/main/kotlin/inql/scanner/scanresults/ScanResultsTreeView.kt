@@ -43,6 +43,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             it.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
             it.expandsSelectedPaths = true
         }
+
         this.tree.addTreeWillExpandListener(object : TreeWillExpandListener {
             override fun treeWillExpand(event: TreeExpansionEvent) {
                 val node = event.path.lastPathComponent
@@ -52,6 +53,17 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             }
             override fun treeWillCollapse(event: TreeExpansionEvent) {}
         })
+
+        tree.addTreeSelectionListener { e ->
+            val node = e.path.lastPathComponent
+            if (node is LazyLeafTreeNode) {
+                node.ensureLoaded(tree.model as DefaultTreeModel)
+                node.setSelectionRefreshCallback {
+                    view.selectionChangeListener(node as DefaultMutableTreeNode)
+                }
+            }
+        }
+
         this.root = DefaultMutableTreeNode("No results yet")
         this.tree.model = DefaultTreeModel(this.root)
         this.initUI()

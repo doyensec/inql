@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
-import javax.swing.SwingWorker
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
@@ -63,6 +62,37 @@ class LazyTreeNodeWithCustomLabel(
     }
 }
 
+class LazyLeafTreeNode(
+    label: String,
+    private val loader: suspend () -> String
+) : TreeNodeWithCustomLabel(label, null, forceDirectory = false) {
+
+    private var loaded = false
+    private var selectionRefreshCallback: (() -> Unit)? = null
+
+    fun setSelectionRefreshCallback(callback: () -> Unit) {
+        this.selectionRefreshCallback = callback
+    }
+
+    fun ensureLoaded(model: DefaultTreeModel) {
+        if (loaded) return
+        loaded = true
+
+        CoroutineScope(Dispatchers.Default).launch {
+            val content = try {
+                loader()
+            } catch (e: Exception) {
+                "<error loading>"
+            }
+
+            withContext(Dispatchers.Swing) {
+                this@LazyLeafTreeNode.userObject = content
+                model.nodeChanged(this@LazyLeafTreeNode)
+                selectionRefreshCallback?.invoke()
+            }
+        }
+    }
+}
 
 class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
     TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
@@ -125,18 +155,12 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         }
 
         if (config.getBoolean("report.cycles") == true) {
-            val cycleNode = LazyTreeNodeWithCustomLabel("Cycle Detection") { parent ->
+            val cycleNode = LazyLeafTreeNode("Cycle Detection") {
                 val cycleScanner = CyclesScanner(gqlSchema)
                 cycleScanner.detect()
                 val results = cycleScanner.cyclesAsString()
-
-                if (results.isNotBlank()) {
-                    listOf(TreeNodeWithCustomLabel("Cycles Summary", results))
-                } else {
-                    listOf(TreeNodeWithCustomLabel("No cycles detected","<no cycles detected>"))
-                }
+                results.ifBlank { "<no cycles detected>" }
             }
-
             this.add(cycleNode)
         }
 
