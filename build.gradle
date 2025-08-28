@@ -19,6 +19,7 @@ dependencies {
     implementation 'net.portswigger.burp.extensions:montoya-api:2023.5'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
     implementation 'org.apache.commons:commons-text:1.11.0'
     implementation 'commons-codec:commons-codec:1.16.1'
     implementation 'io.ktor:ktor-server-core:3.1.1'
