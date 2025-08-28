@@ -9,6 +9,7 @@ import inql.graphql.scanners.POIScanner.Companion.getActiveKeywordsCount
 import inql.scanner.ScanResult
 import inql.utils.JsonPrettifier
 import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeModel
 
 open class TreeNodeWithCustomLabel(val label: String, obj: Any?, val forceDirectory: Boolean = false) : DefaultMutableTreeNode(obj) {
     override fun toString(): String {
@@ -18,6 +19,53 @@ open class TreeNodeWithCustomLabel(val label: String, obj: Any?, val forceDirect
     override fun isLeaf(): Boolean {
         if (forceDirectory) return false
         return super.isLeaf()
+    }
+}
+
+//class LazyTreeNodeWithCustomLabel(
+//    label: String,
+//    private val loader: () -> String
+//) : TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
+//
+//    private var loaded = false
+//
+//    init {
+//        add(DefaultMutableTreeNode("Loading..."))
+//    }
+//
+//    fun ensureLoaded(model: DefaultTreeModel) {
+//        if (!loaded) {
+//            removeAllChildren()
+//            val result = loader()
+//            if (result.isNotBlank()) {
+//                add(DefaultMutableTreeNode(result))
+//            } else {
+//                add(DefaultMutableTreeNode("<no cycles detected>"))
+//            }
+//            loaded = true
+//            model.nodeStructureChanged(this)
+//        }
+//    }
+//}
+class LazyTreeNodeWithCustomLabel(
+    label: String,
+    private val loader: (LazyTreeNodeWithCustomLabel) -> Unit
+) : TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
+
+    private var loaded = false
+
+    init {
+        // Add dummy child so expand arrow shows
+        add(DefaultMutableTreeNode("Loading..."))
+    }
+
+    fun ensureLoaded(model: DefaultTreeModel) {
+        if (!loaded) {
+            removeAllChildren()
+            loader(this)   // let the lambda populate this node
+            loaded = true
+            model.nodeStructureChanged(this)
+        }
     }
 }
 
@@ -51,45 +99,79 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         // Add Points of Interest
         POIScanner.registerHooks()
 
+//        if (config.getBoolean("report.poi") == true && getActiveKeywordsCount() > 0) {
+//            val poiScanner = POIScanner(gqlSchema)
+//            val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+//
+//            poiNode = TreeNodeWithCustomLabel("Points of Interest", pois)
+//            val poiFormat = config.getString("report.poi.format")
+//            if (poiFormat == "text" || poiFormat == "both") {
+//                for ((category, results) in pois) {
+//                    if (results.isEmpty()) continue
+//
+//                    val categoryText = StringBuilder()
+//                    categoryText.appendLine("- $category")
+//
+//                    for (poi in results) {
+//                        categoryText.appendLine("(${poi.queryType})${poi.path}")
+//                    }
+//                    val categoryNode = TreeNodeWithCustomLabel(category, categoryText.toString())
+//                    poiNode?.add(categoryNode)
+//                }
+//            }
+//            if (poiFormat == "json" || poiFormat == "both") {
+//                val jsonPoi = Gson().toJson(pois)
+//                if (!jsonPoi.isNullOrBlank()) {
+//                    poiNode?.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi)))
+//                }
+//            }
+//            this.add(poiNode)
+//        }
+
         if (config.getBoolean("report.poi") == true && getActiveKeywordsCount() > 0) {
-            val poiScanner = POIScanner(gqlSchema)
-            val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+            val poiNode = LazyTreeNodeWithCustomLabel("Points of Interest") { parent ->
+                val poiScanner = POIScanner(gqlSchema)
+                val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
 
-            poiNode = TreeNodeWithCustomLabel("Points of Interest", pois)
-            val poiFormat = config.getString("report.poi.format")
-            if (poiFormat == "text" || poiFormat == "both") {
-                for ((category, results) in pois) {
-                    if (results.isEmpty()) continue
+                val poiFormat = config.getString("report.poi.format")
+                if (poiFormat == "text" || poiFormat == "both") {
+                    for ((category, results) in pois) {
+                        if (results.isEmpty()) continue
 
-                    val categoryText = StringBuilder()
-                    categoryText.appendLine("- $category")
-
-                    for (poi in results) {
-                        categoryText.appendLine("(${poi.queryType})${poi.path}")
+                        val categoryText = buildString {
+                            appendLine("- $category")
+                            for (poi in results) {
+                                appendLine("(${poi.queryType})${poi.path}")
+                            }
+                        }
+                        parent.add(TreeNodeWithCustomLabel(category, categoryText))
                     }
-                    val categoryNode = TreeNodeWithCustomLabel(category, categoryText.toString())
-                    poiNode?.add(categoryNode)
+                }
+                if (poiFormat == "json" || poiFormat == "both") {
+                    val jsonPoi = Gson().toJson(pois)
+                    if (!jsonPoi.isNullOrBlank()) {
+                        parent.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi)))
+                    }
                 }
             }
-            if (poiFormat == "json" || poiFormat == "both") {
-                val jsonPoi = Gson().toJson(pois)
-                if (!jsonPoi.isNullOrBlank()) {
-                    poiNode?.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi)))
-                }
-            }
+
             this.add(poiNode)
         }
 
-        // Add cycle detection results
         if (config.getBoolean("report.cycles") == true) {
-            val cycleScanner = CyclesScanner(gqlSchema)
-            cycleScanner.detect()
-
-            val cycleDetectionResults = cycleScanner.cyclesAsString()
-            if (cycleDetectionResults.isNotBlank()) {
-                this.add(TreeNodeWithCustomLabel("Cycle Detection", cycleDetectionResults))
+            val cycleNode = LazyTreeNodeWithCustomLabel("Cycle Detection") { parent ->
+                val cycleScanner = CyclesScanner(gqlSchema)
+                cycleScanner.detect()
+                val results = cycleScanner.cyclesAsString()
+                if (results.isNotBlank()) {
+                    parent.add(DefaultMutableTreeNode(results))
+                } else {
+                    parent.add(DefaultMutableTreeNode("<no cycles detected>"))
+                }
             }
+            this.add(cycleNode)
         }
+
 
         // Add request template
         this.add(TreeNodeWithCustomLabel("Request Template", scanResult.requestTemplate.withBody("").toString()))
