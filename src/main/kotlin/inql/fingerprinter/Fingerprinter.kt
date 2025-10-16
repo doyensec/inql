@@ -9,9 +9,7 @@ import inql.InQL
 import inql.Logger
 import inql.ui.BorderPanel
 import inql.utils.MarkdownToHtmlConverter
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Desktop
@@ -25,6 +23,7 @@ import javax.swing.event.HyperlinkEvent
 class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var fingerPrinterJob: Job? = null
     private val markdownEditorPane = JEditorPane()
     private val urlField = JTextField()
     private val sendButton = JButton("Start fingerprinting").also {
@@ -164,7 +163,16 @@ The results will appear here
     override fun actionPerformed(e: ActionEvent?) {
         Logger.debug("Initiate Attack handler fired")
         setMarkdownInprogress()
-        this.coroutineScope.launch { run() }
+        fingerPrinterJob = coroutineScope.launch {
+            try {
+                run()
+            } finally {
+            }
+        }
+    }
+
+    fun cancel() {
+        fingerPrinterJob?.cancel()
     }
 
     private fun setMarkdownInprogress() {
@@ -174,7 +182,7 @@ Fingerprinting...
 """)
     }
 
-    private fun run() {
+    private suspend fun run() {
         if (check()) {
             val engine = execute()
             Logger.debug(engine.toString())
@@ -203,7 +211,7 @@ Fingerprinting...
         }
     }
 
-    private fun execute(): String? {
+    private suspend fun execute(): String? {
         return when {
             engineInigo() -> "inigo"
             engineLighthouse() -> "lighthouse"
@@ -275,7 +283,7 @@ Fingerprinting...
         return false
     }
 
-    private fun engineGraphqlYoga(): Boolean {
+    private suspend fun engineGraphqlYoga(): Boolean {
       Logger.debug("engineGraphqlYoga")
         val query = """
       subscription {
@@ -286,7 +294,7 @@ Fingerprinting...
         return errorContains(resp, "asyncExecutionResult[Symbol.asyncIterator] is not a function") || errorContains(resp, "Unexpected error.")
     }
 
-    private fun engineApollo(): Boolean {
+    private suspend fun engineApollo(): Boolean {
       Logger.debug("engineApollo")
         var query = """
       query @skip {
@@ -306,19 +314,19 @@ Fingerprinting...
         resp = graphQuery(query)
         return errorContains(resp, "Directive \\\"@deprecated\\\" may not be used on QUERY.")
     }
-    private fun engineAwsAppSync(): Boolean {
+    private suspend fun engineAwsAppSync(): Boolean {
       Logger.debug("engineAwsAppSync")
         val query = "query @skip { __typename }".trimIndent()
         val resp = graphQuery(query)
         return errorContains(resp, "MisplacedDirective")
     }
-    private fun engineGraphene(): Boolean {
+    private suspend fun engineGraphene(): Boolean {
       Logger.debug("engineGraphene")
         val query = """aaa""".trimIndent()
         val resp = graphQuery(query)
         return errorContains(resp, "Syntax Error GraphQL (1:1)")
     }
-    private fun engineHasura(): Boolean {
+    private suspend fun engineHasura(): Boolean {
       Logger.debug("engineHasura")
         var query = """
       query @cached {
@@ -360,7 +368,7 @@ Fingerprinting...
         return errorContains(resp, "missing selection set for \"__Schema\"")
     }
 
-    private fun engineGraphqlPhp(): Boolean {
+    private suspend fun engineGraphqlPhp(): Boolean {
       Logger.debug("engineGraphqlPhp")
         var query = """
       query ! {
@@ -381,7 +389,7 @@ Fingerprinting...
         return errorContains(resp, "Directive \\\"deprecated\\\" may not be used on \\\"QUERY\\\".")
     }
 
-    private fun engineRuby(): Boolean {
+    private suspend fun engineRuby(): Boolean {
       Logger.debug("engineRuby")
         var query = """
      query @skip {
@@ -422,7 +430,7 @@ Fingerprinting...
         return errorContains(resp, "Directive 'skip' is missing required arguments: if")
     }
 
-    private fun engineHypergraphql(): Boolean {
+    private suspend fun engineHypergraphql(): Boolean {
       Logger.debug("engineHypergraphql")
         var query = """
      zzz {
@@ -442,7 +450,7 @@ Fingerprinting...
         return errorContains(resp, "Validation error of type UnknownDirective: Unknown directive deprecated @ '__typename'")
     }
 
-    private fun engineGraphqlJava(): Boolean {
+    private suspend fun engineGraphqlJava(): Boolean {
       Logger.debug("engineGraphqlJava")
         var query = """
      queryy  {
@@ -467,7 +475,7 @@ Fingerprinting...
         return errorContains(resp, "Invalid Syntax : offending token '<EOF>'")
     }
 
-    private fun engineAriadne(): Boolean {
+    private suspend fun engineAriadne(): Boolean {
       Logger.debug("engineAriadne")
         var query = """
       query {
@@ -484,7 +492,7 @@ Fingerprinting...
         return errorContains(resp, "The query must be a string.")
     }
 
-    private fun engineWpGraphql(): Boolean {
+    private suspend fun engineWpGraphql(): Boolean {
       Logger.debug("engineWpGraphql")
         var query = ""
         var resp = graphQuery(query)
@@ -512,7 +520,7 @@ Fingerprinting...
         return (dbgMsgType == "DEBUG_LOGS_INACTIVE" || dbgMsgMessage == "GraphQL Debug logging is not active. To see debug logs, GRAPHQL_DEBUG must be enabled.")
     }
 
-    private fun engineGqlGen(): Boolean {
+    private suspend fun engineGqlGen(): Boolean {
       Logger.debug("engineGqlGen")
         var query = """
       query  {
@@ -533,7 +541,7 @@ Fingerprinting...
 
         return errorContains(resp, "Expected Name, found <Invalid>")
     }
-    private fun engineGraphqlGo(): Boolean {
+    private suspend fun engineGraphqlGo(): Boolean {
       Logger.debug("engineGraphqlGo")
         var query = """
       query {
@@ -563,7 +571,7 @@ Fingerprinting...
         return typename == "RootQuery"
     }
 
-    private fun engineJuniper(): Boolean {
+    private suspend fun engineJuniper(): Boolean {
       Logger.debug("engineJuniper")
         var query = """
       queryy {
@@ -580,7 +588,7 @@ Fingerprinting...
 
         return errorContains(resp, "Unexpected end of input")
     }
-    private fun engineSangria(): Boolean {
+    private suspend fun engineSangria(): Boolean {
       Logger.debug("engineSangria")
         val query = """
       queryy {
@@ -593,7 +601,7 @@ Fingerprinting...
         return syntaxError.contains(msg)
     }
 
-    private fun engineFlutter(): Boolean {
+    private suspend fun engineFlutter(): Boolean {
       Logger.debug("engineFlutter")
         val query = """
       query {
@@ -604,14 +612,14 @@ Fingerprinting...
         return errorContains(resp, "Directive \"deprecated\" may not be used on FIELD.")
     }
 
-    private fun engineDianaJl(): Boolean {
+    private suspend fun engineDianaJl(): Boolean {
       Logger.debug("engineDianaJl")
         val query = """queryy { __typename }""".trimIndent()
         val resp = graphQuery(query)
         return errorContains(resp, "Syntax Error GraphQL request (1:1) Unexpected Name \"queryy\"") || errorContains(resp, "Syntax Error GraphQL request (1:1) Unexpected Name \\\"queryy\\\"")
     }
 
-    private fun engineStrawberry(): Boolean {
+    private suspend fun engineStrawberry(): Boolean {
       Logger.debug("engineStrawberry")
         val query = """
       query @deprecated {
@@ -621,7 +629,7 @@ Fingerprinting...
         return (errorContains(resp, "Directive '@deprecated' may not be used on query.")  && resp.keySet().contains("data"))
     }
 
-    private fun engineTartiflette(): Boolean {
+    private suspend fun engineTartiflette(): Boolean {
       Logger.debug("engineTartiflette")
         var query = """
       query @a { __typename }
@@ -666,7 +674,7 @@ Fingerprinting...
         return errorContains(resp, "syntax error, unexpected IDENTIFIER")
     }
 
-    private fun engineTailcall(): Boolean {
+    private suspend fun engineTailcall(): Boolean {
       Logger.debug("engineTailcall")
         val query = """
       aa {
@@ -678,7 +686,7 @@ Fingerprinting...
         return errorContains(resp, "expected executable_definition")
     }
 
-    private fun engineDgraph(): Boolean {
+    private suspend fun engineDgraph(): Boolean {
       Logger.debug("engineDgraph")
         var query = """
       query {
@@ -701,7 +709,7 @@ Fingerprinting...
         return errorContains(resp, "Not resolving __typename. There's no GraphQL schema in Dgraph. Use the /admin API to add a GraphQL schema")
     }
 
-    private fun engineDirectus(): Boolean {
+    private suspend fun engineDirectus(): Boolean {
       Logger.debug("engineDirectus")
         val query = ""
 
@@ -710,7 +718,7 @@ Fingerprinting...
         return (JSONObject(errors.get(0)).optJSONObject("extensions")?.optString("code") == "INVALID_PAYLOAD")
     }
 
-    private fun engineLighthouse(): Boolean {
+    private suspend fun engineLighthouse(): Boolean {
       Logger.debug("engineLighthouse")
         val query = """
       query {
@@ -725,7 +733,7 @@ Fingerprinting...
         return false
     }
 
-    private fun engineAgoo(): Boolean {
+    private suspend fun engineAgoo(): Boolean {
       Logger.debug("engineAgoo")
         val query = """
       query {
@@ -735,14 +743,14 @@ Fingerprinting...
         val resp = graphQuery(query)
         return errorContains(resp, "eval error")
     }
-    private fun engineMercurius(): Boolean {
+    private suspend fun engineMercurius(): Boolean {
       Logger.debug("engineMercurius")
         val query = ""
         val resp = graphQuery(query)
 
         return errorContains(resp, "Unknown query") || errorContains(resp, "MER_ERR_GQL_VALIDATION")
     }
-    private fun engineMorpheus(): Boolean {
+    private suspend fun engineMorpheus(): Boolean {
       Logger.debug("engineMorpheus")
         val query = """
       queryy {
@@ -753,7 +761,7 @@ Fingerprinting...
 
         return (errorContains(resp, "expecting white space") || errorContains(resp, "offset"))
     }
-    private fun engineLacinia(): Boolean {
+    private suspend fun engineLacinia(): Boolean {
       Logger.debug("engineLacinia")
         val query = """
       query {
@@ -767,7 +775,7 @@ Fingerprinting...
     }
 
     // TODO
-//    private fun engineJaal(): Boolean {
+//    private suspend fun engineJaal(): Boolean {
 //        var query = """{}""".trimIndent()
 //        var resp = self.graph_query(self.url, payload=query, operation='{}')
 //
@@ -777,7 +785,7 @@ Fingerprinting...
 //    return false
 //    }
 
-  private fun engineCaliban(): Boolean {
+  private suspend fun engineCaliban(): Boolean {
     Logger.debug("engineCaliban")
     val query = """
         query {
@@ -796,7 +804,7 @@ Fingerprinting...
     return errorContains(resp, "Fragment 'woof' is not used in any spread")
 }
 
-  private fun engineAbsinthe(): Boolean {
+  private suspend fun engineAbsinthe(): Boolean {
     Logger.debug("engineAbsinthe")
     val query = """
         query {
@@ -808,21 +816,21 @@ Fingerprinting...
 
     return errorContains(resp, "Cannot query field \\\"inql\\\" on type \\\"RootQueryType\\\".")
 }
-  private fun engineGraphqlDotNet(): Boolean {
+  private suspend fun engineGraphqlDotNet(): Boolean {
     Logger.debug("engineGraphqlDotNet")
     val query = "query @skip { __typename }".trimIndent()
     val resp = graphQuery(query)
     return errorContains(resp, "Directive 'skip' may not be used on Query.")
   }
 
-  private fun enginePgGraphql(): Boolean {
+  private suspend fun enginePgGraphql(): Boolean {
     Logger.debug("enginePgGraphql")
     val query = """query { __typename @skip(aa:true) }""".trimIndent()
     val resp = graphQuery(query)
     return errorContains(resp, "Unknown argument to @skip: aa")
   }
 
-  private fun engineHotChocolate(): Boolean {
+  private suspend fun engineHotChocolate(): Boolean {
     Logger.debug("engineHotChocolate")
     var query = """
         queryy  {
@@ -843,7 +851,7 @@ Fingerprinting...
     return errorContains(resp, "The specified directive `aaa` is not supported by the current schema.")
   }
 
-  private fun engineInigo(): Boolean {
+  private suspend fun engineInigo(): Boolean {
     Logger.debug("engineInigo")
       val query = """
         query  {
@@ -854,7 +862,7 @@ Fingerprinting...
       return resp.optJSONObject("extensions") != null && resp.optJSONObject("extensions").keySet().contains("inigo")
   }
 
-  private fun engineBallerina(): Boolean {
+  private suspend fun engineBallerina(): Boolean {
     Logger.debug("engineBallerina")
     val query = """
         query {

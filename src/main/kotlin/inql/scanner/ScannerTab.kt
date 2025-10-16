@@ -8,7 +8,6 @@ import com.google.gson.Gson
 import inql.Logger
 import inql.Profile
 import inql.bruteforcer.Bruteforcer
-import inql.bruteforcer.Bruteforcer2
 import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
@@ -20,9 +19,7 @@ import inql.scanner.scanresults.ScanResultsView
 import inql.ui.EditableTab
 import inql.ui.ErrorDialog
 import inql.utils.withUpsertedHeaders
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.awt.CardLayout
 import java.io.File
 import java.net.URI
@@ -78,6 +75,9 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     val scanConfigView = ScanConfigView(this)
     val scanResultsView = ScanResultsView(this)
 
+    private var bruteforcerJob: Job? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+
     var url: String
         get() = this.scanConfigView.urlField.text
         set(s) {
@@ -116,6 +116,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun showResultsView() {
         this.showView(SCAN_RESULT_VIEW)
+    }
+
+    fun cancel() {
+        bruteforcerJob?.cancel()
+        this.scanConfigView.setBusy(false)
     }
 
     fun showConfigView() {
@@ -164,8 +169,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         if (this.scanConfigView.verifyAndReturnUrl() == null) return
         this.normalizeHeaders()
         this.scanConfigView.setBusy(true)
-        CoroutineScope(Dispatchers.IO).launch {
-            this@ScannerTab.bruteforce()
+        bruteforcerJob = coroutineScope.launch {
+            try {
+                this@ScannerTab.bruteforce()
+            } finally {
+                // This block runs whether the coroutine completes or is cancelled
+                withContext(Dispatchers.Main) {
+                    this@ScannerTab.scanConfigView.setBusy(false)
+                }
+            }
         }
     }
 
@@ -208,7 +220,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val schema: GQLSchema?
 
         try {
-            schemaToParse = Bruteforcer2(this.inql).startFromRequest(this.requestTemplate)
+            schemaToParse = Bruteforcer(this.inql).startFromRequest(this.requestTemplate)
         } catch (e: EmptyOrIncorrectWordlistException) {
             scanFailed(e.toString())
             return
