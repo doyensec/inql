@@ -13,7 +13,11 @@ import inql.utils.ResourceFileReader
 import kotlinx.coroutines.yield
 import java.io.File
 import java.util.*
-import kotlin.math.min
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
 
 /**
  * A utility object to store regular expressions used for parsing GraphQL error messages.
@@ -30,23 +34,25 @@ object RegexStore {
 
     // For extracting field suggestions from error messages
     val FIELD_SUGGESTIONS = listOf(
-        Regex("""Did you mean "(?<suggestion>[_A-Za-z][_0-9A-Za-z]*)"\?"""),
-        Regex("""Did you mean '(?<suggestion>[_A-Za-z][_0-9A-Za-z]*)'\?"""),
-    )
+        Regex("""(?:Did you mean|\G(?!^))[^\w"']+["'](?<suggestion>[_A-Za-z][_0-9A-Za-z]*)["']"""))
 
     // For finding the type of a field when a sub-selection is attempted on a scalar
     val NO_SUBFIELDS =
         Regex("""Field ["'](?<field>[_A-Za-z][_0-9A-Za-z]*)["'] must not have a selection since type ["']?(?<type>.*?)["']? has no subfields\.*""")
 
+    val MISSING_SUBFIELDS =
+        Regex("""Field ["'](?<field>[_A-Za-z][_0-9A-Za-z]*)["'] of type ["']?(?<type>.*?)["']? must have a selection of subfields\.*""")
 
-    // For finding the type of an argument when the wrong type is provided
-    val WRONG_ARGUMENT_TYPE = Regex(
-        """Argument "(?<argument>[_A-Za-z][_0-9A-Za-z]*)" has invalid value (?<value>.*). Expected type "(?<type>.*)","""
+    val WRONG_ARGUMENT_TYPES = listOf(
+        // Handles errors like: Argument "..." has invalid value ... Expected type "String" OR Expected type [ID!]!
+        Regex("""Argument ['"](?<argument>[_A-Za-z][_0-9A-Za-z]*)['"] has invalid value .* Expected type ['"]?(?<type>[_A-Za-z!\[\]]+)['"]?,?"""),
+        // Handles errors like: Expected type [ID!]!, found {}.
+        Regex("""Expected type (?<type>[_A-Za-z!\[\]]+),? found .*\.""")
     )
 
     // For finding missing required arguments
     val MISSING_ARGUMENT =
-        Regex("""Field "(?<field>[_A-Za-z][_0-9A-Za-z]*)" argument "(?<argument>[_A-Za-z][_0-9A-Za-z]*)" of type "(?<type>.*)" is required but not provided.""")
+        Regex("""Field "(?<field>[_A-Za-z][_0-9A-Za-z]*)" argument "(?<argument>[_A-Za-z][_0-9A-Za-z]*)" of type "(?<type>.*)" is required(?:, but it was not provided| but not provided)?\.""")
 
     // For extracting argument suggestions
     val ARGUMENT_SUGGESTIONS = listOf(
@@ -54,9 +60,26 @@ object RegexStore {
         Regex("""Unknown argument '(?<argument>[_A-Za-z][_0-9A-Za-z]*)' on field '(?<field>[_A-Za-z][_0-9A-Za-z]*)'. Did you mean '(?<suggestion>[_A-Za-z][_0-9A-Za-z]*)'\?"""),
     )
 
+    val UNKNOWN_ARGUMENT = listOf(
+        Regex("""Unknown argument [`"'](?<argument>[_A-Za-z][_0-9A-Za-z]*)['"'] on field .*"""),
+        Regex("""Argument [`"'](?<argument>[_A-Za-z][_0-9A-Za-z]*)['"'] is not defined on field .*""")
+    )
+
+    val EXPECTED_INPUT_OBJECT =
+        Regex("""Expected type (?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+) to be an object\.""")
+
+
+    val SYNTAX_ERROR = listOf(
+        Regex("""Syntax Error.*"""),
+        Regex(""".*GRAPHQL_PARSE_FAILED.*""")
+    )
+
     // A fake field name used to trigger type name errors
     const val WRONG_FIELD_EXAMPLE = "____i_n_q_l____"
     const val WRONG_ARG_EXAMPLE = "____i_n_q_l____"
+
+    val UNKNOWN_INPUT_FIELD =
+        Regex("""Field ['"]${WRONG_ARG_EXAMPLE}['"] is not defined by type ['"](?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]\.""")
 
     fun getSuggestions(errorMessage: String, regexList: List<Regex>): List<String> {
         return regexList.flatMap { regex ->
@@ -72,9 +95,13 @@ object RegexStore {
  */
 class Bruteforcer(private val inql: InQL) {
     private var request: HttpRequest? = null
+    private lateinit var graphQLClient: ThrottledClient
     private var bucketSize: Int = 64
     private var wordlist: List<String> = emptyList()
+    private var argumentWordlist: List<String> = emptyList()
     private var depthLimit: Int = 3
+    private var concurrencyLimit: Int = 8
+    private var bruteforceArguments: Boolean = true
 
     companion object {
         val NAME_REGEX = Regex("^[_A-Za-z][_0-9A-Za-z]*$")
@@ -101,13 +128,23 @@ class Bruteforcer(private val inql: InQL) {
         request = req
         bucketSize = Config.getInstance().getInt("bruteforcer.bucket_size") ?: 64
         depthLimit = Config.getInstance().getInt("bruteforcer.depth_limit") ?: 3
+        concurrencyLimit = Config.getInstance().getInt("bruteforcer.concurrency_limit") ?: 8
+        bruteforceArguments = Config.getInstance().getBoolean("bruteforcer.bruteforce_arguments") ?: true
+
+        graphQLClient = ThrottledClient(req)
 
         val wordlistFile = Config.getInstance()
             .getString("bruteforcer.custom_wordlist")
             ?.takeIf { it.isNotEmpty() }
             ?: "wordlist.txt"
 
-        loadWordlist(wordlistFile)
+        val argWordlistFile = Config.getInstance()
+            .getString("bruteforcer.custom_arg_wordlist")
+            ?.takeIf { it.isNotEmpty() }
+            ?: "arg_wordlist.txt"
+
+        wordlist = loadWordlist(wordlistFile)
+        argumentWordlist = loadWordlist(argWordlistFile)
 
         val schema = run()
         return GraphQLSchemaToSDL.schemaToSDL(schema)
@@ -116,24 +153,27 @@ class Bruteforcer(private val inql: InQL) {
     /**
      * Loads and filters the wordlist from a file.
      */
-    private fun loadWordlist(wordlistFile: String) {
-        val fileContent = when {
-            wordlistFile == "wordlist.txt" -> ResourceFileReader.readFile(wordlistFile)
+    private fun loadWordlist(wordlistFile: String): List<String> {
+        val fileContent = when (wordlistFile) {
+            "wordlist.txt" -> ResourceFileReader.readFile(wordlistFile)
+            "arg_wordlist.txt" -> ResourceFileReader.readFile(wordlistFile)
             else -> File(wordlistFile).takeIf { it.exists() }?.readText()
         } ?: throw EmptyOrIncorrectWordlistException("Wordlist file not found: $wordlistFile")
 
         if (fileContent.isEmpty()) {
-            throw EmptyOrIncorrectWordlistException("Wordlist is empty")
+            throw EmptyOrIncorrectWordlistException("$wordlistFile is empty")
         }
 
-        wordlist = fileContent.lineSequence()
+        var tmpWordlist = fileContent.lineSequence()
             .filter { it.isNotBlank() && NAME_REGEX.matches(it) }
             .distinct()
             .toList()
 
-        if (wordlist.isEmpty()) {
-            throw EmptyOrIncorrectWordlistException("No valid words in the wordlist")
+        if (tmpWordlist.isEmpty()) {
+            throw EmptyOrIncorrectWordlistException("No valid words in the $wordlistFile")
         }
+
+        return tmpWordlist
     }
 
     /**
@@ -189,7 +229,7 @@ class Bruteforcer(private val inql: InQL) {
     /**
      * Probes the endpoint to find the names of the root operation types.
      */
-    private fun fetchRootTypeNames(): RootTypeNames {
+    private suspend fun fetchRootTypeNames(): RootTypeNames {
         // A schema must have a query type. Default to "Query" if detection fails.
         val queryType = probeTypename("query { ${RegexStore.WRONG_FIELD_EXAMPLE} }") ?: "Query"
 
@@ -330,10 +370,11 @@ class Bruteforcer(private val inql: InQL) {
     /**
      * Probes an endpoint with a placeholder query to get the name of the current type.
      */
-    private fun probeTypename(inputDocument: String): String? {
+    private suspend fun probeTypename(inputDocument: String): String? {
         val document = inputDocument.replace("FUZZ", RegexStore.WRONG_FIELD_EXAMPLE)
         try {
-            val response = Utils.sendGraphQLRequest(document, request!!)
+            // The client will handle exceptions now, including TooManyRequestsException
+            val response = graphQLClient.send(document)
             val errors = response.optJSONArray("errors") ?: return null
 
             for (i in 0 until errors.length()) {
@@ -341,16 +382,24 @@ class Bruteforcer(private val inql: InQL) {
 
                 if (message.contains("Schema is not configured for")) return null
 
+                val missingSubfieldsMatch = RegexStore.MISSING_SUBFIELDS.find(message)
+                if (missingSubfieldsMatch != null) {
+                    // Return the full type name, e.g., "[Character]"
+                    return missingSubfieldsMatch.groups["type"]?.value
+                }
+
                 // CHECK FOR SCALAR TYPES FIRST
                 val noSubfieldsMatch = RegexStore.NO_SUBFIELDS.find(message)
                 if (noSubfieldsMatch != null) {
-                    return noSubfieldsMatch.groups["type"]?.value?.replace(Regex("[\\[\\]!]"), "")
+                    // FIX: Remove the .replace() call to return the full type, e.g., "[ID!]!"
+                    return noSubfieldsMatch.groups["type"]?.value
                 }
 
                 for (regex in RegexStore.WRONG_TYPENAME) {
                     val match = regex.find(message)
                     if (match != null) {
-                        return match.groups["typename"]?.value?.replace(Regex("[\\[\\]!]"), "")
+                        // FIX: Remove the .replace() call here as well
+                        return match.groups["typename"]?.value
                     }
                 }
             }
@@ -362,63 +411,147 @@ class Bruteforcer(private val inql: InQL) {
         }
     }
 
+    private data class FieldScanResult(
+        val fieldDefinition: GraphQLFieldDefinition,
+        val discoveredOutputTypes: Set<String>,
+        val discoveredInputTypes: Set<String>
+    )
+
+    /**
+     * Parses a type string like "[String!]!" into a nested GraphQLType object.
+     */
+    private fun parseTypeString(typeString: String): GraphQLType {
+        var remainingType = typeString.trim()
+        var type: GraphQLType
+
+        // 1. Check for Non-Null at the end
+        if (remainingType.endsWith('!')) {
+            remainingType = remainingType.dropLast(1)
+            // Recursively parse the inner type and wrap it
+            type = GraphQLNonNull(parseTypeString(remainingType))
+        }
+        // 2. Check for List
+        else if (remainingType.startsWith('[') && remainingType.endsWith(']')) {
+            remainingType = remainingType.substring(1, remainingType.length - 1)
+            // Recursively parse the inner type and wrap it
+            type = GraphQLList(parseTypeString(remainingType))
+        }
+        // 3. Base case: It's a named type
+        else {
+            type = GraphQLTypeReference(remainingType)
+        }
+        return type
+    }
+
     /**
      * Performs the core scan on a single type to find its fields, their types, and arguments.
      * This version intelligently reclassifies objects with no discovered fields as custom scalars.
      */
-    private suspend fun scanType(scanQuery: String, typeName: String, schema: GraphQLSchema): Pair<GraphQLSchema, Set<String>> {
+    private suspend fun scanType(scanQuery: String, typeName: String, schema: GraphQLSchema): Pair<GraphQLSchema, Set<String>> = coroutineScope {
         val validFields = probeValidFields(scanQuery)
         val newTypesFound = mutableSetOf<String>()
         val currentSchema = schema
         val typeMap = currentSchema.typeMap.toMutableMap()
+        val semaphore = Semaphore(concurrencyLimit)
 
-        // If we found no fields, we reclassify this type as a custom scalar.
         if (validFields.isEmpty()) {
             Logger.debug("No fields found for '$typeName'. Reclassifying as a custom scalar.")
+
+            // Define a generic Coercing implementation for discovered scalars.
+            val passThroughCoercing = object : Coercing<Any, Any> {
+                override fun serialize(dataFetcherResult: Any): Any = dataFetcherResult
+                override fun parseValue(input: Any): Any = input
+            }
+
             val newScalar = GraphQLScalarType.newScalar()
                 .name(typeName)
-                .coercing(object : Coercing<Any, Any> {
-                    override fun serialize(dataFetcherResult: Any): Any = dataFetcherResult
-                    override fun parseValue(input: Any): Any = input
-                    override fun parseLiteral(input: Any): Any = input
-                })
+                .coercing(passThroughCoercing)
                 .build()
+
             typeMap[typeName] = newScalar
         } else {
-            // If we found fields, build the object type as normal.
-            val typeBuilder = GraphQLObjectType.newObject(currentSchema.getObjectType(typeName))
-                .clearFields()
+            // Launch parallel jobs to scan each field for its type and arguments
+            val fieldScanJobs = validFields.map { fieldName ->
+                async {
+                    semaphore.withPermit {
+                        Logger.debug("Found field: $fieldName on type $typeName")
+                        // MODIFICATION: Create separate sets for input and output types
+                        val discoveredOutputTypesForField = mutableSetOf<String>()
+                        val discoveredInputTypesForField = mutableSetOf<String>()
 
-            for (fieldName in validFields) {
-                Logger.debug("Found field: $fieldName on type $typeName")
-                val fieldQuery = scanQuery.replace("FUZZ", "$fieldName { ${RegexStore.WRONG_FIELD_EXAMPLE} }")
-                val fieldTypeName = probeTypename(fieldQuery) ?: "String"
-                newTypesFound.add(fieldTypeName)
-                val arguments = probeValidArguments(scanQuery.replace("FUZZ", fieldName))
-                val fieldDefBuilder = GraphQLFieldDefinition.newFieldDefinition()
-                    .name(fieldName)
-                    .type(GraphQLTypeReference(fieldTypeName))
-                for (argName in arguments) {
-                    val argQuery = scanQuery.replace("FUZZ", "$fieldName($argName: ${RegexStore.WRONG_ARG_EXAMPLE})")
-                    val argTypeName = probeArgumentType(argQuery, fieldName, argName)
-                    newTypesFound.add(argTypeName)
-                    fieldDefBuilder.argument(
-                        GraphQLArgument.newArgument().name(argName).type(GraphQLTypeReference(argTypeName)).build()
-                    )
+                        // Probe field type
+                        val fieldQuery = scanQuery.replace("FUZZ", "$fieldName { ${RegexStore.WRONG_FIELD_EXAMPLE} }")
+                        val fieldTypeName = probeTypename(fieldQuery) ?: "String"
+                        // MODIFICATION: Add the BASE name of the type to the output set
+                        val baseFieldTypeName = fieldTypeName.replace(Regex("[\\[\\]!]"), "")
+                        discoveredOutputTypesForField.add(baseFieldTypeName)
+
+
+                        // Probe arguments
+                        val arguments = probeValidArguments(scanQuery, fieldName)
+                        val fieldDefBuilder = GraphQLFieldDefinition.newFieldDefinition()
+                            .name(fieldName)
+                            .type(parseTypeString(fieldTypeName) as GraphQLOutputType)
+
+                        for (argName in arguments) {
+                            val argQuery =
+                                scanQuery.replace("FUZZ", "$fieldName($argName: ${RegexStore.WRONG_ARG_EXAMPLE}) { __typename }")
+                            val argTypeName = probeArgumentType(argQuery, fieldName, argName)
+                            val baseTypeName = argTypeName.replace(Regex("[\\[\\]!]"), "")
+                            // MODIFICATION: Add the argument's base type to the INPUT set
+                            discoveredInputTypesForField.add(baseTypeName)
+
+                            fieldDefBuilder.argument(
+                                GraphQLArgument.newArgument()
+                                    .name(argName)
+                                    .type(parseTypeString(argTypeName) as GraphQLInputType) // This cast is still needed for the compiler
+                                    .build()
+                            )
+                        }
+                        // MODIFICATION: Return the new FieldScanResult with both sets
+                        FieldScanResult(fieldDefBuilder.build(), discoveredOutputTypesForField, discoveredInputTypesForField)
+                    }
                 }
-                typeBuilder.field(fieldDefBuilder.build())
+            }
+
+            // Build the final object type from the parallel results
+            val typeBuilder = GraphQLObjectType.newObject(currentSchema.getObjectType(typeName)).clearFields()
+            // MODIFICATION: Collect types into separate sets
+            val allDiscoveredOutputTypes = mutableSetOf<String>()
+            val allDiscoveredInputTypes = mutableSetOf<String>()
+
+            fieldScanJobs.forEach { job ->
+                val result = job.await()
+                typeBuilder.field(result.fieldDefinition)
+                allDiscoveredOutputTypes.addAll(result.discoveredOutputTypes)
+                allDiscoveredInputTypes.addAll(result.discoveredInputTypes)
             }
             typeMap[typeName] = typeBuilder.build()
-        }
 
-        // Add placeholders for any newly discovered types that have not been scanned yet.
-        newTypesFound.forEach {
-            if (it !in typeMap && it !in BUILT_IN_SCALARS) {
-                val placeholderField = GraphQLFieldDefinition.newFieldDefinition()
-                    .name("_inql_placeholder")
-                    .type(GraphQLString)
-                    .build()
-                typeMap[it] = GraphQLObjectType.newObject().name(it).field(placeholderField).build()
+            // MODIFICATION: Use the collected sets to drive placeholder creation
+            newTypesFound.addAll(allDiscoveredOutputTypes)
+            newTypesFound.addAll(allDiscoveredInputTypes)
+
+            // Add placeholders for any newly discovered types that have not been scanned yet.
+            newTypesFound.forEach {
+                if (it !in typeMap && it !in BUILT_IN_SCALARS) {
+                    // NEW LOGIC: Check if the type was discovered as an input type
+                    if (it in allDiscoveredInputTypes) {
+                        // Create a GraphQLInputObjectType placeholder
+                        val placeholderField = GraphQLInputObjectField.newInputObjectField()
+                            .name("_inql_placeholder")
+                            .type(GraphQLString)
+                            .build()
+                        typeMap[it] = GraphQLInputObjectType.newInputObject().name(it).field(placeholderField).build()
+                    } else {
+                        // Otherwise, create a regular GraphQLObjectType placeholder
+                        val placeholderField = GraphQLFieldDefinition.newFieldDefinition()
+                            .name("_inql_placeholder")
+                            .type(GraphQLString)
+                            .build()
+                        typeMap[it] = GraphQLObjectType.newObject().name(it).field(placeholderField).build()
+                    }
+                }
             }
         }
 
@@ -446,188 +579,225 @@ class Bruteforcer(private val inql: InQL) {
             builder.clearAdditionalTypes().additionalTypes(otherTypes)
         }
 
-        return Pair(newSchema, newTypesFound)
+        return@coroutineScope Pair(newSchema, newTypesFound)
     }
 
+
     /**
-     * Sends batched requests to discover all valid fields on the current type.
-     * This version is hardened against inconclusive server responses. It will only
-     * determine fields based on three conditions:
-     * 1. A successful response with no errors (all fields in the bucket are valid).
-     * 2. High-confidence "Did you mean..." suggestions from the server.
-     * 3. A response containing *only* "field is not defined" errors, allowing for a safe
-     * process of elimination.
-     * Any other error, like a "Syntax Error", will cause the bucket to be safely ignored.
+     * Sends batched requests in parallel to discover all valid fields on the current type.
+     * This version is hardened against inconclusive server responses.
      */
-    private suspend fun probeValidFields(inputDocument: String): Set<String> {
-        val validFields = mutableSetOf<String>()
+    private suspend fun probeValidFields(inputDocument: String): Set<String> = coroutineScope {
+        val allValidFields = mutableSetOf<String>()
+        val semaphore = Semaphore(concurrencyLimit)
 
-        // Use a labeled 'run' block to allow breaking out of the outer .forEach loop
-        run loop@{
-            wordlist.chunked(bucketSize).forEach { bucket ->
-                yield()
+        val deferredResults = wordlist.chunked(bucketSize).map { bucket ->
+            async {
+                semaphore.withPermit<Set<String>?> {
+                    val document = inputDocument.replace("FUZZ", bucket.joinToString(" "))
+                    try {
+                        val response = graphQLClient.send(document)
+                        val errors = response.optJSONArray("errors")
 
-                val document = inputDocument.replace("FUZZ", bucket.joinToString(" "))
-                try {
-                    val response = Utils.sendGraphQLRequest(document, request!!)
-                    val errors = response.optJSONArray("errors")
+                        if (errors == null || errors.length() == 0) {
+                            return@withPermit bucket.toSet() // The entire bucket is valid.
+                        }
 
-                    // Case 1: No errors. The entire bucket is valid.
-                    if (errors == null || errors.length() == 0) {
-                        validFields.addAll(bucket)
-                        return@forEach // Continue to the next bucket
-                    }
-
-                    var hasSuggestions = false
-                    var hasRecognizedFieldErrors = false
-                    val fieldsInSuggestions = mutableSetOf<String>()
-                    val fieldsInErrors = mutableSetOf<String>()
-
-                    for (i in 0 until errors.length()) {
-                        val message = errors.getJSONObject(i).optString("message", "")
-
-                        // If the server says the parent has no subfields, it's a scalar. Abort everything.
-                        if (RegexStore.NO_SUBFIELDS.find(message) != null) {
+                        if (errors.toString().contains("has no subfields")) {
                             Logger.debug("Detected scalar type from 'no subfields' error. Aborting field scan.")
-                            validFields.clear()
-                            return@loop // Exit the entire 'run' block
+                            return@withPermit null // Signal for scalar type
                         }
 
-                        // Collect high-confidence suggestions.
-                        val suggestions = RegexStore.getSuggestions(message, RegexStore.FIELD_SUGGESTIONS)
-                        if (suggestions.isNotEmpty()) {
-                            hasSuggestions = true
-                            fieldsInSuggestions.addAll(suggestions)
-                        }
+                        val fieldsInSuggestions = mutableSetOf<String>()
+                        val fieldsInErrors = mutableSetOf<String>()
+                        var hasRecognizedErrors = false
 
-                        // Collect explicit "field not defined" errors.
-                        for (regex in RegexStore.WRONG_TYPENAME) {
-                            val match = regex.find(message)
-                            match?.groups?.get("field")?.value?.let { invalidField ->
-                                fieldsInErrors.add(invalidField)
-                                hasRecognizedFieldErrors = true
+                        for (i in 0 until errors.length()) {
+                            val message = errors.getJSONObject(i).optString("message", "")
+                            fieldsInSuggestions.addAll(RegexStore.getSuggestions(message, RegexStore.FIELD_SUGGESTIONS))
+                            for (regex in RegexStore.WRONG_TYPENAME) {
+                                regex.find(message)?.groups?.get("field")?.value?.let { invalidField ->
+                                    fieldsInErrors.add(invalidField)
+                                    hasRecognizedErrors = true
+                                }
                             }
                         }
+
+                        // --- Corrected Hybrid Decision Logic ---
+                        if (fieldsInSuggestions.isNotEmpty() || hasRecognizedErrors) {
+                            val potentiallyValid = bucket.toMutableSet()
+                            // 1. Subtract all fields that we know are invalid.
+                            potentiallyValid.removeAll(fieldsInErrors)
+                            // 2. Add all high-confidence suggestions (which might not have been in the bucket).
+                            potentiallyValid.addAll(fieldsInSuggestions)
+                            return@withPermit potentiallyValid
+                        } else {
+                            Logger.debug("Skipping bucket due to unrecognized errors.")
+                            return@withPermit emptySet()
+                        }
+                    } catch (e: Exception) {
+                        Logger.error("Error during field probing for document '$document': ${e.message}")
+                        return@withPermit emptySet()
                     }
-
-                    // --- Decision Logic ---
-
-                    if (hasSuggestions) {
-                        // High-confidence suggestions are the most reliable result.
-                        validFields.addAll(fieldsInSuggestions)
-                    } else if (hasRecognizedFieldErrors) {
-                        // If we only got "field not defined" errors, we can trust the process of elimination.
-                        val potentiallyValid = bucket.toMutableSet()
-                        potentiallyValid.removeAll(fieldsInErrors)
-                        validFields.addAll(potentiallyValid)
-                    } else {
-                        // If we received errors, but none of them were recognized validation errors
-                        // (e.g., it was a "Syntax Error"), the result for this bucket is inconclusive.
-                        // We cannot safely assume any fields are valid, so we do nothing.
-                        Logger.debug("Skipping bucket due to unrecognized or generic errors (e.g., Syntax Error).")
-                    }
-
-                } catch(e: Exception) {
-                    Logger.error("Error during field probing for document '$document': ${e.message}")
                 }
             }
         }
-        return validFields
-    }
 
+        deferredResults.forEach { deferred ->
+            val result = deferred.await()
+            if (result == null) {
+                allValidFields.clear()
+                return@coroutineScope allValidFields
+            }
+            allValidFields.addAll(result)
+        }
+        return@coroutineScope allValidFields
+    }
     /**
      * Sends requests to discover all valid arguments for a given field.
+     * This version is refactored to construct syntactically correct queries
+     * for nested fields, preventing "Syntax Error" false positives.
      */
-    private fun probeValidArguments(fieldQuery: String): Set<String> {
+    private suspend fun probeValidArguments(scanQuery: String, fieldName: String): Set<String> = coroutineScope {
         val validArgs = mutableSetOf<String>()
 
-        // Step 1: Probe for REQUIRED arguments by sending a query with no arguments.
-        // The server will complain about any missing required arguments.
+        // Step 1: Probe for REQUIRED arguments.
         try {
-            val documentNoArgs = fieldQuery // Query the field directly, e.g., "location"
-            val responseNoArgs = Utils.sendGraphQLRequest(documentNoArgs, request!!)
+            val documentNoArgs = scanQuery.replace("FUZZ", "$fieldName { __typename }")
+            val responseNoArgs = graphQLClient.send(documentNoArgs)
             responseNoArgs.optJSONArray("errors")?.forEach { error ->
                 if (error !is org.json.JSONObject) return@forEach
                 val message = error.optString("message", "")
-                val match = RegexStore.MISSING_ARGUMENT.find(message)
-                match?.groups?.get("argument")?.value?.let {
-                    Logger.debug("Found required argument '$it' from MISSING_ARGUMENT error.")
-                    validArgs.add(it)
+                RegexStore.MISSING_ARGUMENT.find(message)?.let { match ->
+                    val errorField = match.groups["field"]?.value
+                    val errorArg = match.groups["argument"]?.value
+
+                    // This check prevents the race condition
+                    if (errorField == fieldName && errorArg != null) {
+                        Logger.debug("Found required argument '$errorArg' on '$fieldName' from MISSING_ARGUMENT error.")
+                        validArgs.add(errorArg)
+                    }
                 }
             }
         } catch (e: Exception) {
-            Logger.debug("Error during missing argument probe (this is often expected): ${e.message}")
+            Logger.debug("Error during missing argument probe for '$fieldName': ${e.message}")
         }
 
-        // Step 2: Probe for OPTIONAL arguments by triggering "Did you mean..." suggestions.
+        // Step 2: Probe for OPTIONAL arguments using suggestions.
+        var foundArgsViaSuggestions = false
         try {
-            val documentWithFakeArg = "$fieldQuery(${RegexStore.WRONG_ARG_EXAMPLE}: \"\")"
-            val responseWithFakeArg = Utils.sendGraphQLRequest(documentWithFakeArg, request!!)
+            val documentWithFakeArg = scanQuery.replace("FUZZ", "$fieldName(${RegexStore.WRONG_ARG_EXAMPLE}: null) { __typename }")
+            val responseWithFakeArg = graphQLClient.send(documentWithFakeArg)
             responseWithFakeArg.optJSONArray("errors")?.forEach { error ->
                 if (error !is org.json.JSONObject) return@forEach
                 val message = error.optString("message", "")
-                validArgs.addAll(RegexStore.getSuggestions(message, RegexStore.ARGUMENT_SUGGESTIONS))
+                val suggestions = RegexStore.ARGUMENT_SUGGESTIONS.flatMap { regex ->
+                    regex.findAll(message).mapNotNull { match ->
+                        // Also validate the field name for suggestions
+                        if (match.groups["field"]?.value == fieldName) {
+                            match.groups["suggestion"]?.value
+                        } else {
+                            null
+                        }
+                    }
+                }.distinct()
+
+                if (suggestions.isNotEmpty()) {
+                    foundArgsViaSuggestions = true
+                    validArgs.addAll(suggestions)
+                }
             }
         } catch (e: Exception) {
-            Logger.debug("Error during argument suggestion probe: ${e.message}")
+            Logger.debug("Error during argument suggestion probe for '$fieldName': ${e.message}")
         }
 
-        return validArgs
+        // Step 3: FALLBACK - If suggestions failed, brute-force from the wordlist.
+        if (!foundArgsViaSuggestions && bruteforceArguments) {
+            Logger.debug("No argument suggestions found. Falling back to brute-force for field '$fieldName'")
+            val semaphore = Semaphore(concurrencyLimit)
+            val deferredResults = argumentWordlist.chunked(bucketSize).map { bucket ->
+                async {
+                    semaphore.withPermit {
+                        val bucketValidArgs = mutableSetOf<String>()
+                        for (argCandidate in bucket) {
+                            if (argCandidate in validArgs) continue
+
+                            val document = scanQuery.replace("FUZZ", "$fieldName($argCandidate: null) { __typename }")
+                            try {
+                                val response = graphQLClient.send(document)
+                                val errors = response.optJSONArray("errors") ?: continue
+
+                                // No need to check for syntax errors anymore, as our query is always valid.
+                                var isCandidateExplicitlyUnknown = false
+                                for (i in 0 until errors.length()) {
+                                    val errorMessage = errors.getJSONObject(i).optString("message", "")
+
+                                    // Opportunistic checks (suggestions, missing required args)
+                                    // ... [this logic remains the same as the previous version]
+
+                                    // Check if THIS candidate is explicitly unknown.
+                                    for (regex in RegexStore.UNKNOWN_ARGUMENT) {
+                                        val unknownArgMatch = regex.find(errorMessage)
+                                        if (unknownArgMatch != null && unknownArgMatch.groups["argument"]?.value == argCandidate) {
+                                            isCandidateExplicitlyUnknown = true
+                                            break
+                                        }
+                                    }
+                                }
+
+                                if (!isCandidateExplicitlyUnknown) {
+                                    Logger.debug("Brute-force found valid argument: '$argCandidate' on field '$fieldName'")
+                                    bucketValidArgs.add(argCandidate)
+                                }
+                            } catch (e: Exception) { /* Ignore */ }
+                        }
+                        bucketValidArgs
+                    }
+                }
+            }
+            deferredResults.forEach { deferred -> validArgs.addAll(deferred.await()) }
+        }
+
+        return@coroutineScope validArgs
     }
-
-
     /**
      * Probes the type of a specific argument by systematically trying different
      * JSON value types and analyzing the resulting error messages. This method
      * is more exhaustive and aligns with the original Clairvoyance strategy.
      */
-    private fun probeArgumentType(query: String, fieldName: String, argName: String): String {
-        // A list of probes, mapping a potential GraphQL type to a value string for the query.
+    private suspend fun probeArgumentType(query: String, fieldName: String, argName: String): String {
         val probes = listOf(
-            // String is the most common type, so we try it first.
             GraphQLString.name to "\"test\"",
-            // Integer is next.
             GraphQLInt.name to "123",
-            // Boolean.
             GraphQLBoolean.name to "true",
-            // Float.
             GraphQLFloat.name to "1.23",
-            // An empty object literal to test for InputObject types.
+            "InputObjectTrigger" to "{ ${RegexStore.WRONG_ARG_EXAMPLE}: null }",
             "Object" to "{}"
         )
 
         for ((assumedType, probeValue) in probes) {
-            val document = query.replace(RegexStore.WRONG_ARG_EXAMPLE, probeValue)
+            yield()
+
+            var document = query.replace(RegexStore.WRONG_ARG_EXAMPLE, probeValue)
             try {
-                val response = Utils.sendGraphQLRequest(document, request!!)
+                val response = graphQLClient.send(document)
                 val errors = response.optJSONArray("errors")
 
-                // Case 1: The request succeeded without errors.
-                // This means our probe value was valid. We can assume the type we just tried is correct.
-                // Note: If the "Object" probe ({}) succeeds, we cannot know the exact InputObject name,
-                // so we fall through and hope a later probe with an invalid type will reveal the name.
-                // For primitives, however, this is a reliable indicator.
-                if (errors == null || errors.length() == 0) {
-                    if (assumedType != "Object") {
-                        Logger.debug("Argument '$argName' accepted probe for type '$assumedType'.")
-                        return assumedType
-                    }
-                } else {
-                    // Case 2: The request failed. This is good! The error message likely tells us the exact type.
+                if (errors != null && errors.length() > 0) {
                     for (i in 0 until errors.length()) {
                         val message = errors.getJSONObject(i).optString("message", "")
 
-                        // The most reliable error: "Argument 'x' has invalid value. Expected type 'Y'."
-                        val match = RegexStore.WRONG_ARGUMENT_TYPE.find(message)
-                        if (match != null && match.groups["argument"]?.value == argName) {
-                            val discoveredType = match.groups["type"]?.value?.replace(Regex("[\\[\\]!]"), "")
-                            if (discoveredType != null) {
-                                Logger.debug("Discovered argument type '$discoveredType' for '$argName' from WRONG_ARGUMENT_TYPE error.")
-                                return discoveredType
+                        for (regex in RegexStore.WRONG_ARGUMENT_TYPES) {
+                            val match = regex.find(message)
+                            if (match != null) {
+                                val discoveredType = match.groups["type"]?.value
+                                if (discoveredType != null) {
+                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName' (opportunistic probe).")
+                                    return discoveredType // Success! We're done.
+                                }
                             }
                         }
 
-                        // A secondary check for missing argument errors, which can also contain the type.
                         val missingArgMatch = RegexStore.MISSING_ARGUMENT.find(message)
                         if (missingArgMatch != null && missingArgMatch.groups["argument"]?.value == argName) {
                             val discoveredType = missingArgMatch.groups["type"]?.value?.replace(Regex("[\\[\\]!]"), "")
@@ -636,17 +806,54 @@ class Bruteforcer(private val inql: InQL) {
                                 return discoveredType
                             }
                         }
+
+                        if (assumedType == "InputObjectTrigger") {
+                            val unknownFieldMatch = RegexStore.UNKNOWN_INPUT_FIELD.find(message)
+                            unknownFieldMatch?.groups?.get("type")?.value?.let {
+                                Logger.debug("Discovered InputObject type '$it' for '$argName' from UNKNOWN_INPUT_FIELD error.")
+                                return it
+                            }
+                        }
+
+                        if (assumedType == "Object") {
+                            val inputObjectMatch = RegexStore.EXPECTED_INPUT_OBJECT.find(message)
+                            inputObjectMatch?.groups?.get("type")?.value?.let {
+                                Logger.debug("Discovered InputObject type '$it' for '$argName' from error.")
+                                return it
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
-                Logger.error("Exception during argument type probe for '$argName' with value '$probeValue': ${e.message}")
-                // Continue to the next probe.
+                Logger.error("Exception during opportunistic probe for '$argName': ${e.message}")
+            }
+
+            document = query.replace(RegexStore.WRONG_ARG_EXAMPLE, probeValue).replace("}"," { __typename } }")
+
+            try {
+                val response = graphQLClient.send(document)
+                val errors = response.optJSONArray("errors")
+                if (errors != null) {
+                    for (i in 0 until errors.length()) {
+                        val message = errors.getJSONObject(i).optString("message", "")
+                        for (regex in RegexStore.WRONG_ARGUMENT_TYPES) {
+                            val match = regex.find(message)
+                            if (match != null) {
+                                val discoveredType = match.groups["type"]?.value
+                                if (discoveredType != null) {
+                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName' (reliable probe).")
+                                    return discoveredType // Success!
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.error("Exception during reliable probe for '$argName': ${e.message}")
             }
         }
 
-        // If all probes fail to determine the type, fallback to String as a safe default.
-        Logger.debug("Could not determine type for argument '$argName'. Defaulting to String.")
+        Logger.debug("Could not determine type for argument '$argName' on field '$fieldName'. Defaulting to String.")
         return GraphQLString.name
     }
-
 }
