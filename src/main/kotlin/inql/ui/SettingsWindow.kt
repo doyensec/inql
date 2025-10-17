@@ -199,6 +199,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             "Schema bruteforcer",
             "Use these settings to configure schema bruteforcer feature.",
             SettingsElement("bruteforcer.bucket_size", Spinner("Number of fields used in a single query", 1, 128)),
+            SettingsElement("bruteforcer.depth_limit", Spinner("Maximum field depth to scan", 1, 128)),
             SettingsElement("bruteforcer.custom_wordlist", TextField("Custom wordlist for guessing types and fields")),
         )
 

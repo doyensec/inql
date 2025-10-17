@@ -49,6 +49,7 @@ class Config private constructor() {
         "report.poi.custom_scalars" to true,
         "report.poi.custom_keywords" to "",
         "bruteforcer.bucket_size" to 64,
+        "bruteforcer.depth_limit" to 3,
         "bruteforcer.custom_wordlist" to "",
         "logging.level" to "WARN",
         "proxy.highlight_enabled" to true,
