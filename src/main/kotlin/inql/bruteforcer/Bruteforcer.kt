@@ -17,6 +17,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlin.Pair
+import graphql.schema.GraphQLEnumType
+import graphql.schema.GraphQLUnionType
 
 /**
  * Main class for bruteforcing the GraphQL schema.
@@ -32,6 +34,11 @@ class Bruteforcer(private val inql: InQL) {
     private var depthLimit: Int = 3
     private var concurrencyLimit: Int = 8
     private var bruteforceArguments: Boolean = true
+
+    private val enumsToScan = mutableSetOf<String>()
+    private val abstractTypesToScan = mutableMapOf<String, String>() // Map<TypeName, ScanQuery>
+    private val scannedEnums = mutableSetOf<String>()
+    private val scannedAbstractTypes = mutableSetOf<String>()
 
     companion object {
         val NAME_REGEX = Regex("^[_A-Za-z][_0-9A-Za-z]*$")
@@ -120,54 +127,86 @@ class Bruteforcer(private val inql: InQL) {
 
         val scannedTypes = mutableSetOf<String>()
 
-        while (typesToScan.isNotEmpty()) {
+        while (typesToScan.isNotEmpty() || abstractTypesToScan.isNotEmpty() || enumsToScan.isNotEmpty()) {
             yield()
 
-            val currentTypeName = typesToScan.poll()
-            if (currentTypeName in scannedTypes || currentTypeName in BUILT_IN_SCALARS) {
-                continue
-            }
+            if (typesToScan.isNotEmpty()) {
+                val currentTypeName = typesToScan.poll()
+                if (currentTypeName in scannedTypes || currentTypeName in BUILT_IN_SCALARS || currentTypeName in scannedEnums || currentTypeName in scannedAbstractTypes) {
+                    continue
+                }
 
-            val currentType = schema.getType(currentTypeName)
+                val currentType = schema.getType(currentTypeName)
 
-            if (currentType == null) {
-                Logger.error("Type '$currentTypeName' not found in schema. Skipping.")
-                scannedTypes.add(currentTypeName)
-                continue
-            }
+                if (currentType == null) {
+                    Logger.error("Type '$currentTypeName' not found in schema. Skipping.")
+                    scannedTypes.add(currentTypeName)
+                    continue
+                }
 
-            val result = when (currentType) {
-                is GraphQLObjectType -> {
-                    Logger.debug("Scanning OBJECT type: $currentTypeName")
-                    val pathToType = findPathToType(schema, currentTypeName)
-                    val currentDepth = pathToType.size - 1
-                    if (currentDepth > depthLimit) {
-                        Logger.debug("Skipping type '$currentTypeName' as its depth ($currentDepth) exceeds the configured limit of $depthLimit.")
-                        scannedTypes.add(currentTypeName) // Mark as "scanned" to prevent re-adding
-                        continue
+                val result = when (currentType) {
+                    is GraphQLObjectType -> {
+                        Logger.debug("Scanning OBJECT type: $currentTypeName")
+                        val pathToType = findPathToType(schema, currentTypeName)
+                        val currentDepth = pathToType.size - 1
+                        if (currentDepth > depthLimit) {
+                            Logger.debug("Skipping type '$currentTypeName' as its depth ($currentDepth) exceeds the configured limit of $depthLimit.")
+                            scannedTypes.add(currentTypeName) // Mark as "scanned" to prevent re-adding
+                            continue
+                        }
+
+                        val scanQuery = convertPathToQuery(pathToType, schema)
+                        scanType(scanQuery, currentTypeName, schema)
                     }
 
-                    val scanQuery = convertPathToQuery(pathToType, schema)
-                    scanType(scanQuery, currentTypeName, schema)
+                    is GraphQLInputObjectType -> {
+                        scanInputObjectType(currentTypeName, schema)
+                    }
+
+                    else -> {
+                        Logger.debug("Skipping non-scannable type '$currentTypeName' (${currentType::class.simpleName}).")
+                        Pair(schema, emptySet())
+                    }
                 }
-                is GraphQLInputObjectType -> {
-                    scanInputObjectType(currentTypeName, schema)
-                }
-                else -> {
-                    Logger.debug("Skipping non-scannable type '$currentTypeName' (${currentType::class.simpleName}).")
-                    Pair(schema, emptySet()) // No changes, no new types
+
+                schema = result.first
+                scannedTypes.add(currentTypeName)
+
+                result.second.forEach { newType ->
+                    if (newType !in scannedTypes && newType !in typesToScan) {
+                        typesToScan.add(newType)
+                    }
                 }
             }
 
+            // --- Process Abstract (Union/Interface) types ---
+            if (abstractTypesToScan.isNotEmpty()) {
+                val (abstractTypeName, scanQuery) = abstractTypesToScan.entries.first()
+                abstractTypesToScan.remove(abstractTypeName)
 
+                if (abstractTypeName in scannedAbstractTypes || abstractTypeName in scannedTypes) continue
 
-            schema = result.first
-            scannedTypes.add(currentTypeName)
+                Logger.debug("Scanning ABSTRACT type: $abstractTypeName")
+                val (newSchema, newTypes) = probeAbstractTypeImplementations(scanQuery, abstractTypeName, schema)
+                schema = newSchema
+                scannedAbstractTypes.add(abstractTypeName)
 
-            result.second.forEach { newType ->
-                if (newType !in scannedTypes && newType !in typesToScan) {
-                    typesToScan.add(newType)
+                newTypes.forEach { newType ->
+                    if (newType !in scannedTypes && newType !in typesToScan) {
+                        typesToScan.add(newType)
+                    }
                 }
+            }
+
+            if (enumsToScan.isNotEmpty()) {
+                val enumTypeName = enumsToScan.first()
+                enumsToScan.remove(enumTypeName)
+
+                if (enumTypeName in scannedEnums || enumTypeName in scannedTypes) continue
+
+                val (newSchema, _) = scanEnumType(enumTypeName, schema) // newTypes is always empty here
+                schema = newSchema
+                scannedEnums.add(enumTypeName)
             }
         }
         return schema
@@ -368,19 +407,16 @@ class Bruteforcer(private val inql: InQL) {
         var remainingType = typeString.trim()
         var type: GraphQLType
 
-        // 1. Check for Non-Null at the end
         if (remainingType.endsWith('!')) {
             remainingType = remainingType.dropLast(1)
-            // Recursively parse the inner type and wrap it
             type = GraphQLNonNull(parseTypeString(remainingType))
         }
-        // 2. Check for List
+
         else if (remainingType.startsWith('[') && remainingType.endsWith(']')) {
             remainingType = remainingType.substring(1, remainingType.length - 1)
-            // Recursively parse the inner type and wrap it
             type = GraphQLList(parseTypeString(remainingType))
         }
-        // 3. Base case: It's a named type
+
         else {
             type = GraphQLTypeReference(remainingType)
         }
@@ -389,7 +425,7 @@ class Bruteforcer(private val inql: InQL) {
 
     /**
      * Performs the core scan on a single type to find its fields, their types, and arguments.
-     * This version intelligently reclassifies objects with no discovered fields as custom scalars.
+     * Reclassifies objects with no discovered fields as custom scalars.
      */
     private suspend fun scanType(scanQuery: String, typeName: String, schema: GraphQLSchema): Pair<GraphQLSchema, Set<String>> = coroutineScope {
         val validFields = probeValidFields(scanQuery)
@@ -399,39 +435,55 @@ class Bruteforcer(private val inql: InQL) {
         val semaphore = Semaphore(concurrencyLimit)
 
         if (validFields.isEmpty()) {
-            Logger.debug("No fields found for '$typeName'. Reclassifying as a custom scalar.")
-
-            // Define a generic Coercing implementation for discovered scalars.
-            val passThroughCoercing = object : Coercing<Any, Any> {
-                override fun serialize(dataFetcherResult: Any): Any = dataFetcherResult
-                override fun parseValue(input: Any): Any = input
+            val abstractProbeQuery = scanQuery.replace("FUZZ", "__typename")
+            var isAbstractType = false
+            try {
+                val response = graphQLClient.send(abstractProbeQuery)
+                response.optJSONArray("errors")?.forEach { error ->
+                    if (error !is org.json.JSONObject) return@forEach
+                    val message = error.optString("message", "")
+                    RegexStore.ABSTRACT_TYPE_NO_SELECTION.find(message)?.let {
+                        if (it.groups["type"]?.value == typeName) {
+                            isAbstractType = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.debug("Exception during abstract type probe: ${e.message}")
             }
 
-            val newScalar = GraphQLScalarType.newScalar()
-                .name(typeName)
-                .coercing(passThroughCoercing)
-                .build()
+            if (isAbstractType) {
+                Logger.debug("Type '$typeName' has no fields, but responded as an abstract type. Adding to Abstract queue.")
+                abstractTypesToScan[typeName] = scanQuery
+                return@coroutineScope Pair(currentSchema, emptySet())
+            } else {
+                Logger.debug("No fields found for '$typeName'. Reclassifying as a custom scalar.")
 
-            typeMap[typeName] = newScalar
+                val passThroughCoercing = object : Coercing<Any, Any> {
+                    override fun serialize(dataFetcherResult: Any): Any = dataFetcherResult
+                    override fun parseValue(input: Any): Any = input
+                }
+
+                val newScalar = GraphQLScalarType.newScalar()
+                    .name(typeName)
+                    .coercing(passThroughCoercing)
+                    .build()
+
+                typeMap[typeName] = newScalar
+            }
         } else {
-            // Launch parallel jobs to scan each field for its type and arguments
             val fieldScanJobs = validFields.map { fieldName ->
                 async {
                     semaphore.withPermit {
                         Logger.debug("Found field: $fieldName on type $typeName")
-                        // MODIFICATION: Create separate sets for input and output types
                         val discoveredOutputTypesForField = mutableSetOf<String>()
                         val discoveredInputTypesForField = mutableSetOf<String>()
 
-                        // Probe field type
                         val fieldQuery = scanQuery.replace("FUZZ", "$fieldName { ${RegexStore.WRONG_FIELD_EXAMPLE} }")
                         val fieldTypeName = probeTypename(fieldQuery) ?: "String"
-                        // MODIFICATION: Add the BASE name of the type to the output set
                         val baseFieldTypeName = fieldTypeName.replace(Regex("[\\[\\]!]"), "")
                         discoveredOutputTypesForField.add(baseFieldTypeName)
 
-
-                        // Probe arguments
                         val arguments = probeValidArguments(scanQuery, fieldName)
                         val fieldDefBuilder = GraphQLFieldDefinition.newFieldDefinition()
                             .name(fieldName)
@@ -442,25 +494,21 @@ class Bruteforcer(private val inql: InQL) {
                                 scanQuery.replace("FUZZ", "$fieldName($argName: ${RegexStore.WRONG_ARG_EXAMPLE}) { __typename }")
                             val argTypeName = probeArgumentType(argQuery, fieldName, argName)
                             val baseTypeName = argTypeName.replace(Regex("[\\[\\]!]"), "")
-                            // MODIFICATION: Add the argument's base type to the INPUT set
                             discoveredInputTypesForField.add(baseTypeName)
 
                             fieldDefBuilder.argument(
                                 GraphQLArgument.newArgument()
                                     .name(argName)
-                                    .type(parseTypeString(argTypeName) as GraphQLInputType) // This cast is still needed for the compiler
+                                    .type(parseTypeString(argTypeName) as GraphQLInputType)
                                     .build()
                             )
                         }
-                        // MODIFICATION: Return the new FieldScanResult with both sets
                         FieldScanResult(fieldDefBuilder.build(), discoveredOutputTypesForField, discoveredInputTypesForField)
                     }
                 }
             }
 
-            // Build the final object type from the parallel results
             val typeBuilder = GraphQLObjectType.newObject(currentSchema.getObjectType(typeName)).clearFields()
-            // MODIFICATION: Collect types into separate sets
             val allDiscoveredOutputTypes = mutableSetOf<String>()
             val allDiscoveredInputTypes = mutableSetOf<String>()
 
@@ -472,23 +520,18 @@ class Bruteforcer(private val inql: InQL) {
             }
             typeMap[typeName] = typeBuilder.build()
 
-            // MODIFICATION: Use the collected sets to drive placeholder creation
             newTypesFound.addAll(allDiscoveredOutputTypes)
             newTypesFound.addAll(allDiscoveredInputTypes)
 
-            // Add placeholders for any newly discovered types that have not been scanned yet.
             newTypesFound.forEach {
                 if (it !in typeMap && it !in BUILT_IN_SCALARS) {
-                    // NEW LOGIC: Check if the type was discovered as an input type
                     if (it in allDiscoveredInputTypes) {
-                        // Create a GraphQLInputObjectType placeholder
                         val placeholderField = GraphQLInputObjectField.newInputObjectField()
                             .name("_inql_placeholder")
                             .type(GraphQLString)
                             .build()
                         typeMap[it] = GraphQLInputObjectType.newInputObject().name(it).field(placeholderField).build()
                     } else {
-                        // Otherwise, create a regular GraphQLObjectType placeholder
                         val placeholderField = GraphQLFieldDefinition.newFieldDefinition()
                             .name("_inql_placeholder")
                             .type(GraphQLString)
@@ -499,7 +542,6 @@ class Bruteforcer(private val inql: InQL) {
             }
         }
 
-        // Rebuild the schema with our updated typemap.
         val newSchema = currentSchema.transform { builder ->
             val queryTypeName = currentSchema.queryType?.name
             val mutationTypeName = currentSchema.mutationType?.name
@@ -507,21 +549,18 @@ class Bruteforcer(private val inql: InQL) {
 
             if (queryTypeName != null && typeMap.containsKey(queryTypeName)) {
                 val type = typeMap[queryTypeName]
-                // Only set if it's an ObjectType
                 if (type is GraphQLObjectType) {
                     builder.query(type)
                 }
             }
             if (mutationTypeName != null && typeMap.containsKey(mutationTypeName)) {
                 val type = typeMap[mutationTypeName]
-                // Only set if it's an ObjectType
                 if (type is GraphQLObjectType) {
                     builder.mutation(type)
                 }
             }
             if (subscriptionTypeName != null && typeMap.containsKey(subscriptionTypeName)) {
                 val type = typeMap[subscriptionTypeName]
-                // Only set if it's an ObjectType
                 if (type is GraphQLObjectType) {
                     builder.subscription(type)
                 }
@@ -538,6 +577,105 @@ class Bruteforcer(private val inql: InQL) {
         }
 
         return@coroutineScope Pair(newSchema, newTypesFound)
+    }
+
+    /**
+     * Probes an abstract type (Union/Interface) to find its concrete implementations.
+     */
+    private suspend fun probeAbstractTypeImplementations(scanQuery: String, abstractTypeName: String, schema: GraphQLSchema): Pair<GraphQLSchema, Set<String>> = coroutineScope {
+        val implementations = mutableSetOf<String>()
+        val semaphore = Semaphore(concurrencyLimit)
+
+        val deferredResults = wordlist.chunked(bucketSize).map { bucket ->
+            async {
+                semaphore.withPermit<Set<String>> {
+                    val fragments = bucket.joinToString(" ") { "... on $it { __typename }" }
+                    val document = scanQuery.replace("FUZZ", fragments)
+                    try {
+                        val response = graphQLClient.send(document)
+                        val errors = response.optJSONArray("errors") ?: return@withPermit bucket.toSet() // All fragments were valid!
+
+                        val invalidInBucket = mutableSetOf<String>()
+                        val validFromSuggestions = mutableSetOf<String>()
+
+                        errors.forEach { error ->
+                            if (error !is org.json.JSONObject) return@forEach
+                            val message = error.optString("message", "")
+
+                            RegexStore.INVALID_FRAGMENT_TYPE.find(message)?.let {
+                                val errorType = it.groups["type"]?.value
+                                val fragmentType = it.groups["fragmenttype"]?.value
+                                if (errorType == abstractTypeName && fragmentType != null) {
+                                    invalidInBucket.add(fragmentType)
+                                }
+                            }
+
+                            validFromSuggestions.addAll(RegexStore.getSuggestions(message, RegexStore.INVALID_FRAGMENT_SUGGESTIONS))
+                        }
+
+                        return@withPermit (bucket.toSet() - invalidInBucket + validFromSuggestions)
+
+                    } catch (e: Exception) {
+                        Logger.error("Error during abstract type probing for '$abstractTypeName': ${e.message}")
+                        return@withPermit emptySet()
+                    }
+                }
+            }
+        }
+
+        deferredResults.forEach { implementations.addAll(it.await()) }
+
+        Logger.debug("Discovered implementations for '$abstractTypeName': $implementations")
+
+        val unionTypeBuilder = GraphQLUnionType.newUnionType()
+            .name(abstractTypeName)
+
+        implementations.forEach {
+            unionTypeBuilder.possibleType(GraphQLTypeReference(it))
+        }
+
+        val typeMap = schema.typeMap.toMutableMap()
+        typeMap[abstractTypeName] = unionTypeBuilder.build()
+
+        implementations.forEach {
+            if (it !in typeMap && it !in BUILT_IN_SCALARS) {
+                val placeholderField = GraphQLFieldDefinition.newFieldDefinition()
+                    .name("_inql_placeholder")
+                    .type(GraphQLString)
+                    .build()
+                typeMap[it] = GraphQLObjectType.newObject().name(it).field(placeholderField).build()
+            }
+        }
+
+        val newSchema = schema.transform { builder ->
+            val queryTypeName = schema.queryType?.name
+            val mutationTypeName = schema.mutationType?.name
+            val subscriptionTypeName = schema.subscriptionType?.name
+
+            if (queryTypeName != null && typeMap.containsKey(queryTypeName)) {
+                val type = typeMap[queryTypeName]
+                if (type is GraphQLObjectType) builder.query(type)
+            }
+            if (mutationTypeName != null && typeMap.containsKey(mutationTypeName)) {
+                val type = typeMap[mutationTypeName]
+                if (type is GraphQLObjectType) builder.mutation(type)
+            }
+            if (subscriptionTypeName != null && typeMap.containsKey(subscriptionTypeName)) {
+                val type = typeMap[subscriptionTypeName]
+                if (type is GraphQLObjectType) builder.subscription(type)
+            }
+
+            val otherTypes = mutableSetOf<GraphQLType>()
+            typeMap.values.forEach { type ->
+                if (type.name != queryTypeName && type.name != mutationTypeName && type.name != subscriptionTypeName) {
+                    otherTypes.add(type)
+                }
+            }
+            otherTypes.add(GraphQLString); otherTypes.add(GraphQLInt); otherTypes.add(GraphQLFloat); otherTypes.add(GraphQLBoolean); otherTypes.add(GraphQLID)
+            builder.clearAdditionalTypes().additionalTypes(otherTypes)
+        }
+
+        return@coroutineScope Pair(newSchema, implementations)
     }
 
 
@@ -561,8 +699,17 @@ class Bruteforcer(private val inql: InQL) {
                             return@withPermit bucket.toSet() // The entire bucket is valid.
                         }
 
-                        if (errors.toString().contains("has no subfields")) {
-                            Logger.debug("Detected scalar type from 'no subfields' error. Aborting field scan.")
+                        var isScalar = false
+                        for (i in 0 until errors.length()) {
+                            val message = errors.getJSONObject(i).optString("message", "")
+                            if (RegexStore.NO_SUBFIELDS.matches(message) || RegexStore.SELECTION_ON_SCALAR.matches(message)) {
+                                isScalar = true
+                                break // Found a scalar error, no need to check others
+                            }
+                        }
+
+                        if (isScalar) {
+                            Logger.debug("Detected scalar type via specific regex match. Aborting field scan.")
                             return@withPermit null // Signal for scalar type
                         }
 
@@ -572,6 +719,7 @@ class Bruteforcer(private val inql: InQL) {
 
                         for (i in 0 until errors.length()) {
                             val message = errors.getJSONObject(i).optString("message", "")
+
                             fieldsInSuggestions.addAll(RegexStore.getSuggestions(message, RegexStore.FIELD_SUGGESTIONS))
                             for (regex in RegexStore.WRONG_TYPENAME) {
                                 regex.find(message)?.groups?.get("field")?.value?.let { invalidField ->
@@ -581,12 +729,9 @@ class Bruteforcer(private val inql: InQL) {
                             }
                         }
 
-                        // --- Corrected Hybrid Decision Logic ---
                         if (fieldsInSuggestions.isNotEmpty() || hasRecognizedErrors) {
                             val potentiallyValid = bucket.toMutableSet()
-                            // 1. Subtract all fields that we know are invalid.
                             potentiallyValid.removeAll(fieldsInErrors)
-                            // 2. Add all high-confidence suggestions (which might not have been in the bucket).
                             potentiallyValid.addAll(fieldsInSuggestions)
 
                             return@withPermit potentiallyValid
@@ -624,7 +769,6 @@ class Bruteforcer(private val inql: InQL) {
         while (queue.isNotEmpty()) {
             val path = queue.poll()
 
-            // Resolve the current type at the end of the path
             var currentType: GraphQLType = schema.getType(path.first()) as GraphQLType
             for (fieldName in path.drop(1)) {
                 val container = GraphQLTypeUtil.unwrapAll(currentType) as? GraphQLFieldsContainer ?: break
@@ -637,18 +781,16 @@ class Bruteforcer(private val inql: InQL) {
                 for (argument in field.arguments) {
                     val argumentTypeName = GraphQLTypeUtil.unwrapAll(argument.type).name
                     if (argumentTypeName == targetInputTypeName) {
-                        // Found it! Return the path to the field, plus the argument name.
                         return path + field.name + argument.name
                     }
                 }
 
-                // If the field returns another object type, add it to the queue to scan its fields
                 if (GraphQLTypeUtil.unwrapAll(field.type) is GraphQLObjectType) {
                     queue.add(path + field.name)
                 }
             }
         }
-        return null // Path not found
+        return null
     }
 
     /**
@@ -659,7 +801,11 @@ class Bruteforcer(private val inql: InQL) {
         val path = findPathToFieldUsingInput(schema, typeName)
             ?: throw IllegalStateException("Could not find a field using input type $typeName")
 
-        val operationName = if (path.first() == schema.mutationType?.name) "mutation" else "query"
+        val operationName = when (path.first()) {
+            schema.mutationType?.name -> "mutation"
+            schema.subscriptionType?.name -> "subscription"
+            else -> "query" // Default to query
+        }
         val fieldPath = path.drop(1).dropLast(1)
         val argumentName = path.last()
 
@@ -683,7 +829,6 @@ class Bruteforcer(private val inql: InQL) {
         val typeBuilder = GraphQLInputObjectType.newInputObject(schema.getType(typeName) as GraphQLInputObjectType).clearFields()
 
         validFields.forEach { fieldName ->
-            // For simplicity, we default discovered input fields to String.
             typeBuilder.field(
                 GraphQLInputObjectField.newInputObjectField()
                     .name(fieldName)
@@ -692,17 +837,13 @@ class Bruteforcer(private val inql: InQL) {
             )
         }
 
-        // Replace the old type definition with our newly built one in the map
         typeMap[typeName] = typeBuilder.build()
 
-        // --- START: CORRECTED SCHEMA TRANSFORMATION ---
-        // This logic correctly rebuilds the schema, preventing the redefinition error.
         val newSchema = schema.transform { builder ->
             val queryTypeName = schema.queryType?.name
             val mutationTypeName = schema.mutationType?.name
             val subscriptionTypeName = schema.subscriptionType?.name
 
-            // Explicitly set the root types, using the versions from our map
             if (queryTypeName != null && typeMap.containsKey(queryTypeName)) {
                 builder.query(typeMap[queryTypeName] as GraphQLObjectType)
             }
@@ -713,7 +854,6 @@ class Bruteforcer(private val inql: InQL) {
                 builder.subscription(typeMap[subscriptionTypeName] as GraphQLObjectType)
             }
 
-            // Collect all other types, including our updated input object type
             val otherTypes = mutableSetOf<GraphQLType>()
             typeMap.values.forEach { type ->
                 if (type.name != queryTypeName && type.name != mutationTypeName && type.name != subscriptionTypeName) {
@@ -721,20 +861,17 @@ class Bruteforcer(private val inql: InQL) {
                 }
             }
 
-            // Re-add built-in scalars to ensure they're present
             otherTypes.addAll(BUILT_IN_SCALARS.mapNotNull { schema.getType(it) })
 
             builder.clearAdditionalTypes().additionalTypes(otherTypes)
         }
-        // --- END: CORRECTED SCHEMA TRANSFORMATION ---
 
-        return Pair(newSchema, emptySet<String>()) // We don't discover new types this way for now
+        return Pair(newSchema, emptySet<String>())
     }
     /**
      * A specialized version of probeValidFields for input objects.
      */
     private suspend fun probeValidFieldsForInputObject(inputDocument: String): Set<String> = coroutineScope {
-        // This logic is very similar to probeValidFields but looks for input-specific errors
         val allValidFields = mutableSetOf<String>()
         val semaphore = Semaphore(concurrencyLimit)
 
@@ -770,13 +907,10 @@ class Bruteforcer(private val inql: InQL) {
 
     /**
      * Sends requests to discover all valid arguments for a given field.
-     * This version is refactored to construct syntactically correct queries
-     * for nested fields, preventing "Syntax Error" false positives.
      */
     private suspend fun probeValidArguments(scanQuery: String, fieldName: String): Set<String> = coroutineScope {
         val validArgs = mutableSetOf<String>()
 
-        // Step 1: Probe for REQUIRED arguments.
         try {
             val documentNoArgs = scanQuery.replace("FUZZ", "$fieldName { __typename }")
             val responseNoArgs = graphQLClient.send(documentNoArgs)
@@ -788,8 +922,8 @@ class Bruteforcer(private val inql: InQL) {
                 for (regex in RegexStore.WRONG_TYPENAME) {
                     val match = regex.find(message)
                     if (match != null && match.groups["field"]?.value == fieldName) {
-                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe (Step 1). Aborting argument scan.")
-                        return@coroutineScope emptySet() // Exit probeValidArguments
+                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe. Aborting argument scan.")
+                        return@coroutineScope emptySet()
                     }
                 }
 
@@ -808,7 +942,6 @@ class Bruteforcer(private val inql: InQL) {
             Logger.debug("Error during missing argument probe for '$fieldName': ${e.message}")
         }
 
-        // Step 2: Probe for OPTIONAL arguments using suggestions.
         var foundArgsViaSuggestions = false
         try {
             val documentWithFakeArg = scanQuery.replace("FUZZ", "$fieldName(${RegexStore.WRONG_ARG_EXAMPLE}: null) { __typename }")
@@ -820,14 +953,13 @@ class Bruteforcer(private val inql: InQL) {
                 for (regex in RegexStore.WRONG_TYPENAME) {
                     val match = regex.find(message)
                     if (match != null && match.groups["field"]?.value == fieldName) {
-                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe (Step 2). Aborting argument scan.")
-                        return@coroutineScope emptySet() // Exit probeValidArguments
+                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe. Aborting argument scan.")
+                        return@coroutineScope emptySet()
                     }
                 }
 
                 val suggestions = RegexStore.ARGUMENT_SUGGESTIONS.flatMap { regex ->
                     regex.findAll(message).mapNotNull { match ->
-                        // Also validate the field name for suggestions
                         if (match.groups["field"]?.value == fieldName) {
                             match.groups["suggestion"]?.value
                         } else {
@@ -845,8 +977,8 @@ class Bruteforcer(private val inql: InQL) {
             Logger.debug("Error during argument suggestion probe for '$fieldName': ${e.message}")
         }
 
-        // Step 3: FALLBACK - If suggestions failed, brute-force from the wordlist.
-        if (!foundArgsViaSuggestions && bruteforceArguments) {
+        // If suggestions failed, brute-force from the wordlist.
+        if (!foundArgsViaSuggestions && validArgs.isEmpty() && bruteforceArguments) {
             Logger.debug("No argument suggestions found. Falling back to brute-force for field '$fieldName'")
             val semaphore = Semaphore(concurrencyLimit)
             val deferredResults = argumentWordlist.chunked(bucketSize).map { bucket ->
@@ -875,7 +1007,6 @@ class Bruteforcer(private val inql: InQL) {
                                     }
                                     if (isFieldItselfInvalid) break // Stop checking other errors
 
-                                    // Check if THIS candidate is explicitly unknown.
                                     for (regex in RegexStore.UNKNOWN_ARGUMENT) {
                                         val unknownArgMatch = regex.find(errorMessage)
                                         if (unknownArgMatch != null && unknownArgMatch.groups["argument"]?.value == argCandidate) {
@@ -887,7 +1018,7 @@ class Bruteforcer(private val inql: InQL) {
 
                                 if (isFieldItselfInvalid) {
                                     Logger.debug("Field '$fieldName' reported as non-existent during brute-force. Stopping scan for this bucket.")
-                                    break // Stop processing this bucket
+                                    break
                                 }
 
                                 if (!isCandidateExplicitlyUnknown) {
@@ -905,10 +1036,10 @@ class Bruteforcer(private val inql: InQL) {
 
         return@coroutineScope validArgs
     }
+
     /**
-     * Probes the type of a specific argument by systematically trying different
-     * JSON value types and analyzing the resulting error messages. This method
-     * is more exhaustive and aligns with the original Clairvoyance strategy.
+     * Probes the type of specific argument by systematically trying different
+     * JSON value types and analyzing the resulting error messages.
      */
     private suspend fun probeArgumentType(query: String, fieldName: String, argName: String): String {
         val probes = listOf(
@@ -937,8 +1068,15 @@ class Bruteforcer(private val inql: InQL) {
                             if (match != null) {
                                 val discoveredType = match.groups["type"]?.value
                                 if (discoveredType != null) {
-                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName' (opportunistic probe).")
-                                    return discoveredType // Success! We're done.
+                                    if (message.contains("enum", ignoreCase = true)) {
+                                        val baseTypeName = discoveredType.replace(Regex("[\\[\\]!]"), "")
+                                        if (baseTypeName !in BUILT_IN_SCALARS) {
+                                            Logger.debug("Discovered ENUM type '$baseTypeName' for arg '$argName'")
+                                            enumsToScan.add(baseTypeName)
+                                        }
+                                    }
+                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName'.")
+                                    return discoveredType
                                 }
                             }
                         }
@@ -986,8 +1124,8 @@ class Bruteforcer(private val inql: InQL) {
                             if (match != null) {
                                 val discoveredType = match.groups["type"]?.value
                                 if (discoveredType != null) {
-                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName' (reliable probe).")
-                                    return discoveredType // Success!
+                                    Logger.debug("Discovered arg type '$discoveredType' for '$argName'.")
+                                    return discoveredType
                                 }
                             }
                         }
@@ -1000,5 +1138,180 @@ class Bruteforcer(private val inql: InQL) {
 
         Logger.debug("Could not determine type for argument '$argName' on field '$fieldName'. Defaulting to String.")
         return GraphQLString.name
+    }
+
+    /**
+     * Finds a path to a field's argument that uses the given Enum type name.
+     * Returns a list representing the path, e.g., ["Mutation", "updateUser", "role"].
+     */
+    private fun findPathToArgumentUsingEnum(schema: GraphQLSchema, targetEnumTypeName: String): List<String>? {
+        val roots = listOfNotNull(schema.queryType, schema.mutationType, schema.subscriptionType)
+        val queue: Queue<List<String>> = LinkedList()
+        roots.forEach { queue.add(listOf(it.name)) }
+        val visitedTypes = mutableSetOf<String>()
+        roots.map { it.name }.let { visitedTypes.addAll(it) }
+
+
+        while (queue.isNotEmpty()) {
+            val path = queue.poll()
+
+            var currentType: GraphQLType = schema.getType(path.first()) as GraphQLType
+            for (fieldName in path.drop(1)) {
+                val container = GraphQLTypeUtil.unwrapAll(currentType) as? GraphQLFieldsContainer ?: break
+                currentType = container.getFieldDefinition(fieldName)?.type ?: break
+            }
+
+            val currentFieldsContainer = GraphQLTypeUtil.unwrapAll(currentType) as? GraphQLFieldsContainer ?: continue
+
+            for (field in currentFieldsContainer.fieldDefinitions) {
+                for (argument in field.arguments) {
+                    val argumentTypeName = GraphQLTypeUtil.unwrapAll(argument.type).name
+                    if (argumentTypeName == targetEnumTypeName) {
+                        return path + field.name + argument.name
+                    }
+                }
+
+                val fieldTypeName = GraphQLTypeUtil.unwrapAll(field.type).name
+                if (fieldTypeName !in visitedTypes && schema.getType(fieldTypeName) is GraphQLObjectType) {
+                    visitedTypes.add(fieldTypeName)
+                    queue.add(path + field.name)
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Scans a GraphQLEnumType to discover its values.
+     */
+    private suspend fun scanEnumType(typeName: String, schema: GraphQLSchema): Pair<GraphQLSchema, Set<String>> = coroutineScope {
+        Logger.debug("Scanning ENUM type: $typeName")
+
+        val path = findPathToArgumentUsingEnum(schema, typeName)
+            ?: run {
+                Logger.error("Could not find a field using enum type $typeName. Cannot scan its values.")
+                return@coroutineScope Pair(schema, emptySet<String>())
+            }
+
+        val operationName = when (path.first()) {
+            schema.mutationType?.name -> "mutation"
+            schema.subscriptionType?.name -> "subscription"
+            else -> "query" // Default to query
+        }
+        val fieldPath = path.drop(1).dropLast(1)
+        val argumentName = path.last()
+        val fieldToProbe = fieldPath.last()
+
+        var queryBody = ""
+        var currentPathType: GraphQLType = schema.getType(path.first()) as GraphQLType
+
+        fieldPath.dropLast(1).forEach { fieldName ->
+            val container = GraphQLTypeUtil.unwrapAll(currentPathType) as GraphQLFieldsContainer
+            val fieldDef = container.getFieldDefinition(fieldName)!!
+            currentPathType = fieldDef.type
+            queryBody += "$fieldName { "
+        }
+
+        // This query will look like: mutation { user { updateUser(role: FUZZ) { __typename } } }
+        val probeQuery = "$queryBody $fieldToProbe($argumentName: FUZZ) { __typename } ${"}".repeat(fieldPath.size - 1)}"
+        val finalQuery = "$operationName { $probeQuery }"
+
+        val validValues = probeEnumValues(finalQuery, typeName)
+
+        val typeMap = schema.typeMap.toMutableMap()
+        val enumTypeBuilder = GraphQLEnumType.newEnum().name(typeName)
+
+        if (validValues.isEmpty()) Logger.warning("No values found for enum '$typeName'.")
+
+        validValues.forEach {
+            enumTypeBuilder.value(it)
+        }
+
+        // Add a placeholder if empty, otherwise build() fails
+        if (validValues.isEmpty()) {
+            enumTypeBuilder.value("_INQL_PLACEHOLDER")
+        }
+
+        typeMap[typeName] = enumTypeBuilder.build()
+
+        val newSchema = schema.transform { builder ->
+            val queryTypeName = schema.queryType?.name
+            val mutationTypeName = schema.mutationType?.name
+            val subscriptionTypeName = schema.subscriptionType?.name
+
+            if (queryTypeName != null && typeMap.containsKey(queryTypeName)) {
+                val type = typeMap[queryTypeName]
+                if (type is GraphQLObjectType) builder.query(type)
+            }
+            if (mutationTypeName != null && typeMap.containsKey(mutationTypeName)) {
+                val type = typeMap[mutationTypeName]
+                if (type is GraphQLObjectType) builder.mutation(type)
+            }
+            if (subscriptionTypeName != null && typeMap.containsKey(subscriptionTypeName)) {
+                val type = typeMap[subscriptionTypeName]
+                if (type is GraphQLObjectType) builder.subscription(type)
+            }
+
+            val otherTypes = mutableSetOf<GraphQLType>()
+            typeMap.values.forEach { type ->
+                if (type.name != queryTypeName && type.name != mutationTypeName && type.name != subscriptionTypeName) {
+                    otherTypes.add(type)
+                }
+            }
+            otherTypes.add(GraphQLString); otherTypes.add(GraphQLInt); otherTypes.add(GraphQLFloat); otherTypes.add(GraphQLBoolean); otherTypes.add(GraphQLID)
+            builder.clearAdditionalTypes().additionalTypes(otherTypes)
+        }
+
+        return@coroutineScope Pair(newSchema, emptySet<String>())
+    }
+
+    /**
+     * A specialized version of probeValidFields for enum values.
+     */
+    private suspend fun probeEnumValues(probeQuery: String, enumTypeName: String): Set<String> = coroutineScope {
+        val allValidValues = mutableSetOf<String>()
+        val semaphore = Semaphore(concurrencyLimit)
+
+        val deferredResults = wordlist.chunked(bucketSize).map { bucket ->
+            async {
+                semaphore.withPermit<Set<String>> {
+                    // For enums, we must probe one by one, as a single bad value
+                    // can fail the whole query validation.
+                    val validInBucket = mutableSetOf<String>()
+
+                    for (value in bucket) {
+                        val document = probeQuery.replace("FUZZ", value) // Note: No quotes!
+                        try {
+                            val response = graphQLClient.send(document)
+                            val errors = response.optJSONArray("errors")
+
+                            var isInvalid = false
+                            if (errors != null && errors.length() > 0) {
+                                errors.forEach { error ->
+                                    if (error !is org.json.JSONObject) return@forEach
+                                    val message = error.optString("message", "")
+
+                                    // Check if this error is about *our* enum
+                                    for (regex in RegexStore.WRONG_ARGUMENT_TYPES) {
+                                        if (regex.find(message)?.groups?.get("type")?.value?.contains(enumTypeName) == true) {
+                                            isInvalid = true
+                                            break
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!isInvalid) {
+                                validInBucket.add(value)
+                            }
+                        } catch (e: Exception) { /* ignore */ }
+                    }
+                    return@withPermit validInBucket
+                }
+            }
+        }
+        deferredResults.forEach { allValidValues.addAll(it.await()) }
+        Logger.debug("Discovered values for enum '$enumTypeName': $allValidValues")
+        return@coroutineScope allValidValues
     }
 }

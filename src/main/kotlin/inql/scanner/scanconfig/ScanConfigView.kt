@@ -115,7 +115,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         }
     }
 
-    private val bruteforcerBtn = JButton("Launch schema bruteforcer").also {
+    private val bruteforcerBtn = JButton("Launch schema bruteforcer (Beta)").also {
         it.addActionListener {
             this.launchBruteforcer()
         }

@@ -3,6 +3,7 @@ package inql.bruteforcer
 
 import burp.api.montoya.http.message.requests.HttpRequest
 import inql.Logger
+import inql.exceptions.BlankResponseException
 import inql.exceptions.TooManyRequestsException
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -33,7 +34,6 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
                 return response
 
             } catch (e: TooManyRequestsException) {
-                // Handle 429 error
                 val current = backoffDelay.get()
                 val newDelay = if (current == 0L) {
                     INITIAL_BACKOFF_MS
@@ -42,6 +42,14 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
                 }
                 backoffDelay.set(newDelay)
 
+            } catch (e: BlankResponseException) {
+                val current = backoffDelay.get()
+                val newDelay = if (current == 0L) {
+                    INITIAL_BACKOFF_MS
+                } else {
+                    (current * 2).coerceAtMost(MAX_BACKOFF_MS)
+                }
+                backoffDelay.set(newDelay)
             } catch (e: Exception) {
                 Logger.error("An unexpected error occurred during the request: ${e.message}")
                 return JSONObject()
