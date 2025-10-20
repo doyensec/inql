@@ -783,6 +783,16 @@ class Bruteforcer(private val inql: InQL) {
             responseNoArgs.optJSONArray("errors")?.forEach { error ->
                 if (error !is org.json.JSONObject) return@forEach
                 val message = error.optString("message", "")
+
+                // Check if the field itself is invalid. If so, abort this whole function.
+                for (regex in RegexStore.WRONG_TYPENAME) {
+                    val match = regex.find(message)
+                    if (match != null && match.groups["field"]?.value == fieldName) {
+                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe (Step 1). Aborting argument scan.")
+                        return@coroutineScope emptySet() // Exit probeValidArguments
+                    }
+                }
+
                 RegexStore.MISSING_ARGUMENT.find(message)?.let { match ->
                     val errorField = match.groups["field"]?.value
                     val errorArg = match.groups["argument"]?.value
@@ -806,6 +816,15 @@ class Bruteforcer(private val inql: InQL) {
             responseWithFakeArg.optJSONArray("errors")?.forEach { error ->
                 if (error !is org.json.JSONObject) return@forEach
                 val message = error.optString("message", "")
+
+                for (regex in RegexStore.WRONG_TYPENAME) {
+                    val match = regex.find(message)
+                    if (match != null && match.groups["field"]?.value == fieldName) {
+                        Logger.debug("Field '$fieldName' reported as non-existent during argument probe (Step 2). Aborting argument scan.")
+                        return@coroutineScope emptySet() // Exit probeValidArguments
+                    }
+                }
+
                 val suggestions = RegexStore.ARGUMENT_SUGGESTIONS.flatMap { regex ->
                     regex.findAll(message).mapNotNull { match ->
                         // Also validate the field name for suggestions
@@ -842,13 +861,19 @@ class Bruteforcer(private val inql: InQL) {
                                 val response = graphQLClient.send(document)
                                 val errors = response.optJSONArray("errors") ?: continue
 
-                                // No need to check for syntax errors anymore, as our query is always valid.
+                                var isFieldItselfInvalid = false
                                 var isCandidateExplicitlyUnknown = false
                                 for (i in 0 until errors.length()) {
                                     val errorMessage = errors.getJSONObject(i).optString("message", "")
 
-                                    // Opportunistic checks (suggestions, missing required args)
-                                    // ... [this logic remains the same as the previous version]
+                                    for (regex in RegexStore.WRONG_TYPENAME) {
+                                        val match = regex.find(errorMessage)
+                                        if (match != null && match.groups["field"]?.value == fieldName) {
+                                            isFieldItselfInvalid = true
+                                            break
+                                        }
+                                    }
+                                    if (isFieldItselfInvalid) break // Stop checking other errors
 
                                     // Check if THIS candidate is explicitly unknown.
                                     for (regex in RegexStore.UNKNOWN_ARGUMENT) {
@@ -858,6 +883,11 @@ class Bruteforcer(private val inql: InQL) {
                                             break
                                         }
                                     }
+                                }
+
+                                if (isFieldItselfInvalid) {
+                                    Logger.debug("Field '$fieldName' reported as non-existent during brute-force. Stopping scan for this bucket.")
+                                    break // Stop processing this bucket
                                 }
 
                                 if (!isCandidateExplicitlyUnknown) {

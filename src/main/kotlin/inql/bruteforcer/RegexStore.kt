@@ -12,10 +12,8 @@ object RegexStore {
         Regex("""Field '(?<field>[_A-Za-z][_0-9A-Za-z]*)' is not defined by type '(?<typename>[_A-Za-z][_0-9A-Za-z]*)'.(.*)"""),
         Regex("""Cannot query field '(?<field>[_A-Za-z][_0-9A-Za-z]*)' on type '(?<typename>[_A-Za-z][_0-9A-Za-z]*)'.(.*)"""),
         Regex("""Field "(?<field>[_A-Za-z][_0-9A-Za-z]*)" is not defined by type "(?<typename>[_A-Za-z][_0-9A-Za-z]*)".?"""),
-        Regex("""Cannot query field "(?<field>[_A-Za-z][_0-9A-Za-z]*)" on type "(?<typename>[_A-Za-z][_0-9A-Za-z]*)".$"""),
         Regex("""Field '(?<field>[_A-Za-z][_0-9A-Za-z]*)' doesn't exist on type '(?<typename>[_A-Za-z][_0-9A-Za-z]*)'.*"""),
         Regex("""Field '(?<field>[_A-Za-z][_0-9A-Za-z]*)' doesn't exist on type '(?<typename>[_A-Za-z][_0-9A-Za-z]*)'"""),
-        Regex("""Cannot query field "(?<field>[_A-Za-z][_0-9A-Za-z]*)" on type "(?<typename>[_A-Za-z][_0-9A-Za-z]*)"\."""),
     )
 
     val FIELD_SUGGESTIONS = listOf(
@@ -39,6 +37,9 @@ object RegexStore {
         Regex("""Invalid value .* for argument '(?<argument>[_A-Za-z][_0-9A-Za-z]*)' of field '.*': expected type '(?<type>[_A-Za-z!\[\]]+)'"""),
         Regex("""Variable `.*` got invalid value .* expected type `(?<type>[_A-Za-z!\[\]]+)`"""),
         Regex("""Expected type ['"]?(?<type>[_A-Za-z!\[\]]+)['"]? for argument ['"](?<argument>[_A-Za-z][_0-9A-Za-z]*)['"]"""),
+        Regex("""Value .* does not exist in enum ['"]?(?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]?"""),
+        Regex("""Expected type [`"']?(?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]? to be an enum\."""),
+        Regex("""'s value is invalid\. Expected type [`"']?(?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]? enum\."""),
     )
 
     val MISSING_ARGUMENT =
@@ -60,6 +61,17 @@ object RegexStore {
     val EXPECTED_INPUT_OBJECT =
         Regex("""Expected type (?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+) to be an object\.""")
 
+    val ABSTRACT_TYPE_NO_SELECTION =
+        Regex("""Field ["'](?<field>[_A-Za-z][_0-9A-Za-z]*)["'] of abstract type ["']?(?<type>.*?)["']? must have a selection of subfields\.*""")
+
+    val INVALID_FRAGMENT_TYPE =
+        Regex("""Fragment cannot be spread here as objects of type ["']?(?<type>.*?)["']? can never be of type ["']?(?<fragment_type>.*?)["']?\.""")
+
+    val INVALID_FRAGMENT_SUGGESTIONS = listOf(
+        Regex("""Fragment .* not valid on type [`"'](?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]?\. Did you mean [`"'](?<suggestion>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]?\?"""),
+        Regex("""Cannot spread fragment .* on type [`"'](?<type>[_A-Za-z][_0-9A-Za-z!\[\]]+)['"]?\. Possible types are: (?<suggestion1>[_A-Za-z][_0-9A-Za-z!\[\]]+), (?<suggestion2>[_A-Za-z][_0-9A-Za-z!\[\]]+)"""),
+        Regex("""Possible types are (?<suggestion1>[_A-Za-z][_0-9A-Za-z!\[\]]+), (?<suggestion2>[_A-Za-z][_0-9A-Za-z!\[\]]+) and (?<suggestion3>[_A-Za-z][_0-9A-Za-z!\[\]]+)\."""),
+    )
 
     val SYNTAX_ERROR = listOf(
         Regex("""Syntax Error.*"""),
