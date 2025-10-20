@@ -79,7 +79,13 @@ object RegexStore {
         return regexList.flatMap { regex ->
             regex.findAll(errorMessage).flatMap { matchResult ->
                 suggestionGroupNames.mapNotNull { groupName ->
-                    matchResult.groups[groupName]?.value
+                    try {
+                        matchResult.groups[groupName]?.value
+                    } catch (e: NoSuchElementException) {
+                        null
+                    } catch (e: IllegalArgumentException) {
+                        null
+                    }
                 }
             }
         }.distinct()
