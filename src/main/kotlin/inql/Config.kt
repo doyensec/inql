@@ -49,7 +49,7 @@ class Config private constructor() {
         "report.poi.custom_scalars" to true,
         "report.poi.custom_keywords" to "",
         "bruteforcer.bucket_size" to 64,
-        "bruteforcer.depth_limit" to 3,
+        "bruteforcer.depth_limit" to 2,
         "bruteforcer.concurrency_limit" to 8,
         "bruteforcer.bruteforce_arguments" to true,
         "bruteforcer.custom_wordlist" to "",

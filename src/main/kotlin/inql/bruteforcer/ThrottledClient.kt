@@ -9,8 +9,6 @@ import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
 
 class ThrottledClient(private val baseRequest: HttpRequest) {
-
-    // State is now correctly contained within an instance of this client
     private val backoffDelay = AtomicLong(0L)
     private val INITIAL_BACKOFF_MS = 1000L
     private val MAX_BACKOFF_MS = 60000L
@@ -27,10 +25,8 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
             }
 
             try {
-                // Attempt the actual request using the stateless utility function
                 val response = Utils.sendGraphQLRequest(query, baseRequest)
 
-                // On success, reset the backoff delay and return the response
                 if (backoffDelay.get() > 0) {
                     backoffDelay.set(0L)
                 }
@@ -45,11 +41,9 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
                     (current * 2).coerceAtMost(MAX_BACKOFF_MS)
                 }
                 backoffDelay.set(newDelay)
-                // The loop will continue, applying the new delay on the next iteration.
 
             } catch (e: Exception) {
                 Logger.error("An unexpected error occurred during the request: ${e.message}")
-                // Return an empty object or re-throw, depending on desired behavior
                 return JSONObject()
             }
         }
