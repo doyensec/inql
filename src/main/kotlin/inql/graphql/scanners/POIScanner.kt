@@ -102,8 +102,6 @@ class POIScanner(private val schema: GQLSchema) {
             regexKeywords[kId] = keyword.keywords.joinToString("|")
         }
 
-//        val customKeywords = config.getString("report.poi.custom_keywords")!!
-//        setCustomKeywords(customKeywords)
 
         Logger.debug("regexKeyword: '${regexKeywords}'")
         Logger.debug("defaultKeywords: '${defaultKeywords}'")

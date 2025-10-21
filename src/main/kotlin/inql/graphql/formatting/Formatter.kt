@@ -56,9 +56,7 @@ class Formatter(
 
         globalCache[this.cacheKey]!![hash] = element
     }
-   /*
-    debug function kept for reference
-*/
+
     fun estimateGlobalCacheSize(): Long {
         var total = 0L
         for ((outerKey, innerMap) in globalCache) {
