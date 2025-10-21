@@ -344,6 +344,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     }
 
     fun onClose() {
+        this.cancel()
         if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
     }
 
