@@ -1,5 +1,7 @@
 package inql.graphql.formatting
 
+import inql.Config
+import inql.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -12,8 +14,7 @@ class Formatter(
     val isIntrospection: Boolean = false,
 ) {
     companion object {
-        private val globalCache = HashMap<String, HashMap<Long, String>>()
-        private val styleCache = HashMap<String, HashMap<Long, List<StyleMetadata>>>()
+        val globalCache = HashMap<String, HashMap<Long, Pair<String, List<StyleMetadata>>>>()
 
         private fun getQueryHash(query: String): Long {
             /*
@@ -29,26 +30,51 @@ class Formatter(
     private val cacheKey = "$minimized$spaces$stripComments$isIntrospection"
 
     init {
+        val maxBytes = Config.getInstance().getInt("editor.formatting.cache_size_kb") ?: 102400
         if (!globalCache.containsKey(this.cacheKey)) {
-            globalCache[this.cacheKey] = HashMap()
-            styleCache[this.cacheKey] = HashMap()
+            globalCache[this.cacheKey] = SizedLRUCache<Long, Pair<String, List<StyleMetadata>>>(
+               1024L * maxBytes
+            ) { key, value ->
+                8L +                        // key: Long
+                16L +                       // Pair object overhead (object header + 2 refs)
+                value.first.length * 2L +   // String character data
+                40L +                       // String object + internal overhead
+                24L +                       // List object + internal structure
+                value.second.size * 32L     // Each StyleMetadata ~32 bytes
+            }
         }
     }
 
-    private fun getCache(query: String): String? {
+    private fun getCache(query: String): Pair<String, List<StyleMetadata>>? {
         val hash = getQueryHash(query)
         return globalCache[this.cacheKey]!![hash]
     }
 
-    private fun getStyleCache(query: String): List<StyleMetadata> {
+    private fun setCache(query: String, element: Pair<String, List<StyleMetadata>>) {
+        Logger.debug("Cache size: #${globalCache[this.cacheKey]?.size}, ~ ${estimateGlobalCacheSize() / 1024}Kb, ")
         val hash = getQueryHash(query)
-        return styleCache[cacheKey]!![hash]!!
+
+        globalCache[this.cacheKey]!![hash] = element
     }
 
-    private fun setCache(query: String, formatted: String, style: List<StyleMetadata>) {
-        val hash = getQueryHash(query)
-        globalCache[this.cacheKey]!![hash] = formatted
-        styleCache[this.cacheKey]!![hash] = style
+    fun estimateGlobalCacheSize(): Long {
+        var total = 0L
+        for ((outerKey, innerMap) in globalCache) {
+            total += outerKey.length * 2L + 64L // outer String key + map overhead
+            for ((_, pair) in innerMap) {
+                val stringPart = pair.first
+                val styleList = pair.second
+
+                total += 8L                      // innerKey: Long
+                total += 16L                     // Pair object overhead (2 refs)
+                total += stringPart.length * 2L // String character data
+                total += 40L                     // String object overhead
+                total += 24L                     // List object overhead
+                total += styleList.size * 32L   // StyleMetadata items (~32B each)
+                total += 48L                     // entry overhead (Map.Entry)
+            }
+        }
+        return total
     }
 
     private fun makeIndent(level: Int): String {
@@ -58,8 +84,7 @@ class Formatter(
     fun format(query: String): Pair<String, List<StyleMetadata>> {
         val cached = this.getCache(query)
         if (cached != null) {
-            val cachedStyle = this.getStyleCache(query)
-            return Pair(cached, cachedStyle)
+            return cached
         }
 
         var tokens = Tokenizer(query).tokenize()
@@ -67,9 +92,10 @@ class Formatter(
         if (stripComments) {
             tokens = tokens.filter { it.type != Token.Type.COMMENT }
         }
-        val (formattedStr, formattedStyle) = this.format(tokens)
-        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, formattedStr, formattedStyle) } // We don't need to wait for this
-        return Pair(formattedStr, formattedStyle)
+
+        val result: Pair<String, List<StyleMetadata>> = this.format(tokens)
+        CoroutineScope(Dispatchers.Default).launch { this@Formatter.setCache(query, result) } // We don't need to wait for this
+        return result
     }
 
     private fun format(tokens: List<Token>): Pair<String, List<StyleMetadata>> {

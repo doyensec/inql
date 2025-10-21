@@ -2,6 +2,12 @@ package inql.ui
 
 import burp.api.montoya.core.HighlightColor
 import inql.Config
+import inql.Logger
+import inql.graphql.formatting.Style
+import inql.scanner.scanresults.ScanResultsView
+import java.awt.Color
+import java.awt.Dimension
+import java.awt.Font
 import javax.swing.*
 
 class SettingsWindow private constructor() : Window("InQL Settings") {
@@ -90,6 +96,39 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
         }
     }
 
+    val restartScanButton = JButton("Re-scan POI").also {
+        it.foreground = Color.WHITE
+        it.background = Style.ThemeColors.Accent
+        it.font = it.font.deriveFont(Font.BOLD)
+        it.isBorderPainted = false
+        it.addActionListener {
+            Logger.debug("Restarting POI scan")
+            restartScans()
+        }
+    }
+
+    fun restartScans() {
+        restartScanButton.isEnabled = false
+        restartScanButton.text = "Scanning..."
+
+        object : SwingWorker<Unit, Unit>() {
+            override fun doInBackground() {
+                val instances = ScanResultsView.getAllInstances()
+                Logger.info("Number of instances: ${instances.size}")
+                instances.parallelStream().forEach { instance ->
+                    Logger.debug("Scanning POI")
+                    instance.refresh()
+                    Logger.debug("Done scanning POI")
+                }
+            }
+
+            override fun done() {
+                restartScanButton.text = "Re-scan POI"
+                restartScanButton.isEnabled = true
+            }
+        }.execute()
+    }
+
     init {
         // Build the different section first
         val codeGenerationSection = SettingsSection(
@@ -126,6 +165,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement(
                 "editor.formatting.timeout",
                 Spinner("Formatting timeout (ms)", 0, 10000)
+            ),
+            SettingsElement(
+                "editor.formatting.cache_size_kb",
+                Spinner("Approximate max cache size in Kb", 0, 1073741824)
             ),
             SettingsElement(
                 "editor.formatting.wordwrap",
@@ -191,6 +234,7 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.poi.files", CheckBox("Report points of interest that deal with file management")),
             SettingsElement("report.poi.deprecated", CheckBox("Report deprecated functionality")),
             SettingsElement("report.poi.custom_scalars", CheckBox("Report custom scalars")),
+            SettingsElement("report.poi.show_custom_keywords",CheckBox("Report custom keywords")),
             null,
             SettingsElement("report.poi.custom_keywords", TextArea("Custom keywords for points of interest", 6, 20)),
         )
@@ -230,6 +274,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             reportSection,
             JSeparator(JSeparator.HORIZONTAL),
             poiSection,
+            restartScanButton,
+            Box.createRigidArea(Dimension(0, 10)),
             JSeparator(JSeparator.HORIZONTAL),
             loggingLevelSection,
             JSeparator(JSeparator.HORIZONTAL),

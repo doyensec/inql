@@ -4,10 +4,10 @@ import inql.Config
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import graphql.schema.*
+import inql.Logger
 import inql.graphql.GQLSchema
 import inql.graphql.Utils
 import inql.utils.ResourceFileReader
-
 
 class POIScanner(private val schema: GQLSchema) {
     companion object {
@@ -23,50 +23,88 @@ class POIScanner(private val schema: GQLSchema) {
             val queryType: String,
             val description: String?
         )
-    }
 
-    private var regexKeywords = mutableMapOf<String,String>()
-    private var defaultKeywords = mutableListOf<String>()
-    private val config = Config.getInstance()
+        private var regexKeywords = mutableMapOf<String,String>()
+        private var defaultKeywords = mutableListOf<String>()
 
-    init {
-        val jsonString = ResourceFileReader.readFile("keywords.json")
-        val gson = Gson()
+        fun getActiveKeywordsCount() = regexKeywords.size
 
-        val type = object : TypeToken<List<KeywordCategory>>() {}.type
-        val keywords = gson.fromJson<List<KeywordCategory>>(jsonString, type)
-        val tmpKeywordsMap = mapOf(
-            "report.poi.auth" to "auth",
-            "report.poi.privileged" to "privileged",
-            "report.poi.pii" to "pii",
-            "report.poi.payment" to "payment",
-            "report.poi.database" to "database",
-            "report.poi.debugging" to "debugging",
-            "report.poi.files" to "files"
-        )
+        private val config = Config.getInstance()
 
-        // adding keywords enabled in settings
-        for (k in tmpKeywordsMap) {
-            if (config.getBoolean(k.key)!!) {
-                defaultKeywords.add(k.value)
+        fun registerHooks() {
+            val tmpKeywordsMap = mapOf(
+                "report.poi.auth" to "auth",
+                "report.poi.privileged" to "privileged",
+                "report.poi.pii" to "pii",
+                "report.poi.payment" to "payment",
+                "report.poi.database" to "database",
+                "report.poi.debugging" to "debugging",
+                "report.poi.files" to "files",
+                "report.poi.custom_keywords" to "custom_keywords"
+            )
+
+            tmpKeywordsMap.forEach { (configKey, _) ->
+                if (!config.hooks.containsKey(configKey)) {
+                    config.registerHook(configKey) {
+                        rebuildKeywords(tmpKeywordsMap)
+                    }
+                }
             }
+
+            // Initial sync with config
+            rebuildKeywords(tmpKeywordsMap)
         }
 
+        private fun rebuildKeywords(tmpKeywordsMap: Map<String, String>) {
+            defaultKeywords.clear()
+            regexKeywords.clear()
+
+            tmpKeywordsMap.forEach { (configKey, keywordValue) ->
+                if (config.getBoolean(configKey) == true) {
+                    defaultKeywords.add(keywordValue)
+                }
+            }
+
+            val jsonString = ResourceFileReader.readFile("keywords.json")
+            val type = object : TypeToken<List<KeywordCategory>>() {}.type
+            val keywords = Gson().fromJson<List<KeywordCategory>>(jsonString, type)
+
+            for (keyword in keywords) {
+                if (keyword.id in defaultKeywords) {
+                    regexKeywords[keyword.id] = keyword.keywords.joinToString("|")
+                }
+            }
+
+            if(config.getBoolean("report.poi.show_custom_keywords") == true) {
+                val customKeywords = config.getString("report.poi.custom_keywords") ?: ""
+                if (customKeywords.isNotEmpty()) {
+                    regexKeywords["custom"] = customKeywords.lines().joinToString("|")
+                }
+            }
+
+            Logger.debug("Active keywords: $defaultKeywords")
+            Logger.debug("Regex map rebuilt: $regexKeywords")
+        }
+    }
+
+    init {
+        val type = object : TypeToken<List<KeywordCategory>>() {}.type
+        val jsonString = ResourceFileReader.readFile("keywords.json")
+
+        val keywords = Gson().fromJson<List<KeywordCategory>>(jsonString, type)
         for (keyword in keywords) {
             val kId = keyword.id
 
             if (kId !in defaultKeywords) {
-                 continue
+                continue
             }
 
-            this.regexKeywords[kId] = keyword.keywords.joinToString("|")
+            regexKeywords[kId] = keyword.keywords.joinToString("|")
         }
 
-        val customKeywords = config.getString("report.poi.custom_keywords")!!
 
-        if (customKeywords.isNotEmpty()) {
-            this.regexKeywords["custom"] = customKeywords.lines().joinToString("|")
-        }
+        Logger.debug("regexKeyword: '${regexKeywords}'")
+        Logger.debug("defaultKeywords: '${defaultKeywords}'")
     }
 
     fun scan(depth: Int = 4): Map<String, MutableList<FieldResult>> {

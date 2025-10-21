@@ -10,7 +10,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
 
     var _sdl: String? = null
 
-    public fun printSDL(): String {
+    fun printSDL(): String {
         if (_sdl == null) {
             val sb = StringBuilder()
             sb.appendLine("${operationType.name.lowercase()} ${field.name} {")
@@ -18,7 +18,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
             sb.appendLine("}")
             _sdl = sb.toString()
         }
-        return _sdl!!;
+        return _sdl!!
     }
 
 

@@ -20,8 +20,7 @@ class IntrospectionQuery {
                     mutationType {
                         name
                     }
-                    # TODO: We're not parsing subscriptions and directives at all right now
-                    # subscriptionType { name }
+                    subscriptionType { name }
                     # directives { name }
                     types {
                         name

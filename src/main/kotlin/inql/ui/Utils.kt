@@ -224,11 +224,9 @@ open class InQLTabbedPane: TabbedPane() {
     init {
         tabbedPane.apply {
             // Add "Settings" button on the right end
-            setTrailingComponent(
-                BorderPanel(-2, 0, 2, 0).apply {
-                    add(SettingsTabButton())
-                }
-            )
+            trailingComponent = BorderPanel(-2, 0, 2, 0).apply {
+                add(SettingsTabButton())
+            }
         }
     }
 }
@@ -363,9 +361,9 @@ class SettingsTabButton() : JPanel() {
     }
 }
 
-class ErrorDialog(val msg: String) {
+class ErrorDialog(val msg: String, logToError: Boolean = true) {
     init {
-        Logger.error(msg)
+        if(logToError) Logger.error(msg)
         val burpWindow = Burp.Montoya.userInterface().swingUtils().suiteFrame()
         JOptionPane.showMessageDialog(burpWindow, msg, "InQL Error", JOptionPane.ERROR_MESSAGE)
     }

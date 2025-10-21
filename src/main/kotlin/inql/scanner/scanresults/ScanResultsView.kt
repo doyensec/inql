@@ -9,6 +9,7 @@ import inql.scanner.ScanResult
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
 import inql.ui.SendFromInqlHandler
+import java.lang.ref.WeakReference
 import inql.utils.QueryToRequestConverter
 import javax.swing.JSplitPane
 import javax.swing.tree.DefaultMutableTreeNode
@@ -19,14 +20,30 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     private var currentNode: DefaultMutableTreeNode? = null
     private val sendToHandler = ScannerResultSendFromInqlHandler(this).also { it.setEnabled(false) }
 
+    companion object {
+        private val instances = mutableListOf<WeakReference<ScanResultsView>>()
+        fun getAllInstances(): List<ScanResultsView> {
+            instances.removeIf { it.get() == null }
+            return instances.mapNotNull { it.get() }
+        }
+    }
+
     init {
         this.initUI()
+        instances.add(WeakReference(this))
         this.payloadView.setContextMenuHandler(sendToHandler)
         this.sendToHandler.addKeyboardShortcutHandler(this)
         this.sendToHandler.addKeyboardShortcutHandler(treeView)
     }
 
     private fun initUI() {
+        addHierarchyListener { e ->
+            val changed = (e.changeFlags and java.awt.event.HierarchyEvent.DISPLAYABILITY_CHANGED.toLong()) != 0L
+            if (changed && !isDisplayable) {
+                dispose()
+            }
+        }
+
         val splitPane = JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             this.treeView,
@@ -39,6 +56,13 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         splitPane.resizeWeight = 0.2
 
         this.add(splitPane)
+    }
+
+    fun dispose() {
+        // Remove from our registry
+        instances.removeIf { it.get() === this || it.get() == null }
+
+        for (l in hierarchyListeners) removeHierarchyListener(l)
     }
 
     fun refresh() {
@@ -85,11 +109,8 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
 
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
-        private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
 
         override fun getRequest(): HttpRequest? {
-            Logger.warning("VALUE: $shouldStripComments")
-
             val converter = QueryToRequestConverter(view.scannerTab.scanResults.last())
             val query = converter.convert(view.currentNode.toString(), view.currentNode?.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
 

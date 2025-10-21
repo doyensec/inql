@@ -25,7 +25,7 @@ class ExternalToolsService private constructor(){
         private val config = Config.getInstance()
         private val gson = Gson()
 
-        public enum class TOOL {
+        enum class TOOL {
             TOOL_GRAPHIQL,
             TOOL_VOYAGER,
         }
@@ -47,7 +47,7 @@ class ExternalToolsService private constructor(){
             return instance
         }
 
-        public fun openURL(url: String) {
+        fun openURL(url: String) {
             Logger.info("Opening URL: $url")
 
             val useInternalBrowser = config.getBoolean("integrations.browser.internal")?: true
@@ -101,7 +101,7 @@ class ExternalToolsService private constructor(){
             return base64Encoded
         }
 
-        public fun sendRequestToEmbeddedTool(request: HttpRequest?, tool: TOOL) {
+        fun sendRequestToEmbeddedTool(request: HttpRequest?, tool: TOOL) {
             if (request == null) {
                 Logger.debug("Null request, aborting")
                 return
@@ -123,8 +123,8 @@ class ExternalToolsService private constructor(){
         }
     }
 
-    public val webserver: WebServer
-    public val interceptor: ExternalToolsRequestFixer
+    val webserver: WebServer
+    val interceptor: ExternalToolsRequestFixer
 
     init {
         this.webserver = WebServer()
