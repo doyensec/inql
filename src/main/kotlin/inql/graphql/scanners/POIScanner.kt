@@ -89,7 +89,7 @@ class POIScanner(private val schema: GQLSchema) {
 
     init {
         val type = object : TypeToken<List<KeywordCategory>>() {}.type
-        val jsonString = JsonFileReader.readJsonFile("keywords.json")
+        val jsonString = ResourceFileReader.readFile("keywords.json")
 
         val keywords = Gson().fromJson<List<KeywordCategory>>(jsonString, type)
         for (keyword in keywords) {

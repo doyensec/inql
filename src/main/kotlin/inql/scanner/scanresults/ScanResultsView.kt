@@ -109,16 +109,8 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
 
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
-        private val shouldStripComments = Config.getInstance().getBoolean("editor.send_to.strip_comments")
 
-        private fun stripComments(query: String): String {
-            Logger.debug("STRIPPING COMMENTS")
-            return this.stripCommentsFormatter.format(query).first
-        }
-        
         override fun getRequest(): HttpRequest? {
-            Logger.debug("VALUE: $shouldStripComments")
-
             val converter = QueryToRequestConverter(view.scannerTab.scanResults.last())
             val query = converter.convert(view.currentNode.toString(), view.currentNode?.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
 
