@@ -68,6 +68,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
+        scanner.stop()
     }
 
     fun getAvailableProfileId(name: String): String {

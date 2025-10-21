@@ -7,6 +7,8 @@ import burp.api.montoya.persistence.PersistedObject
 import com.google.gson.Gson
 import inql.Logger
 import inql.Profile
+import inql.bruteforcer.Bruteforcer
+import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
 import inql.savestate.SavesAndLoadData
@@ -17,9 +19,7 @@ import inql.scanner.scanresults.ScanResultsView
 import inql.ui.EditableTab
 import inql.ui.ErrorDialog
 import inql.utils.withUpsertedHeaders
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.awt.CardLayout
 import java.io.File
 import java.net.URI
@@ -75,6 +75,9 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     val scanConfigView = ScanConfigView(this)
     val scanResultsView = ScanResultsView(this)
 
+    private var bruteforcerJob: Job? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+
     var url: String
         get() = this.scanConfigView.urlField.text
         set(s) {
@@ -113,6 +116,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun showResultsView() {
         this.showView(SCAN_RESULT_VIEW)
+    }
+
+    fun cancel() {
+        bruteforcerJob?.cancel()
+        this.scanConfigView.setBusy(false)
     }
 
     fun showConfigView() {
@@ -157,6 +165,22 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
     }
 
+    fun launchBruteforcer() {
+        if (this.scanConfigView.verifyAndReturnUrl() == null) return
+        this.normalizeHeaders()
+        this.scanConfigView.setBusy(true)
+        bruteforcerJob = coroutineScope.launch {
+            try {
+                this@ScannerTab.bruteforce()
+            } finally {
+                // This block runs whether the coroutine completes or is cancelled
+                withContext(Dispatchers.Main) {
+                    this@ScannerTab.scanConfigView.setBusy(false)
+                }
+            }
+        }
+    }
+
     private fun normalizeHeaders() {
         val headers = this.requestTemplate.headers()
         if (headers.isEmpty()) return
@@ -189,6 +213,41 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         ) {
             headers[contentTypeIdx] = HttpHeader.httpHeader("Content-Type", "application/json")
         }
+    }
+
+    private suspend fun bruteforce() {
+        var schemaToParse: String? = null
+        val schema: GQLSchema?
+
+        try {
+            schemaToParse = Bruteforcer(this.inql).startFromRequest(this.requestTemplate)
+        } catch (e: EmptyOrIncorrectWordlistException) {
+            scanFailed(e.toString())
+            return
+        } catch (e: Exception) {
+            scanFailed("Failed to bruteforce schema")
+            Logger.debug(e.stackTraceToString())
+            return
+        }
+
+        try {
+            schema = GQLSchema(schemaToParse!!)
+        } catch (e: Exception) {
+            scanFailed("Failed to deserialize JSON schema")
+            return
+        }
+
+        // Create a scan result
+        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+
+        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
+        // and multiple scans at the same time for the same ScannerTab are not allowed
+        this.scanResults.add(sr)
+
+        // Update this tab in burp's project file
+        this.setTabTitle(host!!)
+        this.scanner.updateChildObjectAsync(this)
+        this.scanCompleted()
     }
 
     private suspend fun analyze() {

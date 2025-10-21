@@ -1,8 +1,8 @@
 package inql.utils
 
-class JsonFileReader {
+class ResourceFileReader {
     companion object {
-        fun readJsonFile(fileName: String): String {
+        fun readFile(fileName: String): String {
             return this::class.java.classLoader
                     .getResource(fileName)
                     ?.readText()

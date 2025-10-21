@@ -114,6 +114,13 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             this.updateHeaders()
         }
     }
+
+    private val bruteforcerBtn = JButton("Launch schema bruteforcer (Beta)").also {
+        it.addActionListener {
+            this.launchBruteforcer()
+        }
+    }
+
     private val startScanBtn = JButton("Analyze").also {
         it.foreground = Color.WHITE
         it.background = Color(255, 88, 18)
@@ -209,6 +216,8 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(Box.createHorizontalGlue())
             it.add(this.updateHeadersBtn)
             it.add(Box.createRigidArea(Dimension(10, 0)))
+            it.add(this.bruteforcerBtn)
+            it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(startScanBtn)
         }
         rootContainer.add(BorderPanel(10).also { it.add(buttonPanel) })
@@ -226,6 +235,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         this.saveToProfileBtn.isEnabled = !on
         this.deleteProfileBtn.isEnabled = !on
         this.updateHeadersBtn.isEnabled = !on
+        this.bruteforcerBtn.isEnabled = !on
         this.startScanBtn.isEnabled = !on
         this.startScanBtn.text = if (on) "Loading..." else "Analyze"
     }
@@ -241,6 +251,13 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         val url = this.verifyAndReturnUrl() ?: return
         val headers = Scanner.fetchHeadersForHost(url.host) ?: return
         this.requestTemplate = this.requestTemplate.withUpsertedHeaders(headers)
+    }
+
+    private fun launchBruteforcer() {
+        this.verifyAndReturnUrl() ?: return
+        this.updateRequestFromUrlField()
+        this.fixRequestNewlines()
+        this.scannerTab.launchBruteforcer()
     }
 
     fun updateProfilesList() {
