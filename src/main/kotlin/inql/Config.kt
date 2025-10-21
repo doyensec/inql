@@ -56,12 +56,14 @@ class Config private constructor() {
         "report.poi.show_custom_keywords" to true,
         "report.poi.custom_keywords" to "",
         "logging.level" to "WARNING",
+
         "bruteforcer.bucket_size" to 64,
         "bruteforcer.depth_limit" to 2,
         "bruteforcer.concurrency_limit" to 8,
         "bruteforcer.bruteforce_arguments" to true,
         "bruteforcer.custom_wordlist" to "",
         "bruteforcer.custom_arg_wordlist" to "",
+
         "proxy.highlight_enabled" to true,
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
         "editor.formatting.enabled" to true,

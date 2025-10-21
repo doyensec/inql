@@ -96,13 +96,13 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
         }
     }
 
-    val restartScanButton = JButton("Restart Scans").also {
+    val restartScanButton = JButton("Re-scan POI").also {
         it.foreground = Color.WHITE
         it.background = Style.ThemeColors.Accent
         it.font = it.font.deriveFont(Font.BOLD)
         it.isBorderPainted = false
         it.addActionListener {
-            Logger.info("Restarting POI scan")
+            Logger.debug("Restarting POI scan")
             restartScans()
         }
     }
@@ -116,15 +116,14 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 val instances = ScanResultsView.getAllInstances()
                 Logger.info("Number of instances: ${instances.size}")
                 instances.parallelStream().forEach { instance ->
-                    Logger.debug("Scanning")
+                    Logger.debug("Scanning POI")
                     instance.refresh()
-                    Logger.debug("Done scanning")
+                    Logger.debug("Done scanning POI")
                 }
             }
 
             override fun done() {
-                Logger.info("Scan done")
-                restartScanButton.text = "Restart Scans"
+                restartScanButton.text = "Re-scan POI"
                 restartScanButton.isEnabled = true
             }
         }.execute()
