@@ -63,6 +63,12 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         this.newTab()
     }
 
+    fun stop() {
+        this.getScannerTabs().forEach {
+            it.cancel()
+        }
+    }
+
     override fun closeTab(idx: Int) {
         val tab = this.tabbedPane.getComponentAt(idx) as ScannerTab
         super.closeTab(idx)

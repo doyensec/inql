@@ -7,7 +7,7 @@ import graphql.schema.*
 import inql.Logger
 import inql.graphql.GQLSchema
 import inql.graphql.Utils
-import inql.utils.JsonFileReader
+import inql.utils.ResourceFileReader
 
 class POIScanner(private val schema: GQLSchema) {
     companion object {
@@ -28,12 +28,6 @@ class POIScanner(private val schema: GQLSchema) {
         private var defaultKeywords = mutableListOf<String>()
 
         fun getActiveKeywordsCount() = regexKeywords.size
-
-//        fun setCustomKeywords(customKeywords: String) {
-//            if (customKeywords.isNotEmpty()) {
-//                regexKeywords["custom"] = customKeywords.lines().joinToString("|")
-//            }
-//        }
 
         private val config = Config.getInstance()
 
@@ -71,7 +65,7 @@ class POIScanner(private val schema: GQLSchema) {
                 }
             }
 
-            val jsonString = JsonFileReader.readJsonFile("keywords.json")
+            val jsonString = ResourceFileReader.readFile("keywords.json")
             val type = object : TypeToken<List<KeywordCategory>>() {}.type
             val keywords = Gson().fromJson<List<KeywordCategory>>(jsonString, type)
 
@@ -121,6 +115,7 @@ class POIScanner(private val schema: GQLSchema) {
         val subscriptions = schema.subscriptions
         val results = mutableListOf<FieldResult>()
         val finalResults = mutableMapOf<String, MutableList<FieldResult>>()
+        val tmpResultsCache = mutableMapOf<String, MutableList<String>>() // for de-duplication
 
         for (q in queries) {
             results.addAll(scanField(q.value.type, "", "Query", depth))
@@ -137,8 +132,12 @@ class POIScanner(private val schema: GQLSchema) {
         for (r in results.distinct().toMutableList()) {
             if (r.type !in finalResults) {
                 finalResults[r.type] = mutableListOf(r)
+                tmpResultsCache[r.type] = mutableListOf(r.path)
             } else {
-                finalResults[r.type]!!.add(r)
+                if (r.path !in tmpResultsCache[r.type]!!) {
+                    finalResults[r.type]!!.add(r)
+                    tmpResultsCache[r.type]!!.add(r.path)
+                }
             }
         }
 
@@ -236,7 +235,7 @@ class POIScanner(private val schema: GQLSchema) {
 
         // Check field name against regex keywords
         for ((keywordName, regexPattern) in regexKeywords) {
-            if (Regex(regexPattern, RegexOption.IGNORE_CASE).containsMatchIn(field.name)) {
+            if (Regex("(\\\\W|^|_)($regexPattern)(\\\\W|\$|_)", RegexOption.IGNORE_CASE).containsMatchIn(field.name)) {
                 results.add(FieldResult(
                     type = keywordName,
                     path = path,

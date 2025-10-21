@@ -3,6 +3,7 @@ package inql
 import burp.Burp
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
+import inql.fingerprinter.Fingerprinter
 import inql.externaltools.ExternalToolsService
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
@@ -22,6 +23,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     // main tabs
     val scanner = Scanner(this)
     val attacker = Attacker(this)
+    val fingerprinter = Fingerprinter(this)
 
     init {
         Burp.Montoya.logging().raiseInfoEvent("InQL Started")
@@ -37,6 +39,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
         this.addTab("Scanner", this.scanner)
         this.addTab("Batch Queries", this.attacker)
+        this.addTab("Engine Fingerprinting", this.fingerprinter)
 
         // Register the extension main tab
         Burp.Montoya.userInterface().registerSuiteTab("InQL", this)
@@ -65,6 +68,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
+        scanner.stop()
     }
 
     fun getAvailableProfileId(name: String): String {

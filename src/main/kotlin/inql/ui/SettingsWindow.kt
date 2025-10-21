@@ -172,6 +172,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                 Spinner("Approximate max cache size in Kb", 0, 1073741824)
             ),
             SettingsElement(
+                "editor.formatting.wordwrap",
+                CheckBox("Enable word wrap in the GraphQL editor")
+            ),
+            SettingsElement(
                 "editor.send_to.strip_comments",
                 CheckBox("Strip GraphQL comments from the Scanner result tab when sending a request to another tool")
             ),
@@ -236,6 +240,17 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.poi.custom_keywords", TextArea("Custom keywords for points of interest", 6, 20)),
         )
 
+        val bruteforcerSection = SettingsSection(
+            "Schema bruteforcer",
+            "Use these settings to configure schema bruteforcer feature.",
+            SettingsElement("bruteforcer.bucket_size", Spinner("Number of fields used in a single query", 1, 128)),
+            SettingsElement("bruteforcer.depth_limit", Spinner("Maximum field depth to scan", 1, 128)),
+            SettingsElement("bruteforcer.concurrency_limit", Spinner("Threats number used during scan", 1, 128)),
+            SettingsElement("bruteforcer.bruteforce_arguments", CheckBox("Attempt to brute-force arguments. This option significantly increases the number of requests sent but typically yields better results")),
+            SettingsElement("bruteforcer.custom_wordlist", TextField("Custom wordlist for guessing types and fields. Leave empty to use default")),
+            SettingsElement("bruteforcer.custom_arg_wordlist", TextField("Custom wordlist for guessing fields arguments. Leave empty to use default")),
+        )
+
         val loggingLevelSection = SettingsSection(
             "Logging options",
             "Use these settings to configure the logging level of the extension.",
@@ -254,6 +269,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             featuresSection,
             JSeparator(JSeparator.HORIZONTAL),
             integrationsSection,
+            JSeparator(JSeparator.HORIZONTAL),
+            bruteforcerSection,
             JSeparator(JSeparator.HORIZONTAL),
             reportSection,
             JSeparator(JSeparator.HORIZONTAL),

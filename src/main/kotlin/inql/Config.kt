@@ -56,9 +56,16 @@ class Config private constructor() {
         "report.poi.show_custom_keywords" to true,
         "report.poi.custom_keywords" to "",
         "logging.level" to "WARNING",
+        "bruteforcer.bucket_size" to 64,
+        "bruteforcer.depth_limit" to 2,
+        "bruteforcer.concurrency_limit" to 8,
+        "bruteforcer.bruteforce_arguments" to true,
+        "bruteforcer.custom_wordlist" to "",
+        "bruteforcer.custom_arg_wordlist" to "",
         "proxy.highlight_enabled" to true,
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
         "editor.formatting.enabled" to true,
+        "editor.formatting.wordwrap" to true,
         "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
         "editor.send_to.strip_comments" to true,
         "editor.formatting.cache_size_kb" to 102400, // 100 MB Default
@@ -121,7 +128,6 @@ class Config private constructor() {
         } else {
             "not found"
         }
-//        Logger.debug(logStr)
         return output
     }
 
@@ -149,7 +155,6 @@ class Config private constructor() {
         } else {
             "not found"
         }
-//        Logger.debug(logStr)
         return output
     }
 
