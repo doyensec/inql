@@ -22,7 +22,7 @@ class Browser {
                 "chrome"
             }
         }
-        public fun getInternalBrowserPath(): String? {
+        fun getInternalBrowserPath(): String? {
             val executableName: String = getChromiumExecutableNameForOS()
 
             // Check in Burp jar's folder
@@ -79,7 +79,7 @@ class Browser {
             }
         }
 
-        public fun getChromiumArgs(path: String): List<String> {
+        fun getChromiumArgs(path: String): List<String> {
             val dataDir = Burp.getBurpDataDir()
             val args = mutableListOf(
                 "--disable-ipc-flooding-protection",
@@ -127,11 +127,13 @@ class Browser {
             if (File(extDir).isDirectory) {
                 args.add("--load-extension=$extDir")
             }
-
+            if (System.getProperty("user.name") == "root") {
+                args.add("--no-sandbox")
+            }
             return args
         }
 
-        public fun launchEmbedded(_uri: String): Boolean {
+        fun launchEmbedded(_uri: String): Boolean {
             val uri = if (_uri.startsWith("http")) _uri else "https://${_uri}"
             val pb = ProcessBuilder()
 
@@ -153,12 +155,12 @@ class Browser {
             return true
         }
 
-        public fun launchExternal(_uri: String): Boolean {
+        fun launchExternal(_uri: String): Boolean {
             val uri = if (_uri.startsWith("http")) _uri else "https://${_uri}"
             val customCommand = Config.getInstance().getString("integrations.browser.external.command") ?: ""
 
             if (customCommand.isEmpty() && Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(uri));
+                Desktop.getDesktop().browse(URI(uri))
                 return true
             } else {
                 val pb = ProcessBuilder()

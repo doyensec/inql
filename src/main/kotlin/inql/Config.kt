@@ -2,6 +2,9 @@ package inql
 
 import burp.Burp
 import burp.api.montoya.core.HighlightColor
+import inql.graphql.formatting.Formatter
+import inql.graphql.formatting.SizedLRUCache
+import kotlin.collections.set
 
 class Config private constructor() {
     companion object {
@@ -38,6 +41,8 @@ class Config private constructor() {
         "report.poi" to true,
         "report.poi.depth" to 2,
         "report.poi.format" to "text",
+
+        // hooks on POIScanner.kt
         "report.poi.auth" to true,
         "report.poi.privileged" to true,
         "report.poi.pii" to true,
@@ -45,20 +50,62 @@ class Config private constructor() {
         "report.poi.database" to true,
         "report.poi.debugging" to true,
         "report.poi.files" to true,
+
         "report.poi.deprecated" to true,
         "report.poi.custom_scalars" to true,
+        "report.poi.show_custom_keywords" to true,
         "report.poi.custom_keywords" to "",
-        "logging.level" to "WARN",
+        "logging.level" to "WARNING",
+
+        "bruteforcer.bucket_size" to 64,
+        "bruteforcer.depth_limit" to 2,
+        "bruteforcer.concurrency_limit" to 8,
+        "bruteforcer.bruteforce_arguments" to true,
+        "bruteforcer.custom_wordlist" to "",
+        "bruteforcer.custom_arg_wordlist" to "",
+
         "proxy.highlight_enabled" to true,
         "proxy.highlight_color" to HighlightColor.BLUE.displayName(),
         "editor.formatting.enabled" to true,
+        "editor.formatting.wordwrap" to true,
         "editor.formatting.timeout" to 1000, // Cutoff in milliseconds
         "editor.send_to.strip_comments" to true,
+        "editor.formatting.cache_size_kb" to 102400, // 100 MB Default
     )
 
-    private val hooks = hashMapOf<String, (Any) -> Unit>(
-        "logging.level" to { level -> Logger.setLevel(level.toString()) },
+    val hooks = hashMapOf<String, (Any) -> Unit>(
+        "logging.level" to { level ->
+            Logger.setLevel(level.toString())
+        },
+        "editor.formatting.cache_size_kb" to { cacheSize ->
+            val size = (cacheSize as? Number)?.toLong()
+            if (size != null) {
+                Formatter.globalCache.forEach { (_, value) ->
+                    (value as? SizedLRUCache)?.maxBytes = size * 1024
+                }
+            } else {
+                Logger.warning("Invalid type for 'editor.formatting.cache_size_kb': $cacheSize")
+            }
+        },
+        "proxy.highlight_enabled" to { enabled ->
+            if (enabled as Boolean) {
+                ProxyRequestHighlighter.start()
+            } else {
+                ProxyRequestHighlighter.stop()
+            }
+        }
     )
+
+    fun registerHook(key: String, hook: (Any) -> Unit) {
+        hooks[key] = hook
+    }
+
+    fun triggerHook(key: String) {
+        val value = get(key)
+        if (value != null && hooks.containsKey(key)) {
+            hooks[key]?.let { it(value) }
+        }
+    }
 
     fun getBoolean(key: String, scope: Scope = Scope.EFFECTIVE): Boolean? {
         var output: Boolean? = null
@@ -69,7 +116,6 @@ class Config private constructor() {
         }
         if (output == null && (scope == Scope.GLOBAL || scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
             output = globalStore.getBoolean(key)
-            scopeLog = Scope.GLOBAL
         }
         if (output == null && (scope == Scope.EFFECTIVE || scope == Scope.EFFECTIVE_GLOBAL)) {
             if (defaults[key] != null && defaults[key] is Boolean) {
@@ -84,7 +130,6 @@ class Config private constructor() {
         } else {
             "not found"
         }
-//        Logger.debug(logStr)
         return output
     }
 
@@ -112,7 +157,6 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
         return output
     }
 
@@ -141,7 +185,7 @@ class Config private constructor() {
         } else {
             "not found"
         }
-        Logger.debug(logStr)
+//        Logger.debug(logStr)
         return output
     }
 
@@ -156,8 +200,14 @@ class Config private constructor() {
             Scope.GLOBAL -> globalStore.setBoolean(key, value)
             else -> throw Exception("Invalid scope provided to set(): $scope")
         }
+
         if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
+            try {
+                hooks[key]?.let { it(value) }
+                Logger.debug("Hook executed for $key")
+            } catch (e: Exception) {
+                Logger.error("Failed to execute hook for $key: ${e.message}")
+            }
         }
     }
 
@@ -168,8 +218,14 @@ class Config private constructor() {
             Scope.GLOBAL -> globalStore.setInteger(key, value)
             else -> throw Exception("Invalid scope provided to set(): $scope")
         }
+
         if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
+            try {
+                hooks[key]?.let { it(value) }
+                Logger.debug("Hook executed for $key")
+            } catch (e: Exception) {
+                Logger.error("Failed to execute hook for $key: ${e.message}")
+            }
         }
     }
 
@@ -180,8 +236,14 @@ class Config private constructor() {
             Scope.GLOBAL -> globalStore.setString(key, value)
             else -> throw Exception("Invalid scope provided to set(): $scope")
         }
+
         if (hooks.containsKey(key)) {
-            hooks[key]?.let { it(value) }
+            try {
+                hooks[key]?.let { it(value) }
+                Logger.debug("Hook executed for $key")
+            } catch (e: Exception) {
+                Logger.error("Failed to execute hook for $key: ${e.message}")
+            }
         }
     }
 
@@ -201,14 +263,27 @@ class Config private constructor() {
 
             else -> throw Exception("Invalid scope provided to delete(): $scope")
         }
+
         if (hooks.containsKey(key)) {
-            hooks[key]?.let { this.get(key, scope)?.let { it1 -> it(it1) } }
+            try {
+                this.get(key, scope)?.let { newValue ->
+                    hooks[key]?.let { it(newValue) }
+                    Logger.debug("Hook executed for $key after deletion")
+                }
+            } catch (e: Exception) {
+                Logger.error("Failed to execute hook for $key after deletion: ${e.message}")
+            }
         }
     }
 
     fun reset(scope: Scope = Scope.PROJECT) {
-        this.keys(scope).forEach { key ->
+        val keysToReset = this.keys(scope)
+        keysToReset.forEach { key ->
             this.delete(key, scope)
+        }
+
+        keysToReset.filter { hooks.containsKey(it) }.forEach { key ->
+            triggerHook(key)
         }
     }
 

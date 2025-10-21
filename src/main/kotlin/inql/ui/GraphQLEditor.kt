@@ -15,8 +15,8 @@ import java.awt.Dimension
 import java.util.concurrent.CancellationException
 import javax.swing.*
 import javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES
-import javax.swing.text.SimpleAttributeSet
-import javax.swing.text.StyleConstants
+import javax.swing.text.*
+
 
 class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = false) : JPanel(BorderLayout()) {
 
@@ -25,6 +25,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
     private val watchdogCouroutingScope = CoroutineScope(Dispatchers.Default)
     private var runningJob: Job? = null
     private val timeout = Config.getInstance().getInt("editor.formatting.timeout") ?: 1000
+    private val shouldWordWrap = Config.getInstance().getBoolean("editor.formatting.wordwrap")
     private val mutex = Mutex() // Prevent writing from multiple coroutines at the same time
     private val backgroundColor = if (Burp.isDarkMode()) Color(43, 43, 43) else Color.WHITE
 
@@ -32,7 +33,7 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
         val editorFont = Burp.Montoya.userInterface().currentEditorFont()
         StyleConstants.setFontFamily(it, editorFont.family)
         StyleConstants.setFontSize(it, editorFont.size)
-        StyleConstants.setForeground(it, Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!![Style.StyleClass.NONE])
+        StyleConstants.setForeground(it, Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!![Style.StyleClass.KEYWORD])
     }
 
     private var styleMap = Style.STYLE_COLORS_BY_THEME[Burp.Montoya.userInterface().currentTheme()]!!.entries.associate {
@@ -53,13 +54,16 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
 
     private val scrollPane = JScrollPane(textPaneContainer).also {
         it.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
-        it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS
+        it.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         it.verticalScrollBar.unitIncrement = 16
     }
 
     private fun updateComponentSize() {
         try {
-            this.textPaneContainer.preferredSize = Dimension(this.scrollPane.width, textPane.preferredSize.height)
+            if (shouldWordWrap == true) {
+                this.textPaneContainer.preferredSize = Dimension(this.scrollPane.preferredSize.width, textPane.preferredSize.height)
+            }
+            scrollPane.horizontalScrollBar?.unitIncrement = 16
         } catch (e: Exception) {
             Logger.error("Exception caught while resizing JTextPane")
         }
@@ -95,13 +99,15 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
         }
     }
 
-    private fun setFormatted(content: String, styleMetadata: List<StyleMetadata>) {
+    private fun setFormatted(content: String, styleMetadata: List<StyleMetadata>?) {
         SwingUtilities.invokeLater {
             this.clear()
             try {
                 this.textPane.styledDocument.insertString(0, content, normalTextStyle)
-                for (styledToken in styleMetadata) {
-                    this.textPane.styledDocument.setCharacterAttributes(styledToken.start, styledToken.length, styleMap[styledToken.styleClass], false)
+                if (styleMetadata != null) {
+                    for (styledToken in styleMetadata) {
+                        this.textPane.styledDocument.setCharacterAttributes(styledToken.start, styledToken.length, styleMap[styledToken.styleClass], false)
+                    }
                 }
             } catch (e: OutOfMemoryError) {
                 this.clear()
@@ -147,8 +153,12 @@ class GraphQLEditor(readOnly: Boolean = false, val isIntrospection: Boolean = fa
             }
         } catch (e: CancellationException) {
             Logger.debug("Formatting job cancelled")
-        } catch (e: Exception) {
+        } catch (e: Exception) { // display without formating
             Logger.warning("Formatting job produced an exception: ${e.message}")
+            mutex.withLock {
+                this.setFormatted(s, null)
+                this.runningJob = null
+            }
         }
     }
 }

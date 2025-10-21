@@ -6,6 +6,8 @@ import java.awt.BorderLayout
 import javax.swing.JScrollPane
 import javax.swing.JTree
 import javax.swing.UIManager
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeWillExpandListener
 import javax.swing.event.TreeSelectionEvent
 import javax.swing.event.TreeSelectionListener
 import javax.swing.tree.DefaultMutableTreeNode
@@ -41,6 +43,27 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             it.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
             it.expandsSelectedPaths = true
         }
+
+        this.tree.addTreeWillExpandListener(object : TreeWillExpandListener {
+            override fun treeWillExpand(event: TreeExpansionEvent) {
+                val node = event.path.lastPathComponent
+                if (node is LazyTreeNodeWithCustomLabel) {
+                    node.ensureLoaded(tree.model as DefaultTreeModel)
+                }
+            }
+            override fun treeWillCollapse(event: TreeExpansionEvent) {}
+        })
+
+        tree.addTreeSelectionListener { e ->
+            val node = e.path.lastPathComponent
+            if (node is LazyLeafTreeNode) {
+                node.ensureLoaded(tree.model as DefaultTreeModel)
+                node.setSelectionRefreshCallback {
+                    view.selectionChangeListener(node as DefaultMutableTreeNode)
+                }
+            }
+        }
+
         this.root = DefaultMutableTreeNode("No results yet")
         this.tree.model = DefaultTreeModel(this.root)
         this.initUI()

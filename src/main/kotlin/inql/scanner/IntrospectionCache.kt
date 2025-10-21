@@ -13,16 +13,16 @@ import inql.Logger
  */
 class IntrospectionCache(val inql: InQL) {
     companion object {
-        const val NO_PROFILE = "NO_PROFILE";
+        const val NO_PROFILE = "NO_PROFILE"
     }
 
     private val cache = HashMap<String, HashMap<String, ScanResult>>()
 
-    public fun get(url: String, profile: String = NO_PROFILE): ScanResult? {
+    fun get(url: String, profile: String = NO_PROFILE): ScanResult? {
         return this.cache[url]?.get(profile)
     }
 
-    public fun put(url: String, profile: String = NO_PROFILE, scanResult: ScanResult) {
+    fun put(url: String, profile: String = NO_PROFILE, scanResult: ScanResult) {
         if (!this.cache.containsKey(url)) {
             this.cache[url] = HashMap<String, ScanResult>()
         }
@@ -30,22 +30,22 @@ class IntrospectionCache(val inql: InQL) {
         this.cache[url]!![profile] = scanResult
     }
 
-    public fun putIfNewer(url: String, profile: String = NO_PROFILE, scanResult: ScanResult) {
+    fun putIfNewer(url: String, profile: String = NO_PROFILE, scanResult: ScanResult) {
         val existingTS = this.get(url, profile)?.ts
         if (existingTS == null || existingTS.isBefore(scanResult.ts)) {
             this.put(url, profile, scanResult)
         }
     }
 
-    public fun getSchemasForUrl(url: String): Collection<String> {
+    fun getSchemasForUrl(url: String): Collection<String> {
         return this.cache[url]?.keys ?: emptySet()
     }
 
-    public fun remove(url: String, profile: String = NO_PROFILE) {
+    fun remove(url: String, profile: String = NO_PROFILE) {
         this.cache[url]?.remove(profile)
     }
 
-    public fun populateFromScanner() {
+    fun populateFromScanner() {
         Logger.debug("Populating from open Scanner Tabs...")
         val tabs = this.inql.scanner.getScannerTabs()
         for (tab in tabs) {
@@ -59,7 +59,7 @@ class IntrospectionCache(val inql: InQL) {
 
     }
 
-    public fun refresh() {
+    fun refresh() {
         this.cache.clear()
         this.populateFromScanner()
     }

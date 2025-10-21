@@ -5,12 +5,12 @@ import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
 import inql.Logger
 import inql.Profile
+import inql.graphql.formatting.Style
 import inql.scanner.Scanner
 import inql.scanner.ScannerTab
 import inql.ui.BorderPanel
 import inql.ui.BoxPanel
 import inql.ui.Label
-import inql.ui.MultilineLabel
 import inql.utils.getTextAreaComponent
 import inql.utils.withUpsertedHeaders
 import java.awt.BorderLayout
@@ -24,8 +24,10 @@ import java.awt.event.KeyEvent
 import java.net.URI
 import java.net.URISyntaxException
 import javax.swing.*
+import javax.swing.border.LineBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
+
 
 class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     companion object {
@@ -53,28 +55,75 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
 
     // Url Section
     private var urlChangeListener = UrlUnfocusListener(this)
+
     val urlField = JTextField().also {
         it.isFocusable = true
         it.putClientProperty("JTextField.placeholderText", "https://example.com/graphql")
         it.putClientProperty("JTextField.showClearButton", true)
         it.addKeyListener(UrlFieldKeyListener(this))
         it.addFocusListener(urlChangeListener)
+        it.document.addUndoableEditListener { this.validateUrlAndFileInput() }
+    }
+
+    private val urlTextField = BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) }
+
+    private val urlLabel = Label("GraphQL Endpoint URL", big = true).withPanel(5).also {
+        toolTipText = "Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"
     }
 
     // File Section
     private val fileChooser = ScannerFileChooser(this)
     private val fileField = JTextField().also {
         it.isFocusable = true
-        it.putClientProperty("JTextField.placeholderText", "GraphQL introspection schema in JSON format")
+        it.putClientProperty("JTextField.placeholderText", "[Optional] Schema File (.json / .graphql)")
         it.putClientProperty("JTextField.showClearButton", true)
         it.addFocusListener(fileChooser)
         it.maximumSize = it.preferredSize
         it.minimumSize = Dimension(500, it.preferredSize.height)
         it.preferredSize = Dimension(500, it.preferredSize.height)
         it.document.addDocumentListener(TextFieldClearListener(this))
+        it.document.addUndoableEditListener { this.validateUrlAndFileInput() }
     }
+
+    private val fileLabel = Label("GraphQL Schema", big = true).withPanel(5).also {
+        toolTipText = "InQL can query schema directly from GraphQL server. " +
+                        "If a server does not allow introspection functionality, provide schema as a file (in JSON or SDL format). " +
+                        "URL still needs to be provided to generate sample queries."
+    }
+
     private val selectFileButton = JButton("Select File").also {
         it.addActionListener(this.fileChooser)
+    }
+
+    fun isValidUrl(urlText: String): Boolean {
+        return try {
+            val uri = URI(urlText.trim())
+            uri.scheme != null && uri.host != null && uri.toURL() != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun validateUrlAndFileInput() {
+        val urlText = urlField.text
+        val isFileSelected = !fileField.text.isNullOrBlank()
+        val isUrlEmpty = urlText.isNullOrBlank()
+        val isUrlInvalid =  !isUrlEmpty && !isValidUrl(urlText)
+
+        if ((isFileSelected && isUrlEmpty) || isUrlInvalid) {
+            urlField.border = BorderFactory.createCompoundBorder(
+                LineBorder(Color.RED),
+                BorderFactory.createEmptyBorder(2, 4, 2, 4)
+            )
+            urlField.toolTipText = if (isUrlEmpty) {
+                "This field cannot be empty"
+            } else {
+                "Invalid URL format"
+            }
+        } else {
+            urlField.border = UIManager.getBorder("TextField.border")
+            urlField.toolTipText = null
+        }
     }
 
     // Request Template Section
@@ -107,6 +156,9 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             this.deleteSelectedProfile()
         }
     }
+    private val requestTemplateLabel = Label("Request Template", big = true).withPanel(5).also {
+        toolTipText ="Template of the HTTP request that will be used to send requests to the endpoint"
+    }
 
     // - Request stuff
     private val updateHeadersBtn = JButton("Fetch latest headers").also {
@@ -114,9 +166,16 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             this.updateHeaders()
         }
     }
+
+    private val bruteforcerBtn = JButton("Launch schema bruteforcer (Beta)").also {
+        it.addActionListener {
+            this.launchBruteforcer()
+        }
+    }
+
     private val startScanBtn = JButton("Analyze").also {
         it.foreground = Color.WHITE
-        it.background = Color(255, 88, 18)
+        it.background = Style.ThemeColors.Accent
         it.font = it.font.deriveFont(Font.BOLD)
         it.isBorderPainted = false
         it.addActionListener { this.startScan() }
@@ -143,11 +202,10 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         // 1. First block concerning URL
         rootContainer.let {
             //  1.1.1 First line, left - a big text label
-            it.add(Label("1. URL of the GraphQL endpoint", big = true).withPanel(5))
-            it.add(MultilineLabel("Provide the URL of the GraphQL endpoint, often includes the \"/graphql\" path"))
+            it.add(urlLabel)
 
             //  1.2 Second line - just a single Text field for URL
-            it.add(BorderPanel(10).also { it2 -> it2.add(BorderLayout.CENTER, this.urlField) })
+            it.add(urlTextField)
         }
 
         // A horizontal separator line between the blocks
@@ -155,20 +213,10 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         rootContainer.add(BorderPanel(3).also { it.add(separator) })
 
         // 2. Second block concerning file input
-        rootContainer.let {
-            // 2.1 First line - a big text label
-            it.add(Label("2. (Optional) GraphQL schema file (JSON or SDL format)", big = true).withPanel(5))
-            it.add(
-                MultilineLabel(
-                    "InQL can query schema directly from GraphQL server. " +
-                        "If a server does not allow introspection functionality, provide schema as a file (in JSON or SDL format). " +
-                        "URL still needs to be provided to generate sample queries.",
-                ),
-            )
-        }
+        rootContainer.add(fileLabel) // 2.1 First line - a big text label
 
         val fileInputPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
-            it.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            //it.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
             // 2.3.1 File field on the left
             it.add(this.selectFileButton)
             it.add(Box.createRigidArea(Dimension(10, 0)))
@@ -176,19 +224,17 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(this.fileField)
             it.add(Box.createHorizontalGlue())
         }
-        rootContainer.add(fileInputPanel)
+        rootContainer.add(BorderPanel(5, 10).also { it.add(fileInputPanel) })
 
         // A horizontal separator line between the blocks
         separator = JSeparator().also { it.orientation = SwingConstants.HORIZONTAL }
         rootContainer.add(BorderPanel(3).also { it.add(separator) })
 
         // 3. Third block with request template
-        rootContainer.let {
-            // 2.1 First line - a big text label
-            it.add(Label("3. Request Template", big = true).withPanel(5))
-            it.add(MultilineLabel("Template of the HTTP request that will be used to send requests to the endpoint"))
-        }
+        rootContainer.add(requestTemplateLabel)  // 2.1 First line - a big text label
 
+        // Profile UI elements commented out. Needs rework.
+        /*
         val profileLabelPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
             it.add(JLabel("Current Profile:"))
             it.add(Box.createRigidArea(Dimension(5, 0)))
@@ -197,8 +243,10 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(profileIdLabel)
         }
         rootContainer.add(BorderPanel(0, 5).also { it.add(profileLabelPanel) })
+        */
 
         val buttonPanel = BoxPanel(BoxLayout.LINE_AXIS).also {
+            /*
             it.add(this.profilesComboBox)
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.loadFromProfileBtn)
@@ -207,9 +255,12 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.deleteProfileBtn)
             it.add(Box.createHorizontalGlue())
-            it.add(this.updateHeadersBtn)
-            it.add(Box.createRigidArea(Dimension(10, 0)))
+            */
             it.add(startScanBtn)
+            it.add(Box.createRigidArea(Dimension(10, 0)))
+            it.add(this.bruteforcerBtn)
+            it.add(Box.createRigidArea(Dimension(10, 0)))
+            it.add(this.updateHeadersBtn)
         }
         rootContainer.add(BorderPanel(10).also { it.add(buttonPanel) })
 
@@ -226,6 +277,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         this.saveToProfileBtn.isEnabled = !on
         this.deleteProfileBtn.isEnabled = !on
         this.updateHeadersBtn.isEnabled = !on
+        this.bruteforcerBtn.isEnabled = !on
         this.startScanBtn.isEnabled = !on
         this.startScanBtn.text = if (on) "Loading..." else "Analyze"
     }
@@ -241,6 +293,13 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         val url = this.verifyAndReturnUrl() ?: return
         val headers = Scanner.fetchHeadersForHost(url.host) ?: return
         this.requestTemplate = this.requestTemplate.withUpsertedHeaders(headers)
+    }
+
+    private fun launchBruteforcer() {
+        this.verifyAndReturnUrl() ?: return
+        this.updateRequestFromUrlField()
+        this.fixRequestNewlines()
+        this.scannerTab.launchBruteforcer()
     }
 
     fun updateProfilesList() {
@@ -368,15 +427,8 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     }
 
     fun verifyAndReturnUrl(): URI? {
-        try {
-            var textUrl = this.urlField.text
-            if (textUrl.trim().isBlank()) return null
-            if (!textUrl.matches(Regex("^https?://.*"))) {
-                textUrl = "https://$textUrl"
-                this.urlField.text = textUrl
-            }
-            return URI.create(textUrl)
-        } catch (_: URISyntaxException) {
+        val textUrl = this.urlField.text.trim()
+        if (!isValidUrl(textUrl)) {
             JOptionPane.showMessageDialog(
                 Burp.Montoya.userInterface().swingUtils().suiteFrame(),
                 "Error parsing the target URL, make sure it's correctly formatted",
@@ -386,6 +438,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             )
             return null
         }
+        return URI.create(textUrl)
     }
 
     fun updateRequestFromUrlField() {
@@ -400,6 +453,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
     }
 
     fun updateUrlFieldFromRequest() {
+        if(this.urlField.text.isBlank()) return
         this.urlField.text = this.requestTemplate.url()
     }
 

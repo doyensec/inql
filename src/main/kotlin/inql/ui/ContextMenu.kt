@@ -55,6 +55,9 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     protected val sendToInqlAttackerAction = MenuAction("Batch attack", null) {
         this.sendRequestToInqlAttacker()
     }
+    protected val sendToInqlFingerprinterAction = MenuAction("Engine fingerprinter", null) {
+        this.sendRequestToInqlFingerprinter()
+    }
     protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL", null) {
         this.sendRequestToGraphiQL()
     }
@@ -93,6 +96,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendToIntruderAction,
         sendToRepeaterAction,
         sendToInqlAttackerAction,
+        sendToInqlFingerprinterAction,
         sendToInqlScannerAction,
         sendToGraphiqlAction,
         sendToVoyagerAction
@@ -120,6 +124,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
             this.popup.add(this.sendToInqlScannerAction)
         }
         this.popup.add(this.sendToInqlAttackerAction)
+        this.popup.add(this.sendToInqlFingerprinterAction)
 
         val embeddedActions = this.sendToEmbeddedToolActions
         if (embeddedActions.isNotEmpty()) {
@@ -148,6 +153,10 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
 
     private fun sendRequestToInqlAttacker() {
         inql.attacker.loadFromRequest(this.getRequest() ?: return)
+    }
+
+    private fun sendRequestToInqlFingerprinter() {
+        inql.fingerprinter.loadFromRequest(this.getRequest() ?: return)
     }
 
     private fun sendRequestToGraphiQL() {
@@ -195,7 +204,8 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
     private fun sendToInqlComponents(): MutableList<JMenuItem> {
         return mutableListOf<JMenuItem>(
             BurpMenuItem(super.sendToInqlScannerAction),
-            BurpMenuItem(super.sendToInqlAttackerAction)
+            BurpMenuItem(super.sendToInqlAttackerAction),
+            BurpMenuItem(super.sendToInqlFingerprinterAction)
         ).apply {
             for (action in super.sendToEmbeddedToolActions) {
                 this.add(BurpMenuItem(action))

@@ -19,7 +19,7 @@ import javax.swing.event.ChangeListener
 
 class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     private val tabFactory = ScannerTabFactory(this)
-    public val introspectionCache = IntrospectionCache(this.inql)
+    val introspectionCache = IntrospectionCache(this.inql)
 
     companion object {
         fun fetchHeadersForHost(
@@ -61,6 +61,12 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         this.setTabComponentFactory(this.tabFactory)
         this.addTitleChangeListener { this.tabTitleChangeListener(it) }
         this.newTab()
+    }
+
+    fun stop() {
+        this.getScannerTabs().forEach {
+            it.cancel()
+        }
     }
 
     override fun closeTab(idx: Int) {
