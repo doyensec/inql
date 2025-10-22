@@ -62,7 +62,7 @@ InQL now implements GraphiQL and GraphQL Voyager servers. You can send the analy
 ### :point_up: Engine Fingerprinting
 This tab allows you to scan a GraphQL URL to retrieve information about the backend server technology.
 
-### :construction: Schema Bruteforcer (Beta)
+### :construction: Schema Bruteforcer
 This scanner is designed to recreate the schema when introspection is disabled. It is based on [Clairvoyance CLI tool](https://github.com/nikitastupin/clairvoyance), using regex pattern matching to discover schema details.
 
 # :arrow_down: Installation
