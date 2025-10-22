@@ -13,25 +13,13 @@
 
 ## :rocket: Introduction
 
-Welcome to InQL v6.0, a major update for our open-source GraphQL testing tool. This version provides new and improved features designed to enhance your GraphQL testing experience, making it more efficient and effective.
+Welcome to InQL, an open-source GraphQL testing tool. This tool provides features designed to enhance your GraphQL testing experience, making it more efficient and effective. 
 
 We appreciate your trust in InQL. Happy testing!
 
-## :warning: Whats new in v6.0
+## :star2: Key Features
 
-InQL v6.0 release is focused on improving performance and overall responsiveness of the tool. The whole project has been rewritten into the Kotlin programming language, resulting in a significant speed increase when parsing large GraphQL schemas. 
-
-The version v6.0 also moves away from the soon-to-be-deprecated [GQLSpection](https://github.com/doyensec/GQLSpection) library. Instead, the tool now uses [graphql-java](https://github.com/graphql-java/graphql-java). This shift allows us to concentrate on implementing new security-related features without the added complexity of maintaining the GraphQL parsing library. Additionally, the Java library is faster and more compatible with our Kotlin rewrite.
-
-The new release also brings new important features such as:
-- A built-in GraphiQL and GraphQL Voyager servers, enabling schema visualization even when the target system doesn’t expose such interfaces
-- A circular references detector to identify potentially vulnerable fields
-- An improved batch queries screen
-- Speeeeeed! :rocket:
-
-## :star2: Features
-
-The InQL user interface is equipped with two primary components: the *Scanner* and the *Batch Queries* tab.
+The InQL user interface is equipped with three primary components: the *Scanner*, the *Batch Queries*, and the *Engine Fingerprinting* tab
 
 ### :mag_right: Scanner
 
@@ -70,6 +58,12 @@ Burp's native message editors now come with an additional 'GraphQL (InQL)' tab, 
 ### :crossed_swords: GraphiQL and GraphQL Voyager
 
 InQL now implements GraphiQL and GraphQL Voyager servers. You can send the analysed schame into them to enhance the analysis even further!
+
+### :point_up: Engine Fingerprinting
+This tab allows you to scan a GraphQL URL to retrieve information about the backend server technology.
+
+### :construction: Schema Bruteforcer (Beta)
+This scanner is designed to recreate the schema when introspection is disabled. It is based on [Clairvoyance CLI tool](https://github.com/nikitastupin/clairvoyance), using regex pattern matching to discover schema details.
 
 # :arrow_down: Installation
 
