@@ -73,11 +73,8 @@ This tab allows fingerprinting engine used by the GraphQL server. It works by se
 <br/>
 When a match is found, it displays the server’s security features based on data from the GraphQL Threat Matrix.
 <br/><br/>
-This feature is inspired by the graphw00f CLI tool.
-<br/>
 <h2>References</h2>
-- https://github.com/dolevf/graphw00f<br/>
-- https://github.com/nicholasaleks/graphql-threat-matrix<br/>
+- https://github.com/nicholasaleks/graphql-threat-matrix<br/><br/>
 """)
         editorPane.setEditable(false)
 
