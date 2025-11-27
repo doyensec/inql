@@ -173,6 +173,11 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         }
     }
 
+    private val cancelBruteforcerBtn = JButton("Cancel bruteforce").also {
+        it.isVisible = false
+        it.addActionListener { this.scannerTab.cancel() }
+    }
+
     private val startScanBtn = JButton("Analyze").also {
         it.foreground = Color.WHITE
         it.background = Style.ThemeColors.Accent
@@ -259,6 +264,7 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
             it.add(startScanBtn)
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.bruteforcerBtn)
+            it.add(this.cancelBruteforcerBtn)
             it.add(Box.createRigidArea(Dimension(10, 0)))
             it.add(this.updateHeadersBtn)
         }
@@ -280,6 +286,12 @@ class ScanConfigView(val scannerTab: ScannerTab) : BorderPanel(10) {
         this.bruteforcerBtn.isEnabled = !on
         this.startScanBtn.isEnabled = !on
         this.startScanBtn.text = if (on) "Loading..." else "Analyze"
+    }
+
+    fun setBruteforcerRunning(isRunning: Boolean) {
+        this.cancelBruteforcerBtn.isVisible = isRunning
+        this.cancelBruteforcerBtn.isEnabled = isRunning
+        this.bruteforcerBtn.isVisible = !isRunning
     }
 
     fun startScan() {
