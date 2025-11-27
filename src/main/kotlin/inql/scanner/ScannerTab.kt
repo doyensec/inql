@@ -127,6 +127,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     fun cancel() {
         bruteforcerJob?.cancel()
         this.scanConfigView.setBusy(false)
+        this.scanConfigView.setBruteforcerRunning(false)
     }
 
     fun showConfigView() {
@@ -172,10 +173,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     }
 
     fun launchBruteforcer() {
+        if (this.bruteforcerJob?.isActive == true) {
+            Logger.debug("Bruteforcer already running, ignoring duplicate launch request")
+            return
+        }
         if (this.scanConfigView.verifyAndReturnUrl() == null) return
         if (!this.shouldStartBruteforce()) return
         this.normalizeHeaders()
         this.scanConfigView.setBusy(true)
+        this.scanConfigView.setBruteforcerRunning(true)
         bruteforcerJob = coroutineScope.launch {
             try {
                 this@ScannerTab.bruteforce()
@@ -183,7 +189,9 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
                 // This block runs whether the coroutine completes or is cancelled
                 withContext(Dispatchers.Main) {
                     this@ScannerTab.scanConfigView.setBusy(false)
+                    this@ScannerTab.scanConfigView.setBruteforcerRunning(false)
                 }
+                this@ScannerTab.bruteforcerJob = null
             }
         }
     }
@@ -269,6 +277,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         } catch (e: EmptyOrIncorrectWordlistException) {
             scanFailed(e.toString())
             return
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             scanFailed("Failed to bruteforce schema")
             Logger.debug(e.stackTraceToString())
@@ -360,6 +370,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     private fun scanCompleted() {
         this.scanConfigView.setBusy(false) // Do we need this?
+        this.scanConfigView.setBruteforcerRunning(false)
         this.showView(SCAN_RESULT_VIEW)
         this.scanResultsView.refresh()
         this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
@@ -368,6 +379,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     private fun scanFailed(reason: String?, logToError: Boolean = true) {
         if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
         this.scanConfigView.setBusy(false)
+        this.scanConfigView.setBruteforcerRunning(false)
     }
 
     fun getTabTitle(): String {
