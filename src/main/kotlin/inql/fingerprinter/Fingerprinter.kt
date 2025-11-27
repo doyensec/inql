@@ -188,6 +188,15 @@ Fingerprinting...
             } else {
                 setMarkdown("# Couldn't fingerprint server engine")
             }
+        } else {
+          var markdown = """
+# Couldn't fingerprint server engine
+The server is not a GraphQL server or the server is not responding.<br/>
+If you think this is a mistake, please report it to the InQL team.<br/>
+https://github.com/inql/inql/issues<br/>
+If you want to help us fix this, please submit a pull request.<br/>
+          """
+          setMarkdown(markdown)
         }
     }
 

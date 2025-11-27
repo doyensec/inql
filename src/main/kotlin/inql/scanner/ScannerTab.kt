@@ -13,6 +13,7 @@ import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
 import inql.savestate.SavesAndLoadData
+import inql.Config
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.scanner.scanconfig.ScanConfigView
@@ -21,10 +22,14 @@ import inql.ui.EditableTab
 import inql.ui.ErrorDialog
 import inql.utils.withUpsertedHeaders
 import kotlinx.coroutines.*
+import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
+import javax.swing.BoxLayout
+import javax.swing.JLabel
+import javax.swing.JOptionPane
 import javax.swing.JPanel
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
@@ -168,6 +173,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun launchBruteforcer() {
         if (this.scanConfigView.verifyAndReturnUrl() == null) return
+        if (!this.shouldStartBruteforce()) return
         this.normalizeHeaders()
         this.scanConfigView.setBusy(true)
         bruteforcerJob = coroutineScope.launch {
@@ -179,6 +185,44 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
                     this@ScannerTab.scanConfigView.setBusy(false)
                 }
             }
+        }
+    }
+
+    private fun shouldStartBruteforce(): Boolean {
+        val summary = buildBruteforceSummary()
+        val summaryPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
+            summary.trimEnd().lines().forEach { line ->
+                add(JLabel(line))
+            }
+
+            add(JLabel(" "))
+            add(JLabel("If you want to change the settings, you can click 'Cancel' and open extension settings."))
+            add(JLabel(" "))
+        }
+        val panel = JPanel(BorderLayout()).apply {
+            add(JLabel("Schema bruteforcer will run with the following settings:"), BorderLayout.NORTH)
+            add(summaryPanel, BorderLayout.CENTER)
+        }
+        val result = JOptionPane.showOptionDialog(
+            Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+            panel,
+            "Do you want to start schema bruteforcer?",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            arrayOf("Start", "Cancel"),
+            "Start"
+        )
+        return result == JOptionPane.YES_OPTION
+    }
+
+    private fun buildBruteforceSummary(): String {
+        return buildString {
+            appendLine("Depth limit: ${Config.getInstance().getInt("bruteforcer.depth_limit")}")
+            appendLine("Bucket size: ${Config.getInstance().getInt("bruteforcer.bucket_size")}")
+            appendLine("Number of threads: ${Config.getInstance().getInt("bruteforcer.concurrency_limit")}")
+            appendLine("Bruteforce arguments: ${Config.getInstance().getBoolean("bruteforcer.bruteforce_arguments")}")
         }
     }
 
