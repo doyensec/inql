@@ -15,6 +15,9 @@ plugins {
 }
 
 dependencies {
+    compileOnly 'com.formdev:flatlaf:3.7'
+    compileOnly 'com.formdev:flatlaf-extras:3.7'
+
     implementation 'net.portswigger.burp.extender:burp-extender-api:2.3'
     implementation 'net.portswigger.burp.extensions:montoya-api:2023.5'
     implementation 'com.google.code.gson:gson:2.10.1'
@@ -23,8 +26,6 @@ dependencies {
     implementation 'commons-codec:commons-codec:1.16.1'
     implementation 'io.ktor:ktor-server-core:3.1.1'
     implementation 'io.ktor:ktor-server-netty:3.1.1'
-    implementation 'com.formdev:flatlaf:3.4'
-    implementation 'com.formdev:flatlaf-extras:3.4'
     implementation 'com.graphql-java:graphql-java:21.5'
     implementation "org.jetbrains:markdown:0.7.3"
     implementation "com.vladsch.flexmark:flexmark-all:0.64.0"
@@ -36,7 +37,6 @@ java {
     sourceCompatibility = 17
     targetCompatibility = 17
 }
-
 tasks.withType(KotlinCompile).configureEach {
     compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
 }

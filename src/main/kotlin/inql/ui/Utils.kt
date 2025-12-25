@@ -337,7 +337,11 @@ class SettingsTabButton() : JPanel() {
         icon?.let {
             val iconLabel = JLabel(it)
             clickablePart.add(iconLabel)
-            it.colorFilter = DarkModeFilter(Color.LIGHT_GRAY)
+            try {
+                it.colorFilter = DarkModeFilter(Color.LIGHT_GRAY)
+            } catch (e: Throwable) {
+                Logger.info("InQL: Dark mode icon filtering not supported in this Burp version.")
+            }
         }
 
         // Add the text label
