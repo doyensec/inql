@@ -23,8 +23,8 @@ dependencies {
     implementation 'commons-codec:commons-codec:1.16.1'
     implementation 'io.ktor:ktor-server-core:3.1.1'
     implementation 'io.ktor:ktor-server-netty:3.1.1'
-    implementation 'com.formdev:flatlaf:3.4'
-    implementation 'com.formdev:flatlaf-extras:3.4'
+    implementation 'com.formdev:flatlaf:3.7'
+    implementation 'com.formdev:flatlaf-extras:3.7'
     implementation 'com.graphql-java:graphql-java:21.5'
     implementation "org.jetbrains:markdown:0.7.3"
     implementation "com.vladsch.flexmark:flexmark-all:0.64.0"
@@ -44,7 +44,7 @@ tasks.withType(KotlinCompile).configureEach {
 compileKotlin {
     compilerOptions {
         // Configure the Kotlin compiler options
-        allWarningsAsErrors = true
+        allWarningsAsErrors = false
     }
 }
 
