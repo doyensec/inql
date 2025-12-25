@@ -1,5 +1,6 @@
 package inql.ui
 
+import inql.Logger
 import java.awt.*
 import java.awt.event.*
 import javax.swing.*
@@ -136,7 +137,11 @@ class EditableTabTitle(title: String, val component: Component, val isDarkMode: 
 
 class EditableTab(val tabTitle: EditableTabTitle, val isDarkMode: Boolean) : BoxPanel(BoxLayout.Y_AXIS, gap = 0) {
     private val closeIcon = loadSvgIcon("resources/Media/svg/close.svg", 8)?.also {
-        it.colorFilter = DarkModeFilter(Color.WHITE)
+        try {
+            it.colorFilter = DarkModeFilter(Color.WHITE)
+        } catch (e: Throwable) {
+            Logger.info("InQL: Dark mode icon filtering not supported in this Burp version.")
+        }
     }
     val closeButton = if (closeIcon != null) JButton(closeIcon) else JButton("⨉")
     val closeListeners = ArrayList<(EditableTab) -> Unit>()
@@ -269,7 +274,11 @@ open class EditableTabbedPane : TabbedPane() {
                     val panel = JPanel()
 
                     val icon = loadSvgIcon("resources/Media/svg/add.svg", 18)?.also {
-                        it.colorFilter = DarkModeFilter(Color.WHITE)
+                        try {
+                            it.colorFilter = DarkModeFilter(Color.WHITE)
+                        } catch (e: Throwable) {
+                            Logger.info("InQL: Dark mode icon filtering not supported in this Burp version.")
+                        }
                     }
                     icon?.let {
                         panel.add(JLabel(icon))
