@@ -38,6 +38,8 @@ class Config private constructor() {
         "report.sdl" to true,
         "report.cycles" to true,
         "report.cycles.depth" to 100,
+        "report.cycles.max" to 10_000,
+        "report.cycles.poc.repetitions" to 10,
         "report.poi" to true,
         "report.poi.depth" to 2,
         "report.poi.format" to "text",

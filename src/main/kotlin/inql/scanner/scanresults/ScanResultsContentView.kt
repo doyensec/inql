@@ -3,6 +3,8 @@ package inql.scanner.scanresults
 import burp.Burp
 import burp.api.montoya.core.ByteArray
 import burp.api.montoya.ui.editor.EditorOptions
+import inql.graphql.scanners.CycleResult
+import inql.scanner.ScanResult
 import inql.ui.BorderPanel
 import inql.ui.GraphQLEditor
 import inql.ui.SendFromInqlHandler
@@ -16,10 +18,12 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
     companion object {
         const val RAW_EDITOR_CARD = "RAW_EDITOR_CARD"
         const val GQL_EDITOR_CARD = "GQL_EDITOR_CARD"
+        const val CYCLE_CARD = "CYCLE_CARD"
     }
 
     val rawEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
     val gqlEditor = GraphQLEditor(readOnly = true, isIntrospection = true)
+    private val cyclePanel = CycleDetectionPanel(view)
     var selectedCard: String = RAW_EDITOR_CARD
         private set
 
@@ -35,6 +39,9 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         gqlEditorCard.add(gqlEditor, BorderLayout.CENTER)
         gqlEditorCard.add(gqlEditorSearchPanel, BorderLayout.SOUTH)
         this.add(gqlEditorCard, GQL_EDITOR_CARD)
+
+        // Cycle Detection card
+        this.add(cyclePanel, CYCLE_CARD)
 
         this.show(RAW_EDITOR_CARD)
     }
@@ -59,10 +66,21 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         this.show(RAW_EDITOR_CARD)
     }
 
+    fun loadCycleLoading() {
+        this.cyclePanel.showLoading()
+        this.show(CYCLE_CARD)
+    }
+
+    fun loadCycleResults(scanResult: ScanResult, cycles: List<CycleResult>) {
+        this.cyclePanel.showResults(scanResult, cycles)
+        this.show(CYCLE_CARD)
+    }
+
     fun getText(): String {
         return when (selectedCard) {
             RAW_EDITOR_CARD -> this.rawEditor.contents.toString()
             GQL_EDITOR_CARD -> this.gqlEditor.getQuery()
+            CYCLE_CARD -> this.cyclePanel.getExportText()
             else -> ""
         }
     }

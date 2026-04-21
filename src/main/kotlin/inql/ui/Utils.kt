@@ -308,7 +308,6 @@ fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
     val scalingFactor = height.toFloat() / svgIcon.iconHeight.toFloat()
 
     // Return a new svgIcon derived with the scaling factor, or null if the original icon had a height of 0 to prevent division by zero.
-    svgIcon.colorFilter
     return if (svgIcon.iconHeight > 0) svgIcon.derive(scalingFactor) else null
 }
 
@@ -356,12 +355,6 @@ class SettingsTabButton() : JPanel() {
             }
         })
         add(clickablePart)
-    }
-
-    private fun autoScale(icon: FlatSVGIcon): FlatSVGIcon {
-        val height = this.preferredSize.height
-        val scalingFactor = height.toFloat() / icon.iconHeight
-        return icon.derive(scalingFactor)
     }
 }
 

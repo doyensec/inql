@@ -62,6 +62,12 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
                     view.selectionChangeListener(node as DefaultMutableTreeNode)
                 }
             }
+            if (node is CycleDetectionLazyNode) {
+                node.ensureLoaded(tree.model as DefaultTreeModel)
+                node.setSelectionRefreshCallback {
+                    view.selectionChangeListener(node as DefaultMutableTreeNode)
+                }
+            }
         }
 
         this.root = DefaultMutableTreeNode("No results yet")
