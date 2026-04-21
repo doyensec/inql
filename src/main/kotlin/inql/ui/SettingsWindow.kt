@@ -144,7 +144,16 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
             SettingsElement("report.json", CheckBox("Dump introspection schema in JSON format")),
             SettingsElement("report.sdl", CheckBox("Dump GraphQL schema in SDL format")),
             SettingsElement("report.cycles", CheckBox("Test schema for cycles and report findings")),
-            SettingsElement("report.cycles.depth", Spinner("Maximum depth of the generated queries", 1, 1000)),
+            SettingsElement("report.cycles.depth", Spinner("Maximum recursion depth when scanning for cycles", 1, 1000)),
+            SettingsElement("report.cycles.max", Spinner("Maximum number of cycles to record", 1, 100_000)),
+            SettingsElement(
+                "report.cycles.poc.repetitions",
+                Spinner(
+                    "Number of cycles in PoC request",
+                    1,
+                    100,
+                ),
+            ),
         )
 
         val featuresSection = SettingsSection(

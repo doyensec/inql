@@ -32,7 +32,7 @@ open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (
     This class is also extended below from SendToInqlHandler which instead provides the Extension Context Menu "InQL >" for
     Burp's standard context menu in other Burp tools (Scanner, Proxy, etc).
  */
-abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boolean = false) : MouseAdapter() {
+abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boolean = false, val includeSaveToFile: Boolean = true) : MouseAdapter() {
     private val popup = JPopupMenu()
 
     // ===== Actions associated with Menu Items
@@ -110,11 +110,18 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
     }
 
+    /** Subclasses may add items (e.g. Copy) after the standard entries. */
+    protected open fun appendBottomContextMenuItems(popup: JPopupMenu) {}
+
     // Populate the right click menu in InQL views (InQL Scanner, GraphQL editor view)
     // The context menus added by Burp itself **are not handled here** (e.g. Repeater - Raw editor - right click)
     // In order to add elements to Burp's menu (Extensions - InQL - ...), modify sendToInqlComponents in SendToInqlHandler class
     private fun setContextActions() {
         this.popup.removeAll()
+
+        if (this.popup.componentCount > 0) {
+            this.popup.addSeparator()
+        }
 
         this.popup.add(this.sendToIntruderAction)
         this.popup.add(this.sendToRepeaterAction)
@@ -134,8 +141,13 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
                 this.popup.add(action)
             }
         }
-        this.popup.addSeparator()
-        this.popup.add(this.saveToFileAction)
+
+        if (this.includeSaveToFile) {
+            this.popup.addSeparator()
+            this.popup.add(this.saveToFileAction)
+        }
+
+        appendBottomContextMenuItems(this.popup)
     }
 
     // ===== Convenience methods for the actions

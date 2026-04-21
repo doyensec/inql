@@ -2,7 +2,6 @@ package inql.scanner.scanresults
 
 import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.JsonObject
 import inql.Config
 import inql.Logger
 import inql.scanner.ScanResult
@@ -76,13 +75,13 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         return n.userObject as ScanResult
     }
 
-    private fun generateRequest(requestTemplate: HttpRequest, query: String): HttpRequest? {
-        // Find corresponding scanResult
-        val reqData = JsonObject()
-        reqData.addProperty("query", query)
+    /**
+     * Rebuilds [requestTemplate] with a new body (same URL/service as the captured scan request).
+     */
+    internal fun requestTemplateWithBody(requestTemplate: HttpRequest, body: String): HttpRequest {
         return requestTemplate
             .withService(HttpService.httpService(requestTemplate.url()))
-            .withBody(query)
+            .withBody(body)
     }
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
@@ -97,8 +96,16 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 this.sendToHandler.setEnabled(true)
                 this.currentNode = node
             }
+            is CycleDetectionPayload -> {
+                when (content) {
+                    is CycleDetectionPayload.Loading -> this.payloadView.loadCycleLoading()
+                    is CycleDetectionPayload.Ready -> this.payloadView.loadCycleResults(content.scanResult, content.cycles)
+                }
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
+            }
             is ScanResultElement -> {
-                // If it's something else, (PoI, Cycle detection), don't
+                // If it's something else (e.g. PoI), show as text
                 this.payloadView.load(content.content())
                 this.currentNode = null
                 this.sendToHandler.setEnabled(false)
@@ -106,6 +113,8 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
             else -> Logger.error("Unknown node type selected! ${content.javaClass.name}")
         }
     }
+
+    fun getPayloadText(): String = payloadView.getText()
 
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
@@ -117,11 +126,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
             val node = view.currentNode ?: return null
             val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
 
-            return view.generateRequest(requestTemplate, query)
+            return view.requestTemplateWithBody(requestTemplate, query)
         }
 
         override fun getText(): String {
-            return view.payloadView.getText()
+            return view.getPayloadText()
         }
     }
 }

@@ -4,32 +4,49 @@ import graphql.schema.*
 import inql.Logger
 import inql.graphql.GQLSchema
 
-class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 100) {
+class CyclesScanner(
+    private val schema: GQLSchema,
+    private val maxDepth: Int = 100,
+    private val maxCycles: Int = 10_000,
+) {
     private val visited = mutableSetOf<Pair<String, String?>>()
     private val visiting = mutableListOf<Pair<String, String?>>()
-    private var cycles = mutableListOf<List<Pair<String, String?>>>()
+    private var cycles = mutableListOf<RawCycle>()
+
+    private data class RawCycle(
+        val operationType: GQLSchema.OperationType,
+        val nodes: List<Pair<String, String?>>,
+    )
 
     fun detect() {
-        val all = schema.queries + schema.mutations + schema.subscriptions
+        val allQueries = schema.queries.map { (k, v) -> Triple(k, v, GQLSchema.OperationType.QUERY) }
+        val allMutations = schema.mutations.map { (k, v) -> Triple(k, v, GQLSchema.OperationType.MUTATION) }
+        val allSubs = schema.subscriptions.map { (k, v) -> Triple(k, v, GQLSchema.OperationType.SUBSCRIPTION) }
 
-        for (q in all) {
-            detectCycle(q.key, q.value.type )
+        for ((name, def, op) in allQueries + allMutations + allSubs) {
+            if (cycles.size >= maxCycles) break
+            detectCycle(name, def.type, 0, op)
             visiting.clear()
             visited.clear()
         }
 
-        // deduplication
         cycles = cycles.distinct().toMutableList()
-
     }
 
-    private fun detectCycle(fieldName: String, gqlType: GraphQLType, currentDepth: Int = 0): Boolean {
+    private fun detectCycle(
+        fieldName: String,
+        gqlType: GraphQLType,
+        currentDepth: Int = 0,
+        operationType: GQLSchema.OperationType,
+    ): Boolean {
+        if (cycles.size >= maxCycles) {
+            return false
+        }
         if (currentDepth >= maxDepth) {
             Logger.error("Max recursion depth reached ($maxDepth). Might miss some cycles.")
             return false
         }
 
-        // Properly unwrap all type wrappers (non-null, list, etc.)
         val baseType = GraphQLTypeUtil.unwrapAll(gqlType)
         val typeName = baseType.name
 
@@ -46,8 +63,8 @@ class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 1
 
                     when {
                         fieldType is GraphQLList -> {
-                            val wrappedType = GraphQLTypeUtil.unwrapAll(fieldType.originalWrappedType)
-                            if (detectCycle(field.name, wrappedType, currentDepth + 1)) {
+                            val wrappedType = GraphQLTypeUtil.unwrapAll(fieldType.wrappedType)
+                            if (detectCycle(field.name, wrappedType, currentDepth + 1, operationType)) {
                                 return true
                             }
                         }
@@ -55,19 +72,23 @@ class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 1
                         fieldType is GraphQLObjectType -> {
                             val nextPair = field.name to fieldType.name
                             if (nextPair !in visited) {
-                                if (detectCycle(field.name, fieldType, currentDepth + 1)) {
+                                if (detectCycle(field.name, fieldType, currentDepth + 1, operationType)) {
                                     return true
                                 }
                             } else if (nextPair in visiting) {
+                                if (cycles.size >= maxCycles) {
+                                    Logger.warning("Maximum number of cycles to record ($maxCycles) reached; stopping.")
+                                    return true
+                                }
                                 val cycleNodes = visiting.toList() + nextPair
-                                cycles.add(cycleNodes)
+                                cycles.add(RawCycle(operationType, cycleNodes))
                                 return true
                             }
                         }
 
                         fieldType is GraphQLTypeReference -> {
                             schema.schema.getType((fieldType as GraphQLTypeReference).name)?.let { resolvedType ->
-                                if (detectCycle(field.name, resolvedType, currentDepth + 1)) {
+                                if (detectCycle(field.name, resolvedType, currentDepth + 1, operationType)) {
                                     return true
                                 }
                             }
@@ -77,22 +98,27 @@ class CyclesScanner(private val schema: GQLSchema, private val maxDepth: Int = 1
             }
 
             is GraphQLList -> {
-                // Unwrap list and check its contained type
-                val wrappedType = GraphQLTypeUtil.unwrapAll(baseType.originalWrappedType)
-                return detectCycle(fieldName, wrappedType, currentDepth)
+                val wrappedType = GraphQLTypeUtil.unwrapAll(baseType.wrappedType)
+                return detectCycle(fieldName, wrappedType, currentDepth, operationType)
             }
-
         }
 
         visiting.removeLast()
         return false
     }
 
-    private fun cycleAsString(cycle: List<Pair<String, String?>>): String {
-        return cycle.joinToString(" -> ") { (field, type) -> "$field ($type)" }
-    }
-
-    fun cyclesAsString(): String {
-        return cycles.joinToString("\n") { cycleAsString(it) }
+    fun cycleResults(): List<CycleResult> {
+        return cycles.map { raw ->
+            val names = raw.nodes.map { it.first }
+            val closingPair = raw.nodes.last()
+            val repeatStart = raw.nodes.dropLast(1).indexOfFirst { it == closingPair }.let { idx ->
+                if (idx < 0) 0 else idx
+            }
+            CycleResult(
+                operationType = raw.operationType,
+                pathFieldNames = names,
+                cycleRepeatStartIndex = repeatStart,
+            )
+        }
     }
 }

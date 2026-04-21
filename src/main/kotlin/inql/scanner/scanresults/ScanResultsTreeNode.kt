@@ -94,6 +94,44 @@ class LazyLeafTreeNode(
     }
 }
 
+class CycleDetectionLazyNode(
+    label: String,
+    private val scanResult: ScanResult,
+    private val gqlSchema: GQLSchema,
+) : TreeNodeWithCustomLabel(label, CycleDetectionPayload.Loading, forceDirectory = false) {
+
+    private var loaded = false
+    private var selectionRefreshCallback: (() -> Unit)? = null
+
+    fun setSelectionRefreshCallback(callback: () -> Unit) {
+        this.selectionRefreshCallback = callback
+    }
+
+    fun ensureLoaded(model: DefaultTreeModel) {
+        if (loaded) return
+        loaded = true
+
+        CoroutineScope(Dispatchers.Default).launch {
+            val payload = try {
+                val config = Config.getInstance()
+                val maxDepth = config.getInt("report.cycles.depth")!!
+                val maxCycles = config.getInt("report.cycles.max")!!
+                val scanner = CyclesScanner(gqlSchema, maxDepth, maxCycles)
+                scanner.detect()
+                CycleDetectionPayload.Ready(scanner.cycleResults(), scanResult)
+            } catch (e: Exception) {
+                CycleDetectionPayload.Ready(emptyList(), scanResult)
+            }
+
+            withContext(Dispatchers.Swing) {
+                this@CycleDetectionLazyNode.userObject = payload
+                model.nodeChanged(this@CycleDetectionLazyNode)
+                selectionRefreshCallback?.invoke()
+            }
+        }
+    }
+}
+
 class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
     TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
     init {
@@ -155,13 +193,7 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         }
 
         if (config.getBoolean("report.cycles") == true) {
-            val cycleNode = LazyLeafTreeNode("Cycle Detection") {
-                val cycleScanner = CyclesScanner(gqlSchema)
-                cycleScanner.detect()
-                val results = cycleScanner.cyclesAsString()
-                results.ifBlank { "<no cycles detected>" }
-            }
-            this.add(cycleNode)
+            this.add(CycleDetectionLazyNode("Cycle Detection", this.scanResult, gqlSchema))
         }
 
         // Add request template

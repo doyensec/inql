@@ -1,6 +1,9 @@
 package inql.utils
 
 import graphql.schema.*
+import inql.Config
+import inql.graphql.GQLSchema
+import inql.graphql.scanners.CycleResult
 import inql.scanner.ScanResult
 
 data class QueryWithVariables(
@@ -23,6 +26,211 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             maxDepth = maxDepth
         )
         return formatToJson(queryWithVars)
+    }
+
+    /**
+     * Builds a JSON HTTP body (query + variables) that walks [cycle] along the schema, for Repeater / clipboard.
+     */
+    fun buildCyclePocJson(cycle: CycleResult): String {
+        val schema = scanResults.parsedSchema.schema
+        val config = Config.getInstance()
+        val argDepth = config.getInt("codegen.depth")!!
+        val cycleRepetitions = config.getInt("report.cycles.poc.repetitions")!!.coerceIn(1, 500)
+
+        val rootType = when (cycle.operationType) {
+            GQLSchema.OperationType.QUERY -> schema.queryType
+            GQLSchema.OperationType.MUTATION -> schema.mutationType
+                ?: throw IllegalArgumentException("Schema does not support mutations")
+            GQLSchema.OperationType.SUBSCRIPTION -> schema.subscriptionType
+                ?: throw IllegalArgumentException("Schema does not support subscriptions")
+        }
+
+        val path = expandCyclePathForPoc(
+            rootType = rootType,
+            pathFieldNames = cycle.pathFieldNames,
+            cycleRepeatStartIndex = cycle.cycleRepeatStartIndex,
+            cycleRepetitions = cycleRepetitions,
+        )
+        if (path.isEmpty()) {
+            throw IllegalArgumentException(
+                "Could not build a schema-valid cycle PoC path from this detection result (try another cycle or check the schema).",
+            )
+        }
+
+        val variablesMap = mutableMapOf<String, Any>()
+        val variableDefinitions = mutableListOf<String>()
+        val nestedVarCounter = mutableListOf(0)
+
+        val inner = buildCyclePathSelection(
+            container = rootType,
+            path = path,
+            pathIndex = 0,
+            baseIndent = 1,
+            variablesMap = variablesMap,
+            variableDefinitions = variableDefinitions,
+            nestedVarCounter = nestedVarCounter,
+            maxDepth = argDepth,
+        )
+
+        val opKeyword = when (cycle.operationType) {
+            GQLSchema.OperationType.QUERY -> "query"
+            GQLSchema.OperationType.MUTATION -> "mutation"
+            GQLSchema.OperationType.SUBSCRIPTION -> "subscription"
+        }
+
+        val query = buildString {
+            append("$opKeyword CyclePoc")
+            if (variableDefinitions.isNotEmpty()) {
+                append("(")
+                append(variableDefinitions.joinToString(", "))
+                append(")")
+            }
+            append(" {\n")
+            append(inner)
+            append("}")
+        }
+
+        return formatToJson(QueryWithVariables(query, variablesMap))
+    }
+
+    /**
+     * Root [prefix] once, then [cycleRepetitions] full passes of the loop body ([repeatUnit]).
+     * Long cycles have a longer [repeatUnit] per repetition; the setting controls laps, not total field count.
+     *
+     * The scanner stores field *names* only; the closing step often repeats the same (name, target type) pair as an
+     * earlier vertex, so name-based rules are unreliable. We pick prefix + loop by trying candidates and accepting
+     * the first that [cyclePathValidOnSchema] validates on [rootType] (longer loop first, then without last field).
+     */
+    private fun expandCyclePathForPoc(
+        rootType: GraphQLFieldsContainer,
+        pathFieldNames: List<String>,
+        cycleRepeatStartIndex: Int,
+        cycleRepetitions: Int,
+    ): List<String> {
+        if (pathFieldNames.isEmpty() || cycleRepetitions < 1) return emptyList()
+        val path = pathFieldNames
+        val start = cycleRepeatStartIndex.coerceIn(0, path.lastIndex)
+
+        if (path.size == 1) {
+            val once = listOf(path[0])
+            return if (cyclePathValidOnSchema(rootType, once)) once else emptyList()
+        }
+
+        val candidates = mutableListOf<Pair<List<String>, List<String>>>()
+        if (start == 0) {
+            val prefix = listOf(path[0])
+            if (path.size >= 2) {
+                candidates.add(prefix to path.subList(1, path.size))
+                if (path.size >= 3) {
+                    candidates.add(prefix to path.subList(1, path.size - 1))
+                }
+            }
+        } else {
+            val prefix = path.take(start)
+            candidates.add(prefix to path.subList(start, path.size))
+            if (path.size > start + 1) {
+                candidates.add(prefix to path.subList(start, path.size - 1))
+            }
+        }
+
+        for ((prefix, repeatUnit) in candidates.distinct()) {
+            if (repeatUnit.isEmpty()) continue
+            val expanded = buildList {
+                addAll(prefix)
+                repeat(cycleRepetitions) { addAll(repeatUnit) }
+            }
+            if (cyclePathValidOnSchema(rootType, expanded)) {
+                val maxFields = 2500
+                return if (expanded.size > maxFields) expanded.take(maxFields) else expanded
+            }
+        }
+
+        return emptyList()
+    }
+
+    /** Whether [path] can be walked from [root] with the same container rules as [buildCyclePathSelection]. */
+    private fun cyclePathValidOnSchema(root: GraphQLFieldsContainer, path: List<String>): Boolean {
+        if (path.isEmpty()) return false
+        var container: GraphQLFieldsContainer? = root
+        for ((i, name) in path.withIndex()) {
+            val c = container ?: return false
+            val field = c.getFieldDefinition(name) ?: return false
+            val next = cycleFieldsContainer(field.type)
+            val isLast = i == path.lastIndex
+            if (!isLast && next == null) return false
+            container = next
+        }
+        return true
+    }
+
+    private fun cycleFieldsContainer(type: GraphQLType): GraphQLFieldsContainer? {
+        val u = unwrapType(type)
+        return when (u) {
+            is GraphQLObjectType -> u
+            is GraphQLInterfaceType -> u
+            is GraphQLUnionType -> u.types.firstOrNull() as? GraphQLObjectType
+            else -> null
+        }
+    }
+
+    private fun buildCyclePathSelection(
+        container: GraphQLFieldsContainer,
+        path: List<String>,
+        pathIndex: Int,
+        baseIndent: Int,
+        variablesMap: MutableMap<String, Any>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
+        maxDepth: Int,
+    ): String {
+        if (pathIndex >= path.size) return ""
+
+        val fieldName = path[pathIndex]
+        val field = container.getFieldDefinition(fieldName)
+            ?: throw IllegalArgumentException("Field '$fieldName' not found on type '${container.name}'")
+
+        val args = processFieldArguments(
+            field,
+            pathIndex + 1,
+            maxDepth,
+            variablesMap,
+            variableDefinitions,
+            nestedVarCounter,
+        )
+
+        val indent = "  ".repeat(baseIndent)
+        val isLast = pathIndex == path.lastIndex
+        val unwrapped = unwrapType(field.type)
+
+        return buildString {
+            append(indent).append(fieldName).append(args)
+            if (isLast) {
+                val leafContainer = cycleFieldsContainer(field.type)
+                if (leafContainer != null) {
+                    append(" {\n")
+                    append("  ".repeat(baseIndent + 1)).append("__typename\n")
+                    append(indent).append("}")
+                }
+            } else {
+                val next = cycleFieldsContainer(field.type)
+                    ?: throw IllegalArgumentException("Cannot traverse field '$fieldName' for cycle PoC (non-composite type)")
+                append(" {\n")
+                append(
+                    buildCyclePathSelection(
+                        container = next,
+                        path = path,
+                        pathIndex = pathIndex + 1,
+                        baseIndent = baseIndent + 1,
+                        variablesMap = variablesMap,
+                        variableDefinitions = variableDefinitions,
+                        nestedVarCounter = nestedVarCounter,
+                        maxDepth = maxDepth,
+                    ),
+                )
+                append("\n").append(indent).append("}")
+            }
+            if (isLast) append("\n")
+        }
     }
 
     private fun generateOperation(
