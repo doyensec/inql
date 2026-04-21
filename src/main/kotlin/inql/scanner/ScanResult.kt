@@ -15,6 +15,7 @@ class ScanResult private constructor(
     val parsedSchema: GQLSchema,
     val jsonSchema: String? = null,
     val sdlSchema: String? = null,
+    val schemaDiscoverySource: SchemaDiscoverySource = SchemaDiscoverySource.INTROSPECTION,
     val ts: LocalDateTime,
     val uuid: String,
 ) : SavesDataToProject {
@@ -24,19 +25,34 @@ class ScanResult private constructor(
         parsedSchema: GQLSchema,
         jsonSchema: String? = null,
         sdlSchema: String? = null,
-    ) : this(host, requestTemplate, parsedSchema, jsonSchema, sdlSchema, LocalDateTime.now(), UUID.randomUUID().toString())
+        schemaDiscoverySource: SchemaDiscoverySource = SchemaDiscoverySource.INTROSPECTION,
+    ) : this(
+        host,
+        requestTemplate,
+        parsedSchema,
+        jsonSchema,
+        sdlSchema,
+        schemaDiscoverySource,
+        LocalDateTime.now(),
+        UUID.randomUUID().toString(),
+    )
 
     class Deserializer(key: String) : DeserializerFactory<ScanResult>(key) {
         override fun burpDeserialize(obj: PersistedObject) {
             val jsonSchema = obj.getString("jsonSchema")
             val sdlSchema = obj.getString("sdlSchema")
-            val schema = if (jsonSchema != null) GQLSchema(jsonSchema) else GQLSchema(sdlSchema)
+            val schema = if (jsonSchema != null) GQLSchema(jsonSchema) else GQLSchema(sdlSchema!!)
+            val sourceStr = obj.getString("schemaDiscoverySource")
+            val schemaDiscoverySource = sourceStr?.let { s ->
+                runCatching { SchemaDiscoverySource.valueOf(s) }.getOrNull()
+            } ?: SchemaDiscoverySource.INTROSPECTION
             this.deserialized = ScanResult(
                 obj.getString("host"),
                 obj.getHttpRequest("template"),
                 schema,
                 jsonSchema,
                 sdlSchema,
+                schemaDiscoverySource,
                 LocalDateTime.parse(obj.getString("ts"), DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 obj.getString("uuid"),
             )
@@ -57,6 +73,7 @@ class ScanResult private constructor(
         // obj.setChildObject("schema", parsedSchema.burpSerialize()) TODO: implement GQLSchema de/serialization as needed
         if (jsonSchema != null) obj.setString("jsonSchema", jsonSchema)
         if (sdlSchema != null) obj.setString("sdlSchema", sdlSchema)
+        obj.setString("schemaDiscoverySource", schemaDiscoverySource.name)
         return obj
     }
 }

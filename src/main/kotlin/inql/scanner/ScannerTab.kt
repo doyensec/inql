@@ -16,6 +16,7 @@ import inql.savestate.SavesAndLoadData
 import inql.Config
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
+import inql.scanner.SchemaDiscoverySource
 import inql.scanner.scanconfig.ScanConfigView
 import inql.scanner.scanresults.ScanResultsView
 import inql.ui.EditableTab
@@ -293,7 +294,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
 
         // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+        val sr = ScanResult(
+            this.host!!,
+            this.requestTemplate,
+            schema,
+            schema.jsonSchema,
+            schema.sdlSchema,
+            schemaDiscoverySource = SchemaDiscoverySource.BRUTEFORCE,
+        )
 
         // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
         // and multiple scans at the same time for the same ScannerTab are not allowed
@@ -330,16 +338,32 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             try {
                 jsonSchema = Introspection.sendIntrospectionQuery(this.requestTemplate)
             } catch (e: Exception) {
-                scanFailed("Could not parse introspection response from the endpoint")
-                return
+                Logger.info("Introspection failed: ${e.message}")
+                jsonSchema = null
             }
-            if (jsonSchema == null) {
+            val federationFallback =
+                Config.getInstance().getBoolean("schema.federation_sdl_fallback") != false
+            if (jsonSchema == null && federationFallback) {
+                sdlSchema = Introspection.sendFederationSdlQuery(this.requestTemplate)
+                if (sdlSchema != null) {
+                    Logger.info(
+                        "Standard introspection failed. Successfully recovered schema via Apollo Federation _service{sdl}.",
+                    )
+                }
+            }
+            if (jsonSchema == null && sdlSchema == null) {
                 scanFailed("Introspection seems disabled for this endpoint")
                 return
             }
         }
 
-        
+        val schemaDiscoverySource: SchemaDiscoverySource = when {
+            this.fileSchema != null && this.fileSchema!!.isNotBlank() -> SchemaDiscoverySource.FILE
+            jsonSchema != null -> SchemaDiscoverySource.INTROSPECTION
+            sdlSchema != null -> SchemaDiscoverySource.FEDERATION_SDL_FALLBACK
+            else -> SchemaDiscoverySource.INTROSPECTION
+        }
+
         val schemaToParse = jsonSchema ?: sdlSchema
         val schema: GQLSchema?
         try {
@@ -356,7 +380,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         }
 
         // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+        val sr = ScanResult(
+            this.host!!,
+            this.requestTemplate,
+            schema,
+            schema.jsonSchema,
+            schema.sdlSchema,
+            schemaDiscoverySource = schemaDiscoverySource,
+        )
 
         // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
         // and multiple scans at the same time for the same ScannerTab are not allowed
