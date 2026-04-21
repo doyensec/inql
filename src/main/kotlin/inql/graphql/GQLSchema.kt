@@ -66,7 +66,10 @@ class GQLSchema(jsonOrSdlSchema: String) {
 
         // TypeDefinitionRegistry -> GraphQLSchema
         val schemaGenerator = SchemaGenerator()
-        this.schema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, RuntimeWiring.MOCKED_WIRING)
+        this.schema = schemaGenerator.makeExecutableSchema(
+            typeDefinitionRegistry,
+            SchemaInspectionRuntimeWiring.build(typeDefinitionRegistry),
+        )
     }
 
     val queries = schema.queryType.fields.associateBy { it.name }

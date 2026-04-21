@@ -143,7 +143,10 @@ class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQ
 
 
 class ScanResultTreeNode(val scanResult: ScanResult) :
-    TreeNodeWithCustomLabel(scanResult.host, scanResult) {
+    TreeNodeWithCustomLabel(
+        "${scanResult.host} (${scanResult.schemaDiscoverySource.treeLabelSuffix})",
+        scanResult,
+    ) {
 
     init {
         loadNodes()
