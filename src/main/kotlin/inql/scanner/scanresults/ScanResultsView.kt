@@ -68,6 +68,14 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         this.treeView.refresh()
     }
 
+    fun repairTreeDisplay() {
+        this.treeView.repairTreeDisplay()
+    }
+
+    fun ensureDefaultTreeExpansion() {
+        this.treeView.ensureDefaultTreeExpansion()
+    }
+
     private fun getNodeScanResult(node: DefaultMutableTreeNode): ScanResult? {
         var n = node
         while (n.userObject !is ScanResult && n.parent is DefaultMutableTreeNode) n = n.parent as DefaultMutableTreeNode
@@ -96,10 +104,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 this.sendToHandler.setEnabled(true)
                 this.currentNode = node
             }
-            is CycleDetectionPayload -> {
-                when (content) {
-                    is CycleDetectionPayload.Loading -> this.payloadView.loadCycleLoading()
-                    is CycleDetectionPayload.Ready -> this.payloadView.loadCycleResults(content.scanResult, content.cycles)
+            is CycleDetectionEntry -> {
+                content.ensureLoaded { this.selectionChangeListener(node) }
+                when (val payload = content.payload) {
+                    CycleDetectionPayload.Loading -> this.payloadView.loadCycleLoading()
+                    is CycleDetectionPayload.Ready -> this.payloadView.loadCycleResults(payload.scanResult, payload.cycles)
                 }
                 this.currentNode = null
                 this.sendToHandler.setEnabled(false)
@@ -120,11 +129,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         SendFromInqlHandler(view.scannerTab.inql, false) {
 
         override fun getRequest(): HttpRequest? {
-            val converter = QueryToRequestConverter(view.scannerTab.scanResults.last())
-            val query = converter.convert(view.currentNode.toString(), view.currentNode?.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
-
             val node = view.currentNode ?: return null
-            val requestTemplate = view.getNodeScanResult(node)?.requestTemplate ?: return null
+            val scanResult = view.getNodeScanResult(node) ?: return null
+            val converter = QueryToRequestConverter(scanResult)
+            val query = converter.convert(node.toString(), node.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
+            val requestTemplate = scanResult.requestTemplate
 
             return view.requestTemplateWithBody(requestTemplate, query)
         }

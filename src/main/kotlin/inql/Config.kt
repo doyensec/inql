@@ -4,6 +4,8 @@ import burp.Burp
 import burp.api.montoya.core.HighlightColor
 import inql.graphql.formatting.Formatter
 import inql.graphql.formatting.SizedLRUCache
+import inql.InQLHolder
+import inql.history.HistoryTracker
 import kotlin.collections.set
 
 class Config private constructor() {
@@ -75,6 +77,9 @@ class Config private constructor() {
         "editor.formatting.cache_size_kb" to 102400, // 100 MB Default
 
         "schema.federation_sdl_fallback" to true,
+
+        "history.tracking_enabled" to true,
+        "history.in_scope_only" to false,
     )
 
     val hooks = hashMapOf<String, (Any) -> Unit>(
@@ -97,7 +102,14 @@ class Config private constructor() {
             } else {
                 ProxyRequestHighlighter.stop()
             }
-        }
+        },
+        "history.tracking_enabled" to { enabled ->
+            if (enabled as Boolean) {
+                HistoryTracker.start(InQLHolder.instance)
+            } else {
+                HistoryTracker.stop()
+            }
+        },
     )
 
     fun registerHook(key: String, hook: (Any) -> Unit) {

@@ -15,6 +15,9 @@ enum class SchemaDiscoverySource {
 
     /** Schema produced by the schema bruteforcer. */
     BRUTEFORCE,
+
+    /** Schema reconstructed passively from Proxy / History traffic. */
+    HISTORY,
     ;
 
     /** Short label for the scan tree node, e.g. `(Introspection)`. */
@@ -24,5 +27,6 @@ enum class SchemaDiscoverySource {
             FILE -> "Schema File"
             FEDERATION_SDL_FALLBACK -> "Federation SDL"
             BRUTEFORCE -> "Bruteforced"
+            HISTORY -> "History"
         }
 }

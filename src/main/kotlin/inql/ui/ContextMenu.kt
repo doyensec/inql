@@ -5,6 +5,9 @@ import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.ui.contextmenu.AuditIssueContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
+import burp.api.montoya.ui.contextmenu.InvocationType
+import inql.history.HistoryHostKey
+import inql.history.HistoryTracker
 import inql.Config
 import inql.InQL
 import inql.Logger
@@ -213,16 +216,47 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     // This only sets Right Click handlers for the Burp's own menus. Menus added by InQL are handled
     // in setContextActions()
+    private val extractHistorySchemaAction = MenuAction("Extract GraphQL Schema", null) {
+        this.extractGraphQLSchemaFromHost()
+    }
+
     private fun sendToInqlComponents(): MutableList<JMenuItem> {
         return mutableListOf<JMenuItem>(
             BurpMenuItem(super.sendToInqlScannerAction),
             BurpMenuItem(super.sendToInqlAttackerAction),
-            BurpMenuItem(super.sendToInqlFingerprinterAction)
+            BurpMenuItem(super.sendToInqlFingerprinterAction),
         ).apply {
             for (action in super.sendToEmbeddedToolActions) {
                 this.add(BurpMenuItem(action))
             }
+            if (this@SendToInqlHandler.selectedHost != null) {
+                this.add(BurpMenuItem(extractHistorySchemaAction))
+            }
         }
+    }
+
+    private var selectedHost: String? = null
+
+    private fun extractGraphQLSchemaFromHost() {
+        val host = this.selectedHost ?: return
+        if (!HistoryTracker.isRunning()) {
+            HistoryTracker.start(inql)
+        }
+        HistoryTracker.extractSchemaForHost(host)
+    }
+
+    private fun hostFromContext(event: ContextMenuEvent): String? {
+        if (event.invocationType() == InvocationType.SITE_MAP_TREE) {
+            val requestResponses = event.selectedRequestResponses()
+            if (requestResponses.isNotEmpty()) {
+                return HistoryHostKey.fromRequest(requestResponses[0].request())
+            }
+        }
+        val request = requestFromContext(event)
+        if (request != null) {
+            return HistoryHostKey.fromRequest(request)
+        }
+        return null
     }
 
     private fun requestFromContext(event: ContextMenuEvent): HttpRequest? {
@@ -251,6 +285,10 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
     }
 
     override fun provideMenuItems(event: ContextMenuEvent): MutableList<JMenuItem>? {
+        this.selectedHost = this.hostFromContext(event)
+        if (event.invocationType() == InvocationType.SITE_MAP_TREE && this.selectedHost != null) {
+            return mutableListOf(BurpMenuItem(extractHistorySchemaAction))
+        }
         this.request = this.requestFromContext(event) ?: return null
         return this.sendToInqlComponents()
     }

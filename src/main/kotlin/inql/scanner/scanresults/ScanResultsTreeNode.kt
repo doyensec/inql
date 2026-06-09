@@ -3,7 +3,6 @@ package inql.scanner.scanresults
 import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
-import inql.graphql.scanners.CyclesScanner
 import inql.graphql.scanners.POIScanner
 import inql.graphql.scanners.POIScanner.Companion.getActiveKeywordsCount
 import inql.scanner.ScanResult
@@ -17,8 +16,17 @@ import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
 open class TreeNodeWithCustomLabel(val label: String, obj: Any?, val forceDirectory: Boolean = false) : DefaultMutableTreeNode(obj) {
+    init {
+        allowsChildren = forceDirectory
+    }
+
     override fun toString(): String {
         return this.label
+    }
+
+    override fun getAllowsChildren(): Boolean {
+        if (forceDirectory) return true
+        return super.getAllowsChildren()
     }
 
     override fun isLeaf(): Boolean {
@@ -94,44 +102,6 @@ class LazyLeafTreeNode(
     }
 }
 
-class CycleDetectionLazyNode(
-    label: String,
-    private val scanResult: ScanResult,
-    private val gqlSchema: GQLSchema,
-) : TreeNodeWithCustomLabel(label, CycleDetectionPayload.Loading, forceDirectory = false) {
-
-    private var loaded = false
-    private var selectionRefreshCallback: (() -> Unit)? = null
-
-    fun setSelectionRefreshCallback(callback: () -> Unit) {
-        this.selectionRefreshCallback = callback
-    }
-
-    fun ensureLoaded(model: DefaultTreeModel) {
-        if (loaded) return
-        loaded = true
-
-        CoroutineScope(Dispatchers.Default).launch {
-            val payload = try {
-                val config = Config.getInstance()
-                val maxDepth = config.getInt("report.cycles.depth")!!
-                val maxCycles = config.getInt("report.cycles.max")!!
-                val scanner = CyclesScanner(gqlSchema, maxDepth, maxCycles)
-                scanner.detect()
-                CycleDetectionPayload.Ready(scanner.cycleResults(), scanResult)
-            } catch (e: Exception) {
-                CycleDetectionPayload.Ready(emptyList(), scanResult)
-            }
-
-            withContext(Dispatchers.Swing) {
-                this@CycleDetectionLazyNode.userObject = payload
-                model.nodeChanged(this@CycleDetectionLazyNode)
-                selectionRefreshCallback?.invoke()
-            }
-        }
-    }
-}
-
 class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
     TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
     init {
@@ -142,10 +112,19 @@ class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQ
 }
 
 
+private fun resolveJsonSchema(scanResult: ScanResult): String {
+    val stored = scanResult.jsonSchema?.trim()
+    if (!stored.isNullOrEmpty() && stored.startsWith("{")) {
+        return scanResult.jsonSchema!!
+    }
+    return scanResult.parsedSchema.jsonSchema
+}
+
 class ScanResultTreeNode(val scanResult: ScanResult) :
     TreeNodeWithCustomLabel(
         "${scanResult.host} (${scanResult.schemaDiscoverySource.treeLabelSuffix})",
         scanResult,
+        forceDirectory = true,
     ) {
 
     init {
@@ -196,20 +175,24 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
         }
 
         if (config.getBoolean("report.cycles") == true) {
-            this.add(CycleDetectionLazyNode("Cycle Detection", this.scanResult, gqlSchema))
+            addContentNode(
+                "Cycle Detection",
+                CycleDetectionEntry(this.scanResult, gqlSchema),
+            )
         }
 
-        // Add request template
-        this.add(TreeNodeWithCustomLabel("Request Template", scanResult.requestTemplate.withBody("").toString()))
+        addContentNode("Request Template", scanResult.requestTemplate.withBody("").toString())
 
-        // Add JSON schema
-        if (config.getBoolean("report.json") == true && scanResult.jsonSchema != null) {
-            this.add(TreeNodeWithCustomLabel("JSON schema", JsonPrettifier.prettify(scanResult.jsonSchema)))
+        if (config.getBoolean("report.json") == true) {
+            addContentNode("JSON schema", JsonPrettifier.prettify(resolveJsonSchema(scanResult)))
         }
 
-        // Add SDL schema
         if (config.getBoolean("report.sdl") == true && scanResult.sdlSchema != null) {
-            this.add(TreeNodeWithCustomLabel("SDL schema", scanResult.sdlSchema))
+            addContentNode("SDL schema", scanResult.sdlSchema)
         }
+    }
+
+    private fun addContentNode(label: String, content: Any) {
+        this.add(TreeNodeWithCustomLabel(label, content, forceDirectory = false))
     }
 }

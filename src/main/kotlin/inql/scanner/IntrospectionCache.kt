@@ -52,7 +52,11 @@ class IntrospectionCache(val inql: InQL) {
             Logger.debug("Found tab for url ${tab.url}")
             if (tab.scanResults.isNotEmpty()) {
                 Logger.debug("Found result for ${tab.url}, inserting...")
-                this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, tab.scanResults.last())
+                val scanResult = Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(tab))
+                    ?.let { (source, _) -> tab.scanResults.find { it.schemaDiscoverySource == source } }
+                    ?: tab.scanResults.singleOrNull()
+                    ?: tab.scanResults.last()
+                this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, scanResult)
             }
         }
         Logger.debug("All cached urls: ${this.cache.keys}")

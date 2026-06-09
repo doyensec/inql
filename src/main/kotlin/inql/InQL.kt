@@ -5,6 +5,7 @@ import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
 import inql.fingerprinter.Fingerprinter
 import inql.externaltools.ExternalToolsService
+import inql.history.HistoryTracker
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.scanner.Scanner
@@ -14,6 +15,10 @@ import inql.ui.StyledPayloadEditor
 import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JTabbedPane
+
+object InQLHolder {
+    lateinit var instance: InQL
+}
 
 class InQL : InQLTabbedPane(), SavesAndLoadData {
 
@@ -26,6 +31,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     val fingerprinter = Fingerprinter(this)
 
     init {
+        InQLHolder.instance = this
         Burp.Montoya.logging().raiseInfoEvent("InQL Started")
 
         val logLevel = config.getString("logging.level") ?: "DEBUG"
@@ -64,10 +70,16 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         if (this.config.getBoolean("proxy.highlight_enabled") == true) {
             ProxyRequestHighlighter.start()
         }
+
+        // If enabled, start live history schema tracking
+        if (this.config.getBoolean("history.tracking_enabled") == true) {
+            HistoryTracker.start(this)
+        }
     }
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
+        HistoryTracker.stop()
         scanner.stop()
     }
 

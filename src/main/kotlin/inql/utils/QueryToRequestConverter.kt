@@ -435,7 +435,6 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     }
 
 
-    // Fixed handleUnionType call
     private fun handleUnionType(
         type: GraphQLUnionType,
         currentDepth: Int,
@@ -445,20 +444,28 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         variableDefinitions: MutableList<String>,
         nestedVarCounter: MutableList<Int>
     ): String {
-        val selections = type.types.joinToString("\n") { possibleType ->
-            getSelectionSet(
-                type = possibleType,
-                currentDepth = currentDepth,
+        val fragmentDepth = currentDepth + 1
+        val selections = type.types.mapNotNull { possibleType ->
+            val member = possibleType as? GraphQLObjectType ?: return@mapNotNull null
+            val nested = getSelectionSet(
+                type = member,
+                currentDepth = fragmentDepth + 1,
                 maxDepth = maxDepth,
-                visitedTypes = visitedTypes,
+                visitedTypes = visitedTypes.toMutableSet(),
                 variablesMap = variablesMap,
                 variableDefinitions = variableDefinitions,
-                nestedVarCounter = nestedVarCounter
+                nestedVarCounter = nestedVarCounter,
             )
-        }
+            if (nested.isEmpty()) return@mapNotNull null
+            """
+            |${"  ".repeat(fragmentDepth)}... on ${member.name} {
+            |$nested
+            |${"  ".repeat(fragmentDepth)}}
+            """.trimMargin()
+        }.joinToString("\n")
 
         return if (selections.isEmpty()) {
-            "  ".repeat(currentDepth + 1) + "__typename"
+            "  ".repeat(fragmentDepth) + "__typename"
         } else {
             selections
         }

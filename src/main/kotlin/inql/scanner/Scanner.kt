@@ -8,6 +8,7 @@ import inql.Logger
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
+import inql.history.HistoryHostKey
 import inql.ui.EditableTabTitle
 import inql.ui.EditableTabbedPane
 import java.net.URI
@@ -22,6 +23,47 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     val introspectionCache = IntrospectionCache(this.inql)
 
     companion object {
+        private val SOURCE_TAB_TITLE_REGEX = Regex("""^\[([^\]]+)\]\s+(.+)$""")
+
+        fun sourceTabTitle(source: SchemaDiscoverySource, host: String): String {
+            return "[${source.treeLabelSuffix}] ${HistoryHostKey.normalize(host)}"
+        }
+
+        fun historyTabTitle(host: String): String = sourceTabTitle(SchemaDiscoverySource.HISTORY, host)
+
+        fun tabTitleForSourceParsing(tab: ScannerTab): String {
+            var title = tab.getTabTitle().trim()
+            tab.linkedProfile?.let { profile ->
+                title = title.removeSuffix(" [${profile.name}]")
+            }
+            return title.trim()
+        }
+
+        fun parseSourceTabTitle(title: String): Pair<SchemaDiscoverySource, String>? {
+            val match = SOURCE_TAB_TITLE_REGEX.matchEntire(title.trim()) ?: return null
+            val label = match.groupValues[1]
+            val host = HistoryHostKey.normalize(match.groupValues[2].trim())
+            val source = SchemaDiscoverySource.entries.find { it.treeLabelSuffix == label } ?: return null
+            return source to host
+        }
+
+        fun isSourceTab(tab: ScannerTab, source: SchemaDiscoverySource? = null): Boolean {
+            parseSourceTabTitle(tabTitleForSourceParsing(tab))?.let { (tabSource, _) ->
+                return source == null || tabSource == source
+            }
+            if (source == null) return false
+            return tab.scanResults.isNotEmpty() &&
+                tab.scanResults.all { it.schemaDiscoverySource == source }
+        }
+
+        fun isHistoryTab(tab: ScannerTab): Boolean = isSourceTab(tab, SchemaDiscoverySource.HISTORY)
+
+        fun isAnySourceTab(tab: ScannerTab): Boolean {
+            if (parseSourceTabTitle(tabTitleForSourceParsing(tab)) != null) return true
+            return tab.scanResults.isNotEmpty() &&
+                tab.scanResults.map { it.schemaDiscoverySource }.distinct().size == 1
+        }
+
         fun fetchHeadersForHost(
             host: String,
             pathFilter: String? = null,
@@ -60,6 +102,13 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         this.border = BorderFactory.createEmptyBorder(5, 0, 0, 0)
         this.setTabComponentFactory(this.tabFactory)
         this.addTitleChangeListener { this.tabTitleChangeListener(it) }
+        this.tabbedPane.addChangeListener {
+            val selected = tabbedPane.selectedComponent as? ScannerTab ?: return@addChangeListener
+            if (selected.scanResults.isEmpty()) return@addChangeListener
+            SwingUtilities.invokeLater {
+                selected.scanResultsView.repairTreeDisplay()
+            }
+        }
         this.newTab()
     }
 
@@ -102,6 +151,115 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         tab.url = r_url
         tab.requestTemplate = req.withBody("")
         this.inql.focusTab(this.inql.scanner)
+    }
+
+    fun findTabForHost(host: String): ScannerTab? {
+        val normalizedHost = HistoryHostKey.normalize(host)
+        return getScannerTabs().find { tab ->
+            !isAnySourceTab(tab) && tabMatchesHost(tab, normalizedHost)
+        }
+    }
+
+    fun findTabForHostAndSource(host: String, source: SchemaDiscoverySource): ScannerTab? {
+        val normalizedHost = HistoryHostKey.normalize(host)
+        return getScannerTabs().find { tab ->
+            isSourceTab(tab, source) && tabMatchesHost(tab, normalizedHost, source)
+        }
+    }
+
+    fun findHistoryTabForHost(host: String): ScannerTab? =
+        findTabForHostAndSource(host, SchemaDiscoverySource.HISTORY)
+
+    fun getOrCreateSourceTab(
+        host: String,
+        source: SchemaDiscoverySource,
+        requestTemplate: HttpRequest,
+        focus: Boolean = false,
+    ): ScannerTab {
+        findTabForHostAndSource(host, source)?.let { return it }
+
+        val normalizedHost = HistoryHostKey.normalize(host).ifBlank {
+            HistoryHostKey.fromRequest(requestTemplate).let { HistoryHostKey.normalize(it) }
+        }
+        findTabForHostAndSource(normalizedHost, source)?.let { return it }
+
+        val scheme = try {
+            java.net.URI.create(requestTemplate.url()).scheme ?: "https"
+        } catch (_: Exception) {
+            "https"
+        }
+        val url = "$scheme://$normalizedHost/"
+        val title = sourceTabTitle(source, normalizedHost)
+        val tab = this.newTab(titleArg = title, focus = focus) as ScannerTab
+        tab.url = url
+        tab.requestTemplate = requestTemplate
+        tab.setTabTitle(title)
+        return tab
+    }
+
+    fun getOrCreateHistoryTab(host: String, requestTemplate: HttpRequest): ScannerTab =
+        getOrCreateSourceTab(host, SchemaDiscoverySource.HISTORY, requestTemplate, focus = false)
+
+    fun applyScanResult(
+        host: String,
+        source: SchemaDiscoverySource,
+        requestTemplate: HttpRequest,
+        scanResult: ScanResult,
+        focus: Boolean = false,
+    ) {
+        val normalizedHost = HistoryHostKey.normalize(host)
+        val tab = getOrCreateSourceTab(normalizedHost, source, requestTemplate, focus)
+        val existing = tab.scanResults.find { it.schemaDiscoverySource == source }
+        val resultToSave = if (existing != null) {
+            val idx = tab.scanResults.indexOf(existing)
+            val updated = if (source == SchemaDiscoverySource.HISTORY) {
+                existing.withUpdatedSchema(
+                    scanResult.parsedSchema,
+                    jsonSchema = scanResult.jsonSchema,
+                    sdlSchema = scanResult.sdlSchema,
+                )
+            } else {
+                scanResult
+            }
+            tab.scanResults[idx] = updated
+            updated
+        } else {
+            tab.scanResults.add(scanResult)
+            scanResult
+        }
+        tab.setTabTitle(sourceTabTitle(source, normalizedHost))
+        tab.showResultsView()
+        tab.scanResultsView.refresh()
+        tab.scanResultsView.ensureDefaultTreeExpansion()
+        updateChildObjectAsync(resultToSave)
+        updateChildObjectAsync(tab)
+        introspectionCache.putIfNewer(url = tab.url, scanResult = resultToSave)
+    }
+
+    private fun tabMatchesHost(
+        tab: ScannerTab,
+        normalizedHost: String,
+        source: SchemaDiscoverySource? = null,
+    ): Boolean {
+        val titleSource = source ?: parseSourceTabTitle(tabTitleForSourceParsing(tab))?.first
+        if (titleSource != null) {
+            parseSourceTabTitle(tabTitleForSourceParsing(tab))?.let { (_, titleHost) ->
+                if (HistoryHostKey.matches(titleHost, normalizedHost)) return true
+            }
+        }
+        if (tab.url.isNotBlank()) {
+            HistoryHostKey.fromUrl(tab.url)?.let { tabHostKey ->
+                if (HistoryHostKey.matches(tabHostKey, normalizedHost)) return true
+            }
+        }
+        try {
+            val templateHostKey = HistoryHostKey.fromRequest(tab.requestTemplate)
+            if (HistoryHostKey.matches(templateHostKey, normalizedHost)) return true
+        } catch (_: Exception) {
+        }
+        return tab.scanResults.any { result ->
+            HistoryHostKey.matches(HistoryHostKey.normalize(result.host), normalizedHost)
+        }
     }
 
     fun getScannerTabs(): List<ScannerTab> {
@@ -169,7 +327,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
                     }
 
                     SwingUtilities.invokeLater {
-                        selectedTab.scanResultsView.refresh()
+                        selectedTab.scanResultsView.repairTreeDisplay()
                     }
 
                     tabsToFix.remove(selectedTab)

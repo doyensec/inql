@@ -140,8 +140,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
         val schemaDiscoverySection = SettingsSection(
             "Schema discovery",
-            "If standard introspection fails, attempt to fetch schema via `_service{sdl}` (common in Apollo Federation environments).",
+            "Configure how InQL discovers and reconstructs GraphQL schemas.",
             SettingsElement("schema.federation_sdl_fallback", CheckBox("Enable Apollo Federation SDL Fallback")),
+            SettingsElement("history.tracking_enabled", CheckBox("Enable Live History Tracking")),
+            SettingsElement("history.in_scope_only", CheckBox("Track In-Scope Hosts Only")),
         )
 
         val reportSection = SettingsSection(

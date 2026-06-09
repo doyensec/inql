@@ -64,6 +64,23 @@ class ScanResult private constructor(
 
     override fun getChildrenObjectsToSave(): Collection<SavesDataToProject>? = null
 
+    fun withUpdatedSchema(
+        newSchema: GQLSchema,
+        jsonSchema: String? = newSchema.jsonSchema,
+        sdlSchema: String? = newSchema.sdlSchema,
+    ): ScanResult {
+        return ScanResult(
+            host,
+            requestTemplate,
+            newSchema,
+            jsonSchema,
+            sdlSchema,
+            schemaDiscoverySource,
+            ts,
+            uuid,
+        )
+    }
+
     override fun burpSerialize(): PersistedObject {
         val obj = PersistedObject.persistedObject()
         obj.setString("uuid", this.uuid)

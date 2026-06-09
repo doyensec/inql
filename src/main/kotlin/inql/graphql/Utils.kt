@@ -2,53 +2,243 @@ package inql.graphql
 
 import burp.api.montoya.http.message.requests.HttpRequest
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import graphql.schema.GraphQLModifiedType
 import graphql.schema.GraphQLScalarType
 import graphql.schema.GraphQLType
 import inql.utils.get
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
+data class GraphQLOperation(
+    val query: String,
+    val operationType: String = "query",
+)
 
 object Utils {
     private val gson = Gson() // Initialize once
-    fun getGraphQLQuery(request: HttpRequest): String? {
-        // Let's reject wrong requests ASAP to get the best performance
-        try {
-            // Check method
-            if (request.method() != "POST") {
-                return null
-            }
+    private val jsonGraphQLEnvelopePattern = Regex(
+        """^\{\s*"(?:query|mutation|operationName)"\s*:""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val shorthandSelectionSetPattern = Regex("""^\{\s*(?:__)?[A-Za-z_][A-Za-z0-9_]*""")
 
-            // Check Content-Type
-            val contentType = request.headers().get("content-type")
-            if (contentType == null
-                || !(contentType.startsWith("application/json") || contentType.startsWith("application/graphql"))) {
-                return null
-            }
+    /**
+     * Ensures a GraphQL document string is not a raw JSON request envelope.
+     */
+    fun normalizeGraphQLDocument(input: String): String {
+        val trimmed = stripBom(input.trim())
+        if (!looksLikeJsonGraphQLEnvelope(trimmed)) return trimmed
+        return extractQueryDocumentFromJson(trimmed) ?: trimmed
+    }
 
-            // Search for '"query"'
-            val body = request.bodyToString()
-            if (!body.contains("\"query\"")) {
-                return null
-            }
+    fun isGraphQLDocument(document: String): Boolean {
+        return looksLikeGraphQLDocument(stripBom(document.trim()))
+    }
 
-            // Parse json
-            val query: String
-            val jsonObject = gson.fromJson(body, JsonObject::class.java)
-            if (!jsonObject.has("query")) {
-                return null
+    fun getGraphQLOperation(request: HttpRequest): GraphQLOperation? {
+        return try {
+            when (request.method().uppercase()) {
+                "POST" -> getGraphQLOperationFromPost(request)
+                "GET" -> getGraphQLOperationFromGet(request)
+                else -> null
             }
-            query = jsonObject.get("query").asString
-
-            // Possibly parse query in the future
-            if (query.isNotEmpty()) return query
         } catch (_: Exception) {
-            return null
+            null
         }
-        return null
+    }
+
+    private fun getGraphQLOperationFromPost(request: HttpRequest): GraphQLOperation? {
+        val body = request.bodyToString()
+        if (body.isBlank()) return null
+
+        val contentType = request.headers().get("content-type")
+            ?.lowercase()
+            ?.substringBefore(';')
+            ?.trim()
+
+        when (contentType) {
+            "application/graphql" -> {
+                return toGraphQLOperation(stripBom(body.trim()))
+            }
+            "application/x-www-form-urlencoded" -> {
+                return parseFormUrlEncodedBody(body)
+            }
+            "application/json" -> {
+                parseJsonGraphQLBody(body)?.let { return it }
+            }
+        }
+
+        // JSON envelope or raw document — do not require a specific URL path or Content-Type.
+        parseJsonGraphQLBody(body)?.let { return it }
+
+        val trimmed = stripBom(body.trim())
+        if (looksLikeJsonGraphQLEnvelope(trimmed)) {
+            val query = extractQueryDocumentFromJson(trimmed) ?: return null
+            return toGraphQLOperation(query)
+        }
+        return toGraphQLOperation(trimmed)
+    }
+
+    private fun getGraphQLOperationFromGet(request: HttpRequest): GraphQLOperation? {
+        val uri = URI.create(request.url())
+        val params = parseQueryString(uri.rawQuery ?: return null)
+        val queryDocument = params["query"] ?: return null
+        val decoded = URLDecoder.decode(queryDocument, StandardCharsets.UTF_8).trim()
+        return toGraphQLOperation(decoded)
+    }
+
+    private fun parseJsonGraphQLBody(body: String): GraphQLOperation? {
+        val trimmed = stripBom(body.trim())
+        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null
+        if (!looksLikeJsonGraphQLEnvelope(trimmed) && !trimmed.startsWith("[")) return null
+
+        if (trimmed.startsWith("[")) {
+            return try {
+                val array = gson.fromJson(trimmed, JsonArray::class.java) ?: return null
+                for (element in array) {
+                    if (!element.isJsonObject) continue
+                    parseJsonGraphQLObject(element.asJsonObject)?.let { return it }
+                }
+                null
+            } catch (_: Exception) {
+                parseJsonGraphQLBodyWithOrgJson(trimmed)
+            }
+        }
+
+        return try {
+            val jsonObject = gson.fromJson(trimmed, JsonObject::class.java) ?: return null
+            parseJsonGraphQLObject(jsonObject) ?: extractQueryDocumentFromJson(trimmed)?.let { query ->
+                toGraphQLOperation(query)
+            }
+        } catch (_: Exception) {
+            extractQueryDocumentFromJson(trimmed)?.let { query ->
+                toGraphQLOperation(query)
+            }
+        }
+    }
+
+    private fun parseJsonGraphQLBodyWithOrgJson(body: String): GraphQLOperation? {
+        return try {
+            val array = JSONArray(body)
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                extractQueryDocumentFromJsonObject(obj)?.let { query ->
+                    return toGraphQLOperation(query)
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseJsonGraphQLObject(jsonObject: JsonObject): GraphQLOperation? {
+        val query = readJsonStringField(jsonObject, "query")
+            ?: readJsonStringField(jsonObject, "mutation")
+            ?: return null
+        return toGraphQLOperation(query)
+    }
+
+    private fun readJsonStringField(jsonObject: JsonObject, field: String): String? {
+        val element = jsonObject.get(field) ?: return null
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isString) return null
+        return element.asString.trim().takeIf { it.isNotEmpty() }
+    }
+
+    private fun extractQueryDocumentFromJson(body: String): String? {
+        return try {
+            extractQueryDocumentFromJsonObject(JSONObject(body))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractQueryDocumentFromJsonObject(jsonObject: JSONObject): String? {
+        val query = when {
+            jsonObject.has("query") && !jsonObject.isNull("query") -> jsonObject.optString("query", "")
+            jsonObject.has("mutation") && !jsonObject.isNull("mutation") -> jsonObject.optString("mutation", "")
+            else -> return null
+        }
+        return query.trim().takeIf { it.isNotEmpty() }
+    }
+
+    private fun looksLikeJsonGraphQLEnvelope(body: String): Boolean {
+        return jsonGraphQLEnvelopePattern.containsMatchIn(body.trim())
+    }
+
+    private fun stripBom(value: String): String {
+        return if (value.startsWith("\uFEFF")) value.substring(1) else value
+    }
+
+    private fun parseFormUrlEncodedBody(body: String): GraphQLOperation? {
+        val params = parseQueryString(body)
+        val queryDocument = params["query"] ?: return null
+        val decoded = URLDecoder.decode(queryDocument, StandardCharsets.UTF_8).trim()
+        return toGraphQLOperation(decoded)
+    }
+
+    private fun toGraphQLOperation(document: String): GraphQLOperation? {
+        if (!looksLikeGraphQLDocument(document)) return null
+        return GraphQLOperation(document, detectOperationType(document))
+    }
+
+    private fun looksLikeGraphQLDocument(document: String): Boolean {
+        if (document.isBlank()) return false
+        val withoutLeadingComments = stripLeadingGraphQLComments(document)
+        if (looksLikeNamedGraphQLOperation(withoutLeadingComments)) return true
+        return shorthandSelectionSetPattern.containsMatchIn(withoutLeadingComments)
+    }
+
+    private fun stripLeadingGraphQLComments(document: String): String {
+        var current = document.trimStart()
+        while (current.startsWith("#")) {
+            val newline = current.indexOf('\n')
+            current = if (newline == -1) "" else current.substring(newline + 1).trimStart()
+        }
+        return current
+    }
+
+    private fun parseQueryString(query: String): Map<String, String> {
+        if (query.isBlank()) return emptyMap()
+        return query.split('&').mapNotNull { part ->
+            if (part.isBlank()) return@mapNotNull null
+            val idx = part.indexOf('=')
+            if (idx == -1) {
+                part to ""
+            } else {
+                part.substring(0, idx) to part.substring(idx + 1)
+            }
+        }.toMap()
+    }
+
+    fun getGraphQLQuery(request: HttpRequest): String? {
+        return getGraphQLOperation(request)?.query
     }
 
     fun isGraphQLRequest(request: HttpRequest): Boolean {
-        return getGraphQLQuery(request) != null
+        return getGraphQLOperation(request) != null
+    }
+
+    private fun looksLikeNamedGraphQLOperation(body: String): Boolean {
+        val trimmed = body.trimStart()
+        return trimmed.startsWith("query", ignoreCase = true)
+            || trimmed.startsWith("mutation", ignoreCase = true)
+            || trimmed.startsWith("subscription", ignoreCase = true)
+            || trimmed.startsWith("fragment", ignoreCase = true)
+    }
+
+    private fun detectOperationType(query: String): String {
+        val trimmed = query.trimStart()
+        return when {
+            trimmed.startsWith("mutation", ignoreCase = true) -> "mutation"
+            trimmed.startsWith("subscription", ignoreCase = true) -> "subscription"
+            else -> "query"
+        }
     }
 fun formatComment(string: String, maxLength: Int = 100): String {
     val sb = StringBuilder()

@@ -1,0 +1,41 @@
+package inql.history
+
+import burp.api.montoya.http.message.HttpRequestResponse
+import graphql.schema.GraphQLSchema
+import inql.graphql.GraphQLOperation
+import inql.graphql.Utils
+
+object HistorySchemaBuilder {
+    fun buildFromRequestResponse(
+        requestResponse: HttpRequestResponse,
+        existingSchema: GraphQLSchema? = null,
+    ): GraphQLSchema? {
+        val request = requestResponse.request()
+        val operation = Utils.getGraphQLOperation(request) ?: return null
+        val response = requestResponse.response()
+        val responseBody = if (response != null && HistoryResponseValidator.isSuccessfulResponse(response)) {
+            response.bodyToString()
+        } else {
+            null
+        }
+        return buildFromOperation(operation, responseBody, existingSchema)
+    }
+
+    fun buildFromOperation(
+        operation: GraphQLOperation,
+        responseBody: String?,
+        existingSchema: GraphQLSchema? = null,
+    ): GraphQLSchema? {
+        val rejectedFields = responseBody?.let { HistoryResponseValidator.getRejectedFieldNames(it) } ?: emptySet()
+        val document = Utils.normalizeGraphQLDocument(operation.query)
+        if (!Utils.isGraphQLDocument(document)) return null
+
+        val partialSchema = QueryAstToSchema.buildSchema(
+            document,
+            operation.operationType,
+            rejectedFields,
+            responseBody,
+        ) ?: return null
+        return SchemaMerger.merge(existingSchema, partialSchema)
+    }
+}

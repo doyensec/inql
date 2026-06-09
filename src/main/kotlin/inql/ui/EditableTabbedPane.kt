@@ -313,7 +313,7 @@ open class EditableTabbedPane : TabbedPane() {
         this.tabbedPane.setTabComponentAt(idx, tab)
     }
 
-    fun newTab(titleArg: String? = null): JComponent {
+    fun newTab(titleArg: String? = null, focus: Boolean = true): JComponent {
         if (!tabFactoryInitiated) throw Exception("Trying to invoke new tab creation without TabComponentFactory present")
         val idx = this.tabCount
         val component = this.tabComponentFactory!!.createComponent(idx)
@@ -323,7 +323,9 @@ open class EditableTabbedPane : TabbedPane() {
             titleArg
         }
         this.insertTab(title, component, idx)
-        this.tabbedPane.selectedIndex = idx
+        if (focus) {
+            this.tabbedPane.selectedIndex = idx
+        }
         return component
     }
 
@@ -338,7 +340,20 @@ open class EditableTabbedPane : TabbedPane() {
     }
 
     private fun closeTabHandler(tab: EditableTab) {
-        this.closeTab(this.tabbedPane.indexOfTabComponent(tab))
+        val idx = this.tabbedPane.indexOfTabComponent(tab)
+        if (idx < 0) return
+
+        val title = tab.tabTitle.text.ifBlank { "this tab" }
+        val confirmed = JOptionPane.showConfirmDialog(
+            this,
+            "Close tab \"$title\"?",
+            "Close tab",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+        )
+        if (confirmed != JOptionPane.YES_OPTION) return
+
+        this.closeTab(idx)
     }
 
     private fun isDarkMode(): Boolean {
