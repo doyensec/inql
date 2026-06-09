@@ -25,6 +25,7 @@ internal class SdlTypeRegistry {
     private val unionTypes = linkedMapOf<String, LinkedHashSet<String>>()
     private val inputTypes = linkedMapOf<String, MutableMap<String, SdlField>>()
     private val enumTypes = linkedSetOf<String>()
+    private val enumValues = linkedMapOf<String, LinkedHashSet<String>>()
     private val scalarTypes = linkedSetOf<String>()
     private val rootTypeNames = setOf("Query", "Mutation", "Subscription")
     private val builtInScalars = setOf("String", "Int", "Float", "Boolean", "ID")
@@ -60,6 +61,47 @@ internal class SdlTypeRegistry {
                     mergeField(parentType, field.name, returnType, field.arguments)
                 }
             }
+        }
+    }
+
+    fun registerInputFields(typeName: String, fields: Map<String, String>) {
+        if (fields.isEmpty()) return
+        val bucket = inputTypes.getOrPut(typeName) { mutableMapOf() }
+        for ((fieldName, fieldType) in fields) {
+            val existing = bucket[fieldName]
+            if (existing == null) {
+                bucket[fieldName] = SdlField(fieldType)
+            } else {
+                existing.returnType = GraphQLTypeInference.mergeSdlTypes(existing.returnType, fieldType)
+            }
+        }
+        bucket.remove("_inql_placeholder")
+        registerReferencedTypes(fields.values)
+        for ((fieldName, fieldType) in fields) {
+            registerEnumValuesFromField(fieldName, fieldType)
+        }
+    }
+
+    fun registerEnumValues(typeName: String, values: Collection<String>) {
+        if (values.isEmpty()) return
+        enumTypes.add(typeName)
+        val bucket = enumValues.getOrPut(typeName) { linkedSetOf() }
+        bucket.addAll(values.filter { it != "PLACEHOLDER" && it != "_inql_placeholder" })
+        if (bucket.isNotEmpty()) {
+            bucket.remove("PLACEHOLDER")
+            bucket.remove("_inql_placeholder")
+        }
+    }
+
+    fun applyArgumentTypeHints(hints: List<GraphQLErrorTypeHints.ArgumentTypeHint>) {
+        for (hint in hints) {
+            val fields = types[hint.rootType] ?: continue
+            val field = fields[hint.fieldName] ?: continue
+            field.arguments[hint.argumentName] = GraphQLTypeInference.mergeSdlTypes(
+                field.arguments[hint.argumentName],
+                hint.expectedType,
+            )
+            registerReferencedTypes(listOf(hint.expectedType))
         }
     }
 
@@ -173,6 +215,12 @@ internal class SdlTypeRegistry {
         }
     }
 
+    private fun registerEnumValuesFromField(fieldName: String, fieldType: String) {
+        val baseType = GraphQLTypeInference.baseTypeName(fieldType)
+        if (GraphQLTypeInference.stubKindForReferencedType(baseType) != ReferencedTypeKind.ENUM) return
+        enumTypes.add(baseType)
+    }
+
     private fun ensureInputStub(typeName: String) {
         inputTypes.getOrPut(typeName) {
             mutableMapOf("_inql_placeholder" to SdlField("String"))
@@ -232,7 +280,14 @@ internal class SdlTypeRegistry {
 
         for (typeName in enumTypes.filter { it !in outputTypeNames }.sorted()) {
             sb.append("enum ").append(typeName).append(" {\n")
-            sb.append("  PLACEHOLDER\n")
+            val values = enumValues[typeName].orEmpty()
+            if (values.isEmpty()) {
+                sb.append("  PLACEHOLDER\n")
+            } else {
+                for (value in values.sorted()) {
+                    sb.append("  ").append(value).append('\n')
+                }
+            }
             sb.append("}\n\n")
         }
 

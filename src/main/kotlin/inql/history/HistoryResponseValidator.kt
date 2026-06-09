@@ -24,6 +24,20 @@ object HistoryResponseValidator {
         return response?.statusCode()?.toInt() == 200
     }
 
+    fun isSuccessfulResponseBody(responseBody: String): Boolean {
+        return try {
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+            !json.has("errors") || json.getAsJsonArray("errors").isEmpty
+        } catch (_: Exception) {
+            try {
+                val jsonObject = JSONObject(responseBody)
+                !jsonObject.has("errors") || jsonObject.optJSONArray("errors")?.length() == 0
+            } catch (_: Exception) {
+                true
+            }
+        }
+    }
+
     fun getRejectedFieldNames(responseBody: String): Set<String> {
         val rejected = mutableSetOf<String>()
         val errors = parseErrors(responseBody) ?: return rejected

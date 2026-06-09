@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets
 data class GraphQLOperation(
     val query: String,
     val operationType: String = "query",
+    val variables: Map<String, Any?>? = null,
 )
 
 object Utils {
@@ -141,7 +142,35 @@ object Utils {
         val query = readJsonStringField(jsonObject, "query")
             ?: readJsonStringField(jsonObject, "mutation")
             ?: return null
-        return toGraphQLOperation(query)
+        val variables = parseVariablesField(jsonObject.get("variables"))
+        return toGraphQLOperation(query, variables)
+    }
+
+    private fun parseVariablesField(element: com.google.gson.JsonElement?): Map<String, Any?>? {
+        if (element == null || element.isJsonNull || !element.isJsonObject) return null
+        return gsonJsonElementToKotlin(element) as? Map<String, Any?>
+    }
+
+    private fun gsonJsonElementToKotlin(element: com.google.gson.JsonElement): Any? {
+        return when {
+            element.isJsonNull -> null
+            element.isJsonPrimitive -> {
+                val primitive = element.asJsonPrimitive
+                when {
+                    primitive.isBoolean -> primitive.asBoolean
+                    primitive.isNumber -> primitive.asNumber
+                    primitive.isString -> primitive.asString
+                    else -> null
+                }
+            }
+            element.isJsonObject -> {
+                element.asJsonObject.entrySet().associate { (key, value) ->
+                    key to gsonJsonElementToKotlin(value)
+                }
+            }
+            element.isJsonArray -> element.asJsonArray.map { item -> gsonJsonElementToKotlin(item) }
+            else -> null
+        }
     }
 
     private fun readJsonStringField(jsonObject: JsonObject, field: String): String? {
@@ -182,9 +211,9 @@ object Utils {
         return toGraphQLOperation(decoded)
     }
 
-    private fun toGraphQLOperation(document: String): GraphQLOperation? {
+    private fun toGraphQLOperation(document: String, variables: Map<String, Any?>? = null): GraphQLOperation? {
         if (!looksLikeGraphQLDocument(document)) return null
-        return GraphQLOperation(document, detectOperationType(document))
+        return GraphQLOperation(document, detectOperationType(document), variables)
     }
 
     private fun looksLikeGraphQLDocument(document: String): Boolean {

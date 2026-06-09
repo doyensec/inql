@@ -53,11 +53,7 @@ class HistorySchemaService(private val inql: InQL) {
         val host = HistoryHostKey.fromRequest(request)
         val existing = hostSchemas[host] ?: loadExistingHistorySchema(host)
         val operation = Utils.getGraphQLOperation(request) ?: return
-        val responseBody = if (response != null && HistoryResponseValidator.isSuccessfulResponse(response)) {
-            response.bodyToString()
-        } else {
-            null
-        }
+        val responseBody = response?.bodyToString()
         val merged = HistorySchemaBuilder.buildFromOperation(operation, responseBody, existing) ?: return
 
         if (!applySchemaChange(host, merged, existing, request)) return
@@ -110,9 +106,7 @@ class HistorySchemaService(private val inql: InQL) {
             if (!shouldProcessUrl(req.url())) continue
 
             val operation = Utils.getGraphQLOperation(req) ?: continue
-            val responseBody = item.response
-                ?.takeIf { HistoryResponseValidator.isSuccessfulResponse(it) }
-                ?.bodyToString()
+            val responseBody = item.response?.bodyToString()
 
             val result = HistorySchemaBuilder.buildFromOperation(operation, responseBody, merged) ?: continue
             val newSignature = schemaSignature(result)

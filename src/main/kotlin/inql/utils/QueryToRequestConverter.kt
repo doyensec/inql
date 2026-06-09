@@ -491,17 +491,31 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             return null
         }
 
-        val unwrappedType = unwrapType(type)
-        return when (getTypeName(unwrappedType)) {
+        return when (type) {
+            is GraphQLNonNull -> generateExampleValue(type.wrappedType, currentDepth, maxDepth)
+            is GraphQLList -> {
+                val element = generateExampleValue(type.wrappedType, currentDepth + 1, maxDepth)
+                if (element != null) listOf(element) else null
+            }
+            else -> generateLeafExampleValue(type, currentDepth, maxDepth)
+        }
+    }
+
+    private fun generateLeafExampleValue(
+        type: GraphQLType,
+        currentDepth: Int,
+        maxDepth: Int,
+    ): Any? {
+        return when (getTypeName(type)) {
             "String" -> "exampleString"
             "Int" -> 42
             "Float" -> 3.14
             "Boolean" -> true
             "ID" -> "123"
-            else -> when (unwrappedType) {
-                is GraphQLEnumType -> unwrappedType.values.first().name
+            else -> when (type) {
+                is GraphQLEnumType -> preferredEnumValue(type)
                 is GraphQLInputObjectType -> {
-                    val fields = unwrappedType.fields
+                    val fields = type.fields
                         .mapNotNull { field ->
                             generateExampleValue(field.type, currentDepth + 1, maxDepth)
                                 ?.let { field.name to it }
@@ -513,6 +527,13 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
                 else -> null
             }
         }
+    }
+
+    private fun preferredEnumValue(enumType: GraphQLEnumType): String {
+        val values = enumType.values.map { it.name }
+        return values.firstOrNull { it != "PLACEHOLDER" && it != "_inql_placeholder" }
+            ?: values.firstOrNull()
+            ?: "PLACEHOLDER"
     }
 
     private fun getVariableType(type: GraphQLType): String {
