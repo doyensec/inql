@@ -31,6 +31,19 @@ dependencies {
     implementation "com.vladsch.flexmark:flexmark-all:0.64.0"
     implementation "org.json:json:20250107"
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0'
+
+    // Test dependencies
+    testImplementation 'org.jetbrains.kotlin:kotlin-test:2.1.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.2.1'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testCompileOnly 'net.portswigger.burp.extensions:montoya-api:2023.5'
+    testRuntimeOnly 'net.portswigger.burp.extensions:montoya-api:2023.5'
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 java {
@@ -59,6 +72,11 @@ sourceSets {
         }
         resources {
             srcDirs = ['resources']
+        }
+    }
+    test {
+        kotlin {
+            srcDir 'src/test/kotlin'
         }
     }
 }

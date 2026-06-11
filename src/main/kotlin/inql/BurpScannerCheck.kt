@@ -10,6 +10,7 @@ import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint
 import burp.api.montoya.scanner.audit.issues.AuditIssue
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity
+import inql.graphql.scanners.BatchScanner
 
 class BurpScannerCheck : ScanCheck {
     companion object {
@@ -69,6 +70,76 @@ class BurpScannerCheck : ScanCheck {
             val newReq = baseRequestResponse.request().withPath(url)
             val result = Burp.Montoya.http().sendRequest(newReq)
             issues.addAll(this.passiveAudit(result).auditIssues())
+        }
+
+        // --- Batch Query Detection ---
+        val batchScanner = BatchScanner(baseRequestResponse.request())
+        val batchResults = batchScanner.scan()
+
+        for (result in batchResults) {
+            if (result.supported) {
+                val typeLabel = when (result.type) {
+                    BatchScanner.BatchType.ALIAS -> "Alias-Based"
+                    BatchScanner.BatchType.ARRAY -> "Array-Based"
+                }
+                val description = when (result.type) {
+                    BatchScanner.BatchType.ALIAS -> """
+                        The GraphQL endpoint supports <b>alias-based query batching</b>.<br><br>
+                        An attacker can combine multiple operations into a single HTTP request using
+                        GraphQL aliases (e.g., <code>alias1: fieldName alias2: fieldName</code>).<br><br>
+                        This can be exploited for:<br>
+                        <ul>
+                        <li>Brute-force attacks (e.g., 2FA bypass by sending thousands of codes in one request)</li>
+                        <li>Rate-limit bypass (many operations counted as one HTTP request)</li>
+                        <li>Denial of Service (resource-heavy queries multiplied via aliases)</li>
+                        </ul>
+                    """.trimIndent()
+                    BatchScanner.BatchType.ARRAY -> """
+                        The GraphQL endpoint supports <b>array-based query batching</b>.<br><br>
+                        An attacker can send a JSON array of independent query objects in a single
+                        HTTP request. Each query executes separately on the server.<br><br>
+                        This can be exploited for:<br>
+                        <ul>
+                        <li>Brute-force attacks (e.g., thousands of login attempts in one request)</li>
+                        <li>Rate-limit bypass (one HTTP request, many GraphQL operations)</li>
+                        <li>Denial of Service (parallel execution of expensive queries)</li>
+                        </ul>
+                    """.trimIndent()
+                }
+
+                val remediation = """
+                    Consider implementing:<br>
+                    <ul>
+                    <li>Query cost analysis / depth limiting</li>
+                    <li>Per-operation rate limiting (not just per-HTTP-request)</li>
+                    <li>Disable array batching if not needed (e.g., Apollo Server's
+                        <code>allowBatchedHttpRequests: false</code>)</li>
+                    <li>Limit the maximum number of aliases per query</li>
+                    </ul>
+                """.trimIndent()
+
+                issues.add(
+                    AuditIssue.auditIssue(
+                        "GraphQL $typeLabel Batch Query Support Detected",
+                        description,
+                        remediation,
+                        baseRequestResponse.url(),
+                        AuditIssueSeverity.LOW,
+                        AuditIssueConfidence.CERTAIN,
+                        null,
+                        """<ul>
+                            <li><a href='https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/'>OWASP API4 - Unrestricted Resource Consumption</a></li>
+                            <li><a href='https://graphql.org/'>GraphQL Specification</a></li>
+                        </ul>""",
+                        AuditIssueSeverity.LOW,
+                        if (result.response != null) {
+                            listOf(baseRequestResponse)
+                        } else {
+                            emptyList()
+                        },
+                    ),
+                )
+            }
         }
         return AuditResult.auditResult(issues)
     }

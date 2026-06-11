@@ -3,6 +3,7 @@ package inql.scanner.scanresults
 import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
+import inql.graphql.scanners.BatchScanner
 import inql.graphql.scanners.CyclesScanner
 import inql.graphql.scanners.POIScanner
 import inql.graphql.scanners.POIScanner.Companion.getActiveKeywordsCount
@@ -197,6 +198,15 @@ class ScanResultTreeNode(val scanResult: ScanResult) :
 
         if (config.getBoolean("report.cycles") == true) {
             this.add(CycleDetectionLazyNode("Cycle Detection", this.scanResult, gqlSchema))
+        }
+
+        // Batch Query Detection
+        if (config.getBoolean("report.batch") == true) {
+            val batchNode = LazyLeafTreeNode("Batch Query Detection") {
+                val batchScanner = BatchScanner(scanResult.requestTemplate)
+                batchScanner.scanAsString().ifBlank { "<could not determine batch support>" }
+            }
+            this.add(batchNode)
         }
 
         // Add request template

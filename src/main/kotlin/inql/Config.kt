@@ -44,6 +44,11 @@ class Config private constructor() {
         "report.poi.depth" to 2,
         "report.poi.format" to "text",
 
+        // Batch scanning
+        "report.batch" to true,
+        "report.batch.alias" to true,
+        "report.batch.array" to true,
+
         // hooks on POIScanner.kt
         "report.poi.auth" to true,
         "report.poi.privileged" to true,
