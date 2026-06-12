@@ -9,6 +9,13 @@ import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.history.HistoryHostKey
+import inql.history.HistoryTracker
+import inql.graphql.Utils
+import inql.schema.corrections.GraphQLErrorPathParser
+import inql.schema.corrections.SchemaCorrections
+import inql.schema.corrections.SchemaCorrectionsService
+import inql.schema.corrections.TypeCorrectionTargetResolver
+import java.lang.reflect.InvocationTargetException
 import inql.ui.EditableTabTitle
 import inql.ui.EditableTabbedPane
 import java.net.URI
@@ -170,6 +177,13 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     fun findHistoryTabForHost(host: String): ScannerTab? =
         findTabForHostAndSource(host, SchemaDiscoverySource.HISTORY)
 
+    fun focusScannerTab(tab: ScannerTab) {
+        val idx = tabbedPane.indexOfComponent(tab)
+        if (idx >= 0) {
+            tabbedPane.selectedIndex = idx
+        }
+    }
+
     fun getOrCreateSourceTab(
         host: String,
         source: SchemaDiscoverySource,
@@ -206,6 +220,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         requestTemplate: HttpRequest,
         scanResult: ScanResult,
         focus: Boolean = false,
+        incrementalTreeUpdate: Boolean = false,
     ) {
         val normalizedHost = HistoryHostKey.normalize(host)
         val tab = getOrCreateSourceTab(normalizedHost, source, requestTemplate, focus)
@@ -213,11 +228,13 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         val resultToSave = if (existing != null) {
             val idx = tab.scanResults.indexOf(existing)
             val updated = if (source == SchemaDiscoverySource.HISTORY) {
-                existing.withUpdatedSchema(
-                    scanResult.parsedSchema,
-                    jsonSchema = scanResult.jsonSchema,
-                    sdlSchema = scanResult.sdlSchema,
-                )
+                existing.withUpdatedSchema(scanResult.parsedSchema).let { base ->
+                    if (scanResult.schemaCorrections != existing.schemaCorrections) {
+                        base.withCorrections(scanResult.schemaCorrections, base.parsedSchema)
+                    } else {
+                        base
+                    }
+                }
             } else {
                 scanResult
             }
@@ -228,12 +245,147 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
             scanResult
         }
         tab.setTabTitle(sourceTabTitle(source, normalizedHost))
-        tab.showResultsView()
-        tab.scanResultsView.refresh()
-        tab.scanResultsView.ensureDefaultTreeExpansion()
-        updateChildObjectAsync(resultToSave)
-        updateChildObjectAsync(tab)
+        val canSyncIncrementally = incrementalTreeUpdate && existing != null
+        if (canSyncIncrementally && tab.scanResultsView.syncScanResult(resultToSave)) {
+            tab.showResultsView()
+            updateChildObjectAsync(resultToSave)
+        } else {
+            tab.showResultsView()
+            if (focus) {
+                inql.focusTab(inql.scanner)
+                focusScannerTab(tab)
+            }
+            tab.scanResultsView.refresh()
+            tab.scanResultsView.ensureDefaultTreeExpansion()
+            updateChildObjectAsync(resultToSave)
+            updateChildObjectAsync(tab)
+        }
         introspectionCache.putIfNewer(url = tab.url, scanResult = resultToSave)
+    }
+
+    /**
+     * Applies a type correction from a GraphQL "Did you mean" validation error to the schema for [host].
+     * Prefer argument-scoped overrides from [request]'s query so unrelated fields keep their own input types.
+     */
+    fun applyTypeRenameCorrection(
+        request: HttpRequest,
+        host: String,
+        wrongType: String,
+        suggestedType: String,
+    ): Boolean {
+        val normalizedHost = HistoryHostKey.normalize(host)
+        val tab = findHistoryTabForHost(normalizedHost)
+            ?: findTabForHost(normalizedHost)
+            ?: getScannerTabs().find { tabReferencesHost(it, normalizedHost) }
+            ?: return false
+
+        val scanResult = tab.scanResults.find { it.schemaDiscoverySource == SchemaDiscoverySource.HISTORY }
+            ?: tab.scanResults.firstOrNull()
+            ?: return false
+
+        val corrections = buildScopedTypeCorrection(
+            scanResult = scanResult,
+            request = request,
+            wrongType = wrongType,
+            suggestedType = suggestedType,
+        )
+        val (schema, errors) = SchemaCorrectionsService.validateAndApply(
+            scanResult.parsedSchema.schema,
+            corrections,
+        )
+        if (schema == null) {
+            Logger.error("Type rename correction failed: ${errors.joinToString("; ")}")
+            return false
+        }
+
+        val updated = scanResult.withCorrectionsOnly(corrections)
+        val idx = tab.scanResults.indexOfFirst { it.uuid == scanResult.uuid }
+        if (idx < 0) return false
+        tab.scanResults[idx] = updated
+
+        if (updated.schemaDiscoverySource == SchemaDiscoverySource.HISTORY) {
+            HistoryTracker.storeCorrections(
+                updated.host,
+                corrections,
+                scanResult.parsedSchema.schema,
+            )
+        }
+
+        updateChildObjectAsync(updated)
+        updateChildObjectAsync(tab)
+        if (tab.url.isNotBlank()) {
+            introspectionCache.putIfNewer(
+                tab.url,
+                scanResult = updated.withUpdatedSchema(updated.effectiveParsedSchema()),
+            )
+        }
+
+        SwingUtilities.invokeLater {
+            tab.showResultsView()
+            if (!tab.scanResultsView.syncScanResult(updated)) {
+                tab.scanResultsView.refresh()
+            }
+            tab.scanResultsView.openSchemaCorrections(updated.uuid)
+            inql.focusTab(inql.scanner)
+            focusScannerTab(tab)
+        }
+        Logger.info("Applied type correction: $wrongType → $suggestedType for $normalizedHost")
+        return true
+    }
+
+    private fun buildScopedTypeCorrection(
+        scanResult: ScanResult,
+        request: HttpRequest,
+        wrongType: String,
+        suggestedType: String,
+    ): SchemaCorrections {
+        val effectiveSchema = scanResult.effectiveParsedSchema().schema
+        val operation = Utils.getGraphQLOperation(request)
+        val querySites = operation?.let { op ->
+            TypeCorrectionTargetResolver.argumentSitesInQuery(
+                schema = effectiveSchema,
+                query = op.query,
+                operationType = op.operationType,
+                wrongType = wrongType,
+            )
+        }.orEmpty()
+
+        val targetSites = querySites.ifEmpty {
+            TypeCorrectionTargetResolver.argumentSitesInSchema(effectiveSchema, wrongType)
+        }
+
+        val normalizedSuggested = GraphQLErrorPathParser.normalizeTypeName(suggestedType) ?: suggestedType
+        val suggestedSdl = if (normalizedSuggested.endsWith("!")) normalizedSuggested else "$normalizedSuggested!"
+
+        if (targetSites.isNotEmpty()) {
+            var corrections = scanResult.schemaCorrections
+            for (site in targetSites) {
+                corrections = corrections.withArgumentTypeOverride(
+                    parentType = site.parentType,
+                    fieldName = site.fieldName,
+                    argumentName = site.argumentName,
+                    type = suggestedSdl,
+                )
+            }
+            return corrections
+        }
+
+        return scanResult.schemaCorrections.withSuggestionRename(wrongType, suggestedType)
+    }
+
+    fun tabReferencesHost(tab: ScannerTab, normalizedHost: String): Boolean {
+        return tabMatchesHost(tab, normalizedHost)
+    }
+
+    fun onTabClosed(tab: ScannerTab) {
+        val url = tab.url
+        val profileName = tab.linkedProfile?.name
+        introspectionCache.evictForClosedTab(url, profileName)
+        if (HistoryTracker.isRunning()) {
+            for (host in tab.referencedHosts()) {
+                HistoryTracker.releaseHostIfNoOpenTabs(host)
+            }
+        }
     }
 
     private fun tabMatchesHost(
@@ -283,45 +435,55 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
     }
 
     override fun burpDeserialize(obj: PersistedObject) {
-        val prevTabCnt = this.tabCount
         this.tabFactory.tabIdx = obj.getInteger("tabFactoryIdx")
-        val tabIdList = obj.getStringList("tabs")
-        if (tabIdList != null) {
-            // Remove pre-existing tabs
-            for (tab in 0..<prevTabCnt) {
-                this.tabbedPane.removeTabAt(tab)
+        val tabIdList = obj.getStringList("tabs") ?: return
+
+        Logger.debug("Loading ${tabIdList.size} tab(s) from project file")
+
+        val tabsToFix = mutableSetOf<ScannerTab>()
+        val restoredTabs = mutableListOf<ScannerTab>()
+        for (tabId in tabIdList) {
+            val id = tabId.substring(tabId.lastIndexOf('.') + 1).toInt()
+            Logger.debug("Loading tab with id: $id")
+            val tab = ScannerTab(this, id)
+            tabsToFix.add(tab)
+            if (!tab.loadFromProjectFile()) continue
+            restoredTabs.add(tab)
+        }
+
+        restoreTabsOnEdt(restoredTabs, tabsToFix)
+    }
+
+    private fun restoreTabsOnEdt(restoredTabs: List<ScannerTab>, tabsToFix: MutableSet<ScannerTab>) {
+        val restoreUi = Runnable {
+            while (this.tabCount > 0) {
+                this.tabbedPane.removeTabAt(0)
             }
-
-            Logger.debug("Loading ${tabIdList.size} tab(s) from project file")
-
-            val tabsToFix = mutableSetOf<ScannerTab>()
-            for (tabId in tabIdList) {
-                val id = tabId.substring(tabId.lastIndexOf('.') + 1).toInt()
-                Logger.debug("Loading tab with id: $id")
-                val tab = ScannerTab(this, id)
-                tabsToFix.add(tab)
-                if (!tab.loadFromProjectFile()) continue
+            for (tab in restoredTabs) {
                 this.addTab(tab.getTabTitle(), tab)
                 tab.setTabTitle(tab.getTabTitle())
+                tab.restoreResultsViewIfNeeded()
+                tab.recoverHostKeyIfNeeded()?.let { host ->
+                    Logger.info("Re-extracting history schema for $host after failed scan-result restore")
+                    HistoryTracker.extractSchemaForHost(host)
+                }
             }
 
-            // Update Introspection Cache
             this.introspectionCache.populateFromScanner()
 
-            /*
-            The following is needed to fix glitchy UI where the JTree is not rendered correctly when
-            it's created while the Tab is not currently in foreground.
-            We hook a ChangeListener that repaints each affected Tab exactly once.
-            The ChangeListener unhooks itself when there are no more tabs to fix
-             */
+            // Blank tab for "new scan"; do not steal focus from restored tabs.
+            this.newTab(focus = false)
 
-            // Add a new tab (needed for the ChangeListener)
-            this.newTab()
+            restoredTabs.firstOrNull()?.let { restored ->
+                val idx = this.tabbedPane.indexOfComponent(restored)
+                if (idx >= 0) {
+                    this.tabbedPane.selectedIndex = idx
+                }
+            }
 
-            // Add listener to fix glitchy UI
-            class BuggyTreeUIFixer: ChangeListener {
+            class BuggyTreeUIFixer : ChangeListener {
                 override fun stateChanged(e: ChangeEvent?) {
-                    val selectedTab = tabbedPane.selectedComponent as ScannerTab
+                    val selectedTab = tabbedPane.selectedComponent as? ScannerTab ?: return
                     if (!tabsToFix.contains(selectedTab)) {
                         return
                     }
@@ -337,6 +499,19 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
                 }
             }
             this.tabbedPane.addChangeListener(BuggyTreeUIFixer())
+        }
+
+        if (SwingUtilities.isEventDispatchThread()) {
+            restoreUi.run()
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(restoreUi)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                Logger.error("Interrupted while restoring scanner tabs")
+            } catch (e: InvocationTargetException) {
+                Logger.error("Failed to restore scanner tabs: ${e.cause?.message ?: e.message}")
+            }
         }
     }
 }

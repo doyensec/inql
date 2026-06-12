@@ -19,6 +19,10 @@ internal object QueryAstToSchema {
         val scalarReturnType: String? = null,
         val inlineFragments: Map<String, List<FieldNode>> = emptyMap(),
         val hasSubselection: Boolean = false,
+        /** Concrete GraphQL object type from response `__typename`, when present. */
+        val objectTypeName: String? = null,
+        /** Resolved output type for composite fields (cycle-aware synthetic naming). */
+        val outputTypeName: String? = null,
     )
 
     private data class SelectionExtract(
@@ -39,13 +43,43 @@ internal object QueryAstToSchema {
         variables: Map<String, Any?>? = null,
         errorHints: GraphQLErrorTypeHints.Hints = GraphQLErrorTypeHints.Hints(),
     ): GraphQLSchema? {
-        if (!Utils.isGraphQLDocument(query)) return null
+        val registry = SdlTypeRegistry()
+        if (!populateRegistry(
+                registry,
+                query,
+                operationType,
+                rejectedFieldNames,
+                responseBody,
+                variables,
+                errorHints,
+            )
+        ) {
+            return null
+        }
+        return registry.toSchema()
+    }
+
+    /**
+     * Merges one operation into [registry] without a GraphQLSchema round-trip.
+     * @return true when the registry changed.
+     */
+    fun populateRegistry(
+        registry: SdlTypeRegistry,
+        query: String,
+        operationType: String,
+        rejectedFieldNames: Set<String> = emptySet(),
+        responseBody: String? = null,
+        variables: Map<String, Any?>? = null,
+        errorHints: GraphQLErrorTypeHints.Hints = GraphQLErrorTypeHints.Hints(),
+    ): Boolean {
+        if (!Utils.isGraphQLDocument(query)) return false
         return try {
+            val before = registry.snapshot()
             val document = parser.parseDocument(query)
             val fragmentMap = buildFragmentMap(document)
             val operation = document.definitions
                 .filterIsInstance<OperationDefinition>()
-                .firstOrNull() ?: return null
+                .firstOrNull() ?: return false
 
             val effectiveOperationType = resolveOperationType(operation, operationType)
             val rootTypeName = when (effectiveOperationType) {
@@ -69,28 +103,30 @@ internal object QueryAstToSchema {
                 operationType = effectiveOperationType,
                 errorHints = errorHints,
                 buildContext = buildContext,
+                parentOutputTypeName = rootTypeName,
             )
-            if (rootExtract.fields.isEmpty() && rootExtract.inlineFragments.isEmpty()) return null
+            if (rootExtract.fields.isEmpty() && rootExtract.inlineFragments.isEmpty()) return false
 
-            val registry = SdlTypeRegistry()
-            registry.addFields(rootTypeName, rootExtract.fields)
+            registry.addFields(rootTypeName, rootExtract.fields, evidencedParent = true)
             for ((typeName, fragmentFields) in rootExtract.inlineFragments) {
-                registry.addFields(typeName, fragmentFields)
+                registry.addFields(typeName, fragmentFields, evidencedParent = true)
             }
             for ((inputTypeName, fields) in buildContext.inlineInputFields) {
                 registry.registerInputFields(inputTypeName, fields)
             }
             registry.applyArgumentTypeHints(errorHints.argumentHints)
+            registry.applyInferredTypeRenames(errorHints.typeRenames)
             if (!variables.isNullOrEmpty()) {
                 JsonValueTypeInference.applyVariableValues(registry, variables, variableTypes)
             }
+            registry.registerVariableDeclarationTypes(variableTypes)
             for ((enumName, values) in buildContext.enumValues) {
                 registry.registerEnumValues(enumName, values)
             }
-            registry.toSchema()
+            registry.snapshot() != before
         } catch (e: Exception) {
-            Logger.debug("Failed to build schema from query AST: ${e.message}")
-            null
+            Logger.debug("Failed to populate schema registry from query AST: ${e.message}")
+            false
         }
     }
 
@@ -118,6 +154,9 @@ internal object QueryAstToSchema {
         operationType: String,
         errorHints: GraphQLErrorTypeHints.Hints,
         buildContext: SchemaBuildContext,
+        parentOutputTypeName: String,
+        fieldPathStack: MutableList<String> = mutableListOf(),
+        assignedChildTypes: MutableList<String> = mutableListOf(),
     ): SelectionExtract {
         if (selectionSet == null) return SelectionExtract()
 
@@ -134,38 +173,57 @@ internal object QueryAstToSchema {
                         .filter { it.fieldName == fieldName }
                         .associate { it.argumentName to it.expectedType }
 
-                    val args = selection.arguments.associate { arg ->
+                    val args = selection.arguments.mapNotNull { arg ->
                         val inferenceContext = ValueInferenceContext(
                             operationType = operationType,
+                            parentOutputTypeName = parentOutputTypeName,
                             parentFieldName = fieldName,
                             argumentName = arg.name,
                             argumentTypeHints = argumentHints,
                             enumValues = buildContext.enumValues,
                         )
-                        val argType = inferArgumentType(arg, variableTypes, inferenceContext, buildContext)
-                        arg.name to argType
-                    }
+                        inferArgumentType(arg, variableTypes, inferenceContext, buildContext)
+                            ?.let { arg.name to it }
+                    }.toMap()
 
                     val fieldResponse = ResponseDataParser.normalizeResponseNode(
                         ResponseDataParser.responseValueForField(responseNode, fieldName, selection.alias),
                     )
-                    val childExtract = extractSelectionSet(
-                        selection.selectionSet,
-                        fragmentMap,
-                        rejectedFieldNames,
-                        variableTypes,
-                        fieldResponse,
-                        operationType,
-                        errorHints,
-                        buildContext,
-                    )
+                    val cycleStart = fieldPathStack.indexOf(fieldName)
+                    val childParentType = ResponseDataParser.extractTypename(fieldResponse)
+                        ?.takeIf { it.isNotBlank() && !it.startsWith("__") }
+                        ?: if (cycleStart >= 0) {
+                            assignedChildTypes[cycleStart]
+                        } else {
+                            ConnectionNodeTypeNaming.child(parentOutputTypeName, fieldName)
+                        }
+                    fieldPathStack.add(fieldName)
+                    assignedChildTypes.add(childParentType)
+                    val childExtract = try {
+                        extractSelectionSet(
+                            selection.selectionSet,
+                            fragmentMap,
+                            rejectedFieldNames,
+                            variableTypes,
+                            fieldResponse,
+                            operationType,
+                            errorHints,
+                            buildContext,
+                            parentOutputTypeName = childParentType,
+                            fieldPathStack = fieldPathStack,
+                            assignedChildTypes = assignedChildTypes,
+                        )
+                    } finally {
+                        fieldPathStack.removeAt(fieldPathStack.lastIndex)
+                        assignedChildTypes.removeAt(assignedChildTypes.lastIndex)
+                    }
                     val hasSubselection = selection.selectionSet?.selections?.isNotEmpty() == true
                     val scalarReturnType = if (
                         !hasSubselection &&
                         childExtract.fields.isEmpty() &&
                         childExtract.inlineFragments.isEmpty()
                     ) {
-                        GraphQLTypeInference.inferReturnTypeFromResponse(fieldResponse, fieldName)
+                        GraphQLTypeInference.inferReturnTypeFromResponse(fieldResponse)
                     } else {
                         null
                     }
@@ -177,6 +235,8 @@ internal object QueryAstToSchema {
                             scalarReturnType = scalarReturnType,
                             inlineFragments = childExtract.inlineFragments,
                             hasSubselection = hasSubselection,
+                            objectTypeName = ResponseDataParser.extractTypename(fieldResponse),
+                            outputTypeName = childParentType.takeIf { hasSubselection },
                         ),
                     )
                 }
@@ -192,6 +252,9 @@ internal object QueryAstToSchema {
                         operationType,
                         errorHints,
                         buildContext,
+                        parentOutputTypeName = typeName,
+                        fieldPathStack = fieldPathStack,
+                        assignedChildTypes = assignedChildTypes,
                     )
                     mergeFragmentExtract(inlineFragments, typeName, fragExtract)
                 }
@@ -208,6 +271,9 @@ internal object QueryAstToSchema {
                         operationType,
                         errorHints,
                         buildContext,
+                        parentOutputTypeName = typeName ?: parentOutputTypeName,
+                        fieldPathStack = fieldPathStack,
+                        assignedChildTypes = assignedChildTypes,
                     )
                     if (typeName != null) {
                         mergeFragmentExtract(inlineFragments, typeName, fragExtract)
@@ -242,11 +308,8 @@ internal object QueryAstToSchema {
         variableTypes: Map<String, String>,
         context: ValueInferenceContext,
         buildContext: SchemaBuildContext,
-    ): String {
-        var argType = GraphQLTypeInference.inferValueType(arg.value, variableTypes, context)
-        if (arg.value is ObjectValue) {
-            argType = GraphQLTypeInference.ensureNonNullSdlType(argType)
-        }
+    ): String? {
+        val argType = GraphQLTypeInference.inferValueType(arg.value, variableTypes, context) ?: return null
         if (arg.value is ObjectValue) {
             val inputTypeName = GraphQLTypeInference.baseTypeName(argType)
             val fields = GraphQLTypeInference.extractObjectFields(
@@ -254,11 +317,15 @@ internal object QueryAstToSchema {
                 variableTypes,
                 inputTypeName,
                 context,
+                buildContext.inlineInputFields,
             )
-            val bucket = buildContext.inlineInputFields.getOrPut(inputTypeName) { linkedMapOf() }
-            for ((fieldName, fieldType) in fields) {
-                bucket[fieldName] = GraphQLTypeInference.mergeSdlTypes(bucket[fieldName], fieldType)
+            if (fields.isNotEmpty()) {
+                val bucket = buildContext.inlineInputFields.getOrPut(inputTypeName) { linkedMapOf() }
+                for ((fieldName, fieldType) in fields) {
+                    bucket[fieldName] = GraphQLTypeInference.mergeSdlTypes(bucket[fieldName], fieldType)
+                }
             }
+            return GraphQLTypeInference.ensureNonNullSdlType(argType)
         }
         return argType
     }

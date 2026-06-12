@@ -2,6 +2,8 @@ package inql.history
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import inql.schema.corrections.GraphQLErrorPathParser
+import inql.schema.corrections.SchemaArgumentPathResolver
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,7 +12,7 @@ import org.json.JSONObject
  */
 internal object GraphQLErrorTypeHints {
     data class ArgumentTypeHint(
-        val rootType: String,
+        val parentType: String,
         val fieldName: String,
         val argumentName: String,
         val expectedType: String,
@@ -18,6 +20,7 @@ internal object GraphQLErrorTypeHints {
 
     data class Hints(
         val argumentHints: List<ArgumentTypeHint> = emptyList(),
+        val typeRenames: List<Pair<String, String>> = emptyList(),
     )
 
     private val gson = Gson()
@@ -30,66 +33,62 @@ internal object GraphQLErrorTypeHints {
     fun parse(responseBody: String?): Hints {
         if (responseBody.isNullOrBlank()) return Hints()
         val errors = parseErrors(responseBody) ?: return Hints()
-        val hints = mutableListOf<ArgumentTypeHint>()
+        val argumentHints = mutableListOf<ArgumentTypeHint>()
+        val renames = mutableListOf<Pair<String, String>>()
 
         for (i in 0 until errors.length()) {
             val error = errors.optJSONObject(i) ?: continue
-            hints.addAll(parseErrorObject(error))
+            argumentHints.addAll(parseArgumentHint(error))
+            renames.addAll(parseTypeRename(error))
         }
 
-        return Hints(argumentHints = hints.distinct())
+        return Hints(
+            argumentHints = argumentHints.distinct(),
+            typeRenames = renames.distinct(),
+        )
     }
 
-    private fun parseErrorObject(error: JSONObject): List<ArgumentTypeHint> {
+    private fun parseArgumentHint(error: JSONObject): List<ArgumentTypeHint> {
         val message = error.optString("message", "")
         val extensions = error.optJSONObject("extensions")
-        val pathHint = parsePathHint(error.optJSONArray("path"), extensions?.optJSONArray("path"))
+        val path = error.optJSONArray("path") ?: extensions?.optJSONArray("path")
 
         val argumentType = extractArgumentTypeFromMessage(message)
             ?: extensions?.optString("argumentType")?.takeIf { it.isNotBlank() }
 
-        if (pathHint == null || argumentType.isNullOrBlank()) {
+        val fieldLocation = SchemaArgumentPathResolver.parseArgumentLocation(path)
+        if (fieldLocation == null || argumentType.isNullOrBlank()) {
             return emptyList()
         }
 
+        val (fieldName, argumentName) = fieldLocation
+        val parentType = SchemaArgumentPathResolver.inferredParentTypeFromErrorPath(path, fieldName)
+            ?: return emptyList()
+        val expectedType = GraphQLErrorPathParser.normalizeTypeName(argumentType) ?: return emptyList()
         return listOf(
             ArgumentTypeHint(
-                rootType = pathHint.rootType,
-                fieldName = pathHint.fieldName,
-                argumentName = pathHint.argumentName,
-                expectedType = normalizeSdlType(argumentType),
+                parentType = parentType,
+                fieldName = fieldName,
+                argumentName = argumentName,
+                expectedType = expectedType,
             ),
         )
     }
 
-    private data class PathHint(
-        val rootType: String,
-        val fieldName: String,
-        val argumentName: String,
-    )
+    private fun parseTypeRename(error: JSONObject): List<Pair<String, String>> {
+        val message = error.optString("message", "")
+        val extensions = error.optJSONObject("extensions")
+        val match = argumentMismatchMessage.find(message) ?: return emptyList()
 
-    private fun parsePathHint(primary: JSONArray?, fallback: JSONArray?): PathHint? {
-        val path = primary ?: fallback ?: return null
-        val segments = (0 until path.length()).mapNotNull { index ->
-            when (val value = path.opt(index)) {
-                is String -> value
-                else -> value?.toString()
-            }
-        }
-        if (segments.size < 3) return null
+        val variableType = GraphQLErrorPathParser.normalizeTypeName(
+            match.groups["variableType"]?.value ?: extensions?.optString("typeName"),
+        ) ?: return emptyList()
+        val argumentType = GraphQLErrorPathParser.normalizeTypeName(
+            match.groups["argumentType"]?.value ?: extensions?.optString("argumentType"),
+        ) ?: return emptyList()
 
-        val rootType = when (segments[0].lowercase()) {
-            "mutation" -> "Mutation"
-            "subscription" -> "Subscription"
-            "query" -> "Query"
-            else -> return null
-        }
-
-        return PathHint(
-            rootType = rootType,
-            fieldName = segments[1],
-            argumentName = segments[2],
-        )
+        if (variableType == argumentType) return emptyList()
+        return listOf(variableType to argumentType)
     }
 
     private fun extractArgumentTypeFromMessage(message: String): String? {
@@ -97,13 +96,13 @@ internal object GraphQLErrorTypeHints {
         return match.groups["argumentType"]?.value?.trim()
     }
 
-    private fun normalizeSdlType(type: String): String {
-        return type.trim()
-    }
-
     private fun parseErrors(responseBody: String): JSONArray? {
+        val trimmed = responseBody.trim()
+        if (trimmed.startsWith("[")) {
+            return parseBatchErrors(trimmed)
+        }
         return try {
-            val json = gson.fromJson(responseBody, JsonObject::class.java)
+            val json = gson.fromJson(trimmed, JsonObject::class.java)
             when {
                 json.has("errors") && json.get("errors").isJsonArray ->
                     JSONArray(json.getAsJsonArray("errors").toString())
@@ -111,10 +110,27 @@ internal object GraphQLErrorTypeHints {
             }
         } catch (_: Exception) {
             try {
-                JSONObject(responseBody).optJSONArray("errors")
+                JSONObject(trimmed).optJSONArray("errors")
             } catch (_: Exception) {
                 null
             }
+        }
+    }
+
+    private fun parseBatchErrors(responseBody: String): JSONArray? {
+        return try {
+            val array = JSONArray(responseBody)
+            val merged = JSONArray()
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                val errors = entry.optJSONArray("errors") ?: continue
+                for (errorIndex in 0 until errors.length()) {
+                    merged.put(errors.opt(errorIndex))
+                }
+            }
+            if (merged.length() == 0) null else merged
+        } catch (_: Exception) {
+            null
         }
     }
 }

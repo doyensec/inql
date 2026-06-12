@@ -6,13 +6,29 @@ import org.json.JSONObject
 internal object ResponseDataParser {
     fun extractData(responseBody: String?): Map<String, Any?>? {
         if (responseBody.isNullOrBlank()) return null
+        val trimmed = responseBody.trim()
         return try {
-            val root = JSONObject(responseBody)
-            val data = root.optJSONObject("data") ?: return null
-            jsonObjectToMap(data)
+            when {
+                trimmed.startsWith("[") -> extractDataFromBatch(trimmed)
+                else -> {
+                    val root = JSONObject(trimmed)
+                    val data = root.optJSONObject("data") ?: return null
+                    jsonObjectToMap(data)
+                }
+            }
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun extractDataFromBatch(responseBody: String): Map<String, Any?>? {
+        val array = JSONArray(responseBody)
+        for (index in 0 until array.length()) {
+            val entry = array.optJSONObject(index) ?: continue
+            val data = entry.optJSONObject("data") ?: continue
+            return jsonObjectToMap(data)
+        }
+        return null
     }
 
     fun responseValueForField(parent: Any?, fieldName: String, alias: String?): Any? {
@@ -21,6 +37,15 @@ internal object ResponseDataParser {
         return when (parent) {
             is Map<*, *> -> parent[key]
             is JSONObject -> parent.opt(key)
+            else -> null
+        }
+    }
+
+    fun extractTypename(node: Any?): String? {
+        val normalized = normalizeResponseNode(node) ?: return null
+        return when (normalized) {
+            is Map<*, *> -> normalized["__typename"] as? String
+            is JSONObject -> normalized.optString("__typename").takeIf { it.isNotBlank() }
             else -> null
         }
     }

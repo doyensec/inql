@@ -1,6 +1,7 @@
 package inql.scanner.scanresults
 
 import inql.Logger
+import inql.scanner.ScanResult
 import inql.ui.BorderPanel
 import java.awt.BorderLayout
 import java.awt.event.HierarchyEvent
@@ -90,13 +91,71 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         }
     }
 
-    fun refresh() {
+    fun refreshKeepingSchemaCorrections(scanResultUuid: String) {
+        wantsDefaultExpansion = false
+        refresh(preserveSchemaCorrectionsFor = scanResultUuid)
+    }
+
+    fun release() {
+        pendingSelectedPath = null
+        root.removeAllChildren()
+        (tree.model as DefaultTreeModel).nodeStructureChanged(root)
+    }
+
+    fun syncScanResult(updated: ScanResult): Boolean {
+        wantsDefaultExpansion = false
+        val expandedPaths = captureExpandedPaths()
+        val selectedPath = captureSelectedPath()
+
+        val model = tree.model as DefaultTreeModel
+        for (i in 0 until root.childCount) {
+            val node = root.getChildAt(i) as? ScanResultTreeNode ?: continue
+            if (node.scanResult.uuid != updated.uuid) continue
+
+            val previousLabel = nodeLabel(node)
+            node.reloadSchemaBranches(updated)
+            model.nodeStructureChanged(node)
+            model.nodeChanged(node)
+
+            val currentLabel = nodeLabel(node)
+            val restoredExpansion = remapFirstLabel(expandedPaths, previousLabel, currentLabel)
+            pendingSelectedPath = selectedPath?.let { labels ->
+                remapFirstLabel(linkedSetOf(labels), previousLabel, currentLabel).firstOrNull()
+            }
+            scheduleApplyTreeState(restoredExpansion)
+            return true
+        }
+        return false
+    }
+
+    private fun selectSchemaCorrectionsNode(scanResultUuid: String) {
+        for (i in 0 until root.childCount) {
+            val scanResultNode = root.getChildAt(i) as? DefaultMutableTreeNode ?: continue
+            val result = scanResultNode.userObject as? inql.scanner.ScanResult ?: continue
+            if (result.uuid != scanResultUuid) continue
+
+            val scanPath = TreePath(scanResultNode.path)
+            tree.expandPath(scanPath)
+            tree.makeVisible(scanPath)
+
+            for (j in 0 until scanResultNode.childCount) {
+                val child = scanResultNode.getChildAt(j) as? DefaultMutableTreeNode ?: continue
+                if (child.userObject !is SchemaCorrectionsEntry) continue
+                val childPath = TreePath(child.path)
+                tree.selectionPath = childPath
+                view.selectionChangeListener(child)
+                return
+            }
+        }
+    }
+
+    fun refresh(preserveSchemaCorrectionsFor: String? = null) {
         val expandedPaths = if (wantsDefaultExpansion) emptySet() else captureExpandedPaths()
         if (expandedPaths.isNotEmpty()) {
             wantsDefaultExpansion = false
         }
 
-        pendingSelectedPath = captureSelectedPath()
+        pendingSelectedPath = if (preserveSchemaCorrectionsFor == null) captureSelectedPath() else null
 
         this.root.userObject = this.view.scannerTab.host
         this.root.removeAllChildren()
@@ -107,6 +166,9 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         model.nodeStructureChanged(root)
 
         scheduleApplyTreeState(expandedPaths)
+        if (preserveSchemaCorrectionsFor != null) {
+            SwingUtilities.invokeLater { selectSchemaCorrectionsNode(preserveSchemaCorrectionsFor) }
+        }
     }
 
     fun ensureDefaultTreeExpansion() {
@@ -229,6 +291,21 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         return labels.ifEmpty { null }
     }
 
+    private fun remapFirstLabel(
+        paths: Set<List<String>>,
+        oldLabel: String,
+        newLabel: String,
+    ): Set<List<String>> {
+        if (oldLabel == newLabel) return paths
+        return paths.map { labels ->
+            if (labels.isNotEmpty() && labels[0] == oldLabel) {
+                listOf(newLabel) + labels.drop(1)
+            } else {
+                labels
+            }
+        }.toSet()
+    }
+
     private fun findNodeByLabels(labels: List<String>): DefaultMutableTreeNode? {
         var current: DefaultMutableTreeNode = root
         for (label in labels) {
@@ -259,9 +336,10 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
 
     private fun triggerCycleDetectionLoad(node: Any) {
         if (node !is DefaultMutableTreeNode) return
-        val entry = node.userObject as? CycleDetectionEntry ?: return
-        entry.ensureLoaded {
-            view.selectionChangeListener(node)
+        when (val entry = node.userObject) {
+            is CycleDetectionEntry -> entry.ensureLoaded { view.selectionChangeListener(node) }
+            is SchemaCorrectionsEntry -> if (node.isLeaf) view.selectionChangeListener(node)
+            is RequestTemplateEntry -> if (node.isLeaf) view.selectionChangeListener(node)
         }
     }
 

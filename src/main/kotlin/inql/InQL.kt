@@ -6,12 +6,14 @@ import inql.attacker.Attacker
 import inql.fingerprinter.Fingerprinter
 import inql.externaltools.ExternalToolsService
 import inql.history.HistoryTracker
+import inql.savestate.LoadsDataFromProject
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.scanner.Scanner
 import inql.ui.InQLTabbedPane
 import inql.ui.SendToInqlHandler
 import inql.ui.StyledPayloadEditor
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JTabbedPane
@@ -53,11 +55,21 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         // Register context menu handler
         Burp.Montoya.userInterface().registerContextMenuItemsProvider(SendToInqlHandler(this))
 
+        val historyEnabled = this.config.getBoolean("history.tracking_enabled") == true
+
         // Reload data from the project file
         if (!this.dataPresentInProjectFile()) {
             this.saveToProjectFile(false) // initialize main object
+            if (historyEnabled) {
+                HistoryTracker.start(this)
+            }
         } else {
-            this.loadFromProjectFileAsync()
+            LoadsDataFromProject.coroutineScope.launch {
+                this@InQL.loadFromProjectFile()
+                if (historyEnabled) {
+                    HistoryTracker.start(this@InQL)
+                }
+            }
         }
 
         // Initialize ExternalToolsService to make it ready to spawn the webserver and register the interceptor when they are needed
@@ -71,10 +83,6 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
             ProxyRequestHighlighter.start()
         }
 
-        // If enabled, start live history schema tracking
-        if (this.config.getBoolean("history.tracking_enabled") == true) {
-            HistoryTracker.start(this)
-        }
     }
 
     fun unload() = runBlocking {
@@ -135,7 +143,9 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     fun focusTab(tab: Component) {
         (this.parent as JTabbedPane).selectedComponent = this
-        this.tabbedPane.selectedComponent = tab
+        if (this.tabbedPane.indexOfComponent(tab) >= 0) {
+            this.tabbedPane.selectedComponent = tab
+        }
     }
 
     override val saveStateKey: String

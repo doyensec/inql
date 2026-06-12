@@ -51,9 +51,8 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
         // Handle object field
         sb.appendLinesWithPadding(descriptionLines, padding)
 
-        // If we reached maxDepth, just print the field commented out and return
+        // Past depth limit: omit composite fields (do not emit invalid/truncated selections).
         if (depth > maxDepth) {
-            sb.appendLine("$padding$name$args # { Truncated by depth limit }")
             return
         }
 

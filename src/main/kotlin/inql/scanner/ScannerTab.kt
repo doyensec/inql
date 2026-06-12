@@ -87,6 +87,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     private var bruteforcerJob: Job? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var recoverSchemaOnRestore = false
 
     var url: String
         get() = this.scanConfigView.urlField.text
@@ -112,6 +113,17 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         set(r) {
             this.scanConfigView.requestTemplate = r
         }
+
+    fun applyRequestTemplate(request: HttpRequest) {
+        val normalized = request.withBody("")
+        requestTemplate = normalized
+        for (index in scanResults.indices) {
+            val updated = scanResults[index].withUpdatedRequestTemplate(normalized)
+            scanResults[index] = updated
+            scanner.updateChildObjectAsync(updated)
+        }
+        scanner.updateChildObjectAsync(this)
+    }
 
     private fun showView(card: String) {
         if (!setOf<String>(
@@ -420,10 +432,12 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         scanner.introspectionCache.putIfNewer(url = url, scanResult = scanResults.last())
     }
 
-    private fun scanFailed(reason: String?, logToError: Boolean = true) {
-        if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
-        this.scanConfigView.setBusy(false)
-        this.scanConfigView.setBruteforcerRunning(false)
+    private suspend fun scanFailed(reason: String?, logToError: Boolean = true) {
+        withContext(Dispatchers.Main) {
+            if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
+            scanConfigView.setBusy(false)
+            scanConfigView.setBruteforcerRunning(false)
+        }
     }
 
     fun getTabTitle(): String {
@@ -443,9 +457,35 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         title.text = text
     }
 
+    fun referencedHosts(): Set<String> {
+        val hosts = linkedSetOf<String>()
+        if (url.isNotBlank()) {
+            HistoryHostKey.fromUrl(url)?.let { hosts.add(HistoryHostKey.normalize(it)) }
+        }
+        runCatching {
+            hosts.add(HistoryHostKey.normalize(HistoryHostKey.fromRequest(requestTemplate)))
+        }
+        for (result in scanResults) {
+            hosts.add(HistoryHostKey.normalize(result.host))
+        }
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.let { (_, host) ->
+            hosts.add(HistoryHostKey.normalize(host))
+        }
+        return hosts
+    }
+
     fun onClose() {
-        this.cancel()
-        if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
+        cancel()
+        coroutineScope.cancel()
+        scanResultsView.release()
+        scanner.onTabClosed(this)
+        if (scanResults.isNotEmpty()) {
+            scanner.deleteChildObjectAsync(this) {
+                scanResults.clear()
+            }
+        } else {
+            scanResults.clear()
+        }
     }
 
     override val saveStateKey: String
@@ -476,17 +516,36 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val resultsIdLst = obj.getStringList("results")
         if (!resultsIdLst.isNullOrEmpty()) {
             for (resultId in resultsIdLst) {
-                this.scanResults.add(ScanResult.Deserializer(resultId).get() ?: continue)
+                val result = ScanResult.Deserializer(resultId).get()
+                if (result == null) {
+                    Logger.warning("[$saveStateKey] Failed to load persisted scan result: $resultId")
+                    continue
+                }
+                scanResults.add(result)
+            }
+            if (scanResults.isEmpty()) {
+                recoverSchemaOnRestore = true
             }
         }
 
         // Set the tab title AFTER setting the linked profile to prevent double suffix
         this.setTabTitle(obj.getString("tabTitle"))
 
-        // Set the UI to show the results
-        if (this.scanResults.isNotEmpty()) {
-            this.showResultsView()
-            this.scanResultsView.refresh()
+    }
+
+    fun restoreResultsViewIfNeeded() {
+        if (scanResults.isEmpty()) return
+        showResultsView()
+        scanResultsView.refresh()
+        scanResultsView.ensureDefaultTreeExpansion()
+    }
+
+    fun recoverHostKeyIfNeeded(): String? {
+        if (!recoverSchemaOnRestore) return null
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.second?.let { return it }
+        if (url.isNotBlank()) {
+            runCatching { HistoryHostKey.fromUrl(url) }.getOrNull()?.let { return HistoryHostKey.normalize(it) }
         }
+        return null
     }
 }

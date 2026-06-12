@@ -1,13 +1,15 @@
 package inql.history
 
 import burp.Burp
-import burp.api.montoya.http.message.HttpRequestResponse
 import burp.api.montoya.proxy.ProxyHttpRequestResponse
+import graphql.schema.GraphQLSchema
 import inql.Config
 import inql.InQL
 import inql.Logger
 import inql.graphql.Utils
+import inql.schema.corrections.SchemaCorrections
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 
 class HistoryTracker private constructor(private val inql: InQL) {
     companion object {
@@ -32,13 +34,32 @@ class HistoryTracker private constructor(private val inql: InQL) {
             }
         }
 
+        fun storeCorrections(host: String, corrections: SchemaCorrections, schema: GraphQLSchema) {
+            if (this::instance.isInitialized) {
+                instance.schemaService.storeCorrections(host, corrections, schema)
+            }
+        }
+
+        fun resetHostSchema(host: String) {
+            if (this::instance.isInitialized) {
+                instance.schemaService.resetHostForReextract(host)
+            }
+        }
+
         fun isRunning(): Boolean = this::instance.isInitialized
+
+        fun releaseHostIfNoOpenTabs(host: String) {
+            if (this::instance.isInitialized) {
+                instance.schemaService.releaseHostIfNoOpenTabs(host)
+            }
+        }
     }
 
     private val pollingDelay = 1000L
     private val pollingScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val processingScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val schemaService = HistorySchemaService(inql)
+    private val historyItemChannel = Channel<ProxyHttpRequestResponse>(Channel.UNLIMITED)
 
     private var oldIdx = 0
     private val newIdx = { Burp.Montoya.proxy().history().size - 1 }
@@ -46,14 +67,23 @@ class HistoryTracker private constructor(private val inql: InQL) {
     init {
         oldIdx = newIdx()
         pollingScope.launch { poll() }
+        processingScope.launch { processHistoryQueue() }
         Logger.debug("History tracker started")
     }
 
     private fun stop() {
         pollingScope.cancel()
         processingScope.cancel()
+        historyItemChannel.close()
         schemaService.stop()
         Logger.debug("History tracker stopped")
+    }
+
+    private suspend fun processHistoryQueue() {
+        for (item in historyItemChannel) {
+            handleHistoryItem(item)
+            yield()
+        }
     }
 
     fun extractSchemaForHost(host: String) {
@@ -68,27 +98,20 @@ class HistoryTracker private constructor(private val inql: InQL) {
             val currentIdx = newIdx()
             if (currentIdx <= oldIdx) continue
 
-            val batch = (oldIdx + 1..currentIdx).map { Burp.Montoya.proxy().history()[it] }
-            oldIdx = currentIdx
-
-            processingScope.launch {
-                for (item in batch) {
-                    handleHistoryItem(item)
-                    yield()
-                }
+            for (idx in oldIdx + 1..currentIdx) {
+                historyItemChannel.send(Burp.Montoya.proxy().history()[idx])
             }
+            oldIdx = currentIdx
         }
     }
 
-    private fun handleHistoryItem(item: ProxyHttpRequestResponse) {
+    private suspend fun handleHistoryItem(item: ProxyHttpRequestResponse) {
         val request = item.finalRequest()
-        if (!Utils.isGraphQLRequest(request)) return
+        if (Utils.getGraphQLOperations(request).isEmpty()) return
 
         val response = item.originalResponse()
         if (response != null) {
-            schemaService.processRequestResponse(
-                HttpRequestResponse.httpRequestResponse(request, response),
-            )
+            schemaService.processRequest(request, response)
         } else {
             schemaService.processRequest(request)
         }

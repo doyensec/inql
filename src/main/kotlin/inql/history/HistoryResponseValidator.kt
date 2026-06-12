@@ -10,7 +10,8 @@ object HistoryResponseValidator {
     private val gson = Gson()
 
     private val schemaRejectionPatterns = listOf(
-        Regex("""Cannot query field ['"](?<field>[^'"]+)['"]""", RegexOption.IGNORE_CASE),
+        Regex("""Cannot query field ['"`]?(?<field>[_A-Za-z][_0-9A-Za-z]*)['"`]?""", RegexOption.IGNORE_CASE),
+        Regex("""Field ['"`]?(?<field>[_A-Za-z][_0-9A-Za-z]*)['"`]? doesn't exist on type""", RegexOption.IGNORE_CASE),
         Regex("""Field ['"](?<field>[^'"]+)['"].*undefined""", RegexOption.IGNORE_CASE),
     )
 
@@ -47,6 +48,9 @@ object HistoryResponseValidator {
             val message = error.optString("message", "")
             if (isApplicationLevelError(message)) continue
             rejected.addAll(extractRejectedFields(message))
+            error.optJSONObject("extensions")?.optString("fieldName")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { rejected.add(it) }
         }
         return rejected
     }
@@ -67,18 +71,39 @@ object HistoryResponseValidator {
 
     private fun parseErrors(responseBody: String): JSONArray? {
         if (responseBody.isBlank()) return null
+        val trimmed = responseBody.trim()
+        if (trimmed.startsWith("[")) {
+            return parseBatchErrors(trimmed)
+        }
         return try {
-            val json = gson.fromJson(responseBody, JsonObject::class.java)
+            val json = gson.fromJson(trimmed, JsonObject::class.java)
             when {
                 json.has("errors") -> JSONArray(json.getAsJsonArray("errors").toString())
                 else -> null
             }
         } catch (_: Exception) {
             try {
-                JSONObject(responseBody).optJSONArray("errors")
+                JSONObject(trimmed).optJSONArray("errors")
             } catch (_: Exception) {
                 null
             }
+        }
+    }
+
+    private fun parseBatchErrors(responseBody: String): JSONArray? {
+        return try {
+            val array = JSONArray(responseBody)
+            val merged = JSONArray()
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                val errors = entry.optJSONArray("errors") ?: continue
+                for (errorIndex in 0 until errors.length()) {
+                    merged.put(errors.opt(errorIndex))
+                }
+            }
+            if (merged.length() == 0) null else merged
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -89,7 +114,9 @@ object HistoryResponseValidator {
 
     private fun isSchemaRejectionError(message: String): Boolean {
         val lower = message.lowercase()
-        return lower.contains("cannot query field") || lower.contains("field undefined")
+        return lower.contains("cannot query field") ||
+            lower.contains("doesn't exist on type") ||
+            lower.contains("field undefined")
     }
 
     private fun extractRejectedFields(message: String): Set<String> {

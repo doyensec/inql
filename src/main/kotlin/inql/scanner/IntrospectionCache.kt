@@ -43,6 +43,19 @@ class IntrospectionCache(val inql: InQL) {
 
     fun remove(url: String, profile: String = NO_PROFILE) {
         this.cache[url]?.remove(profile)
+        if (this.cache[url]?.isEmpty() == true) {
+            this.cache.remove(url)
+        }
+    }
+
+    fun evictForClosedTab(url: String, profileName: String?) {
+        if (url.isBlank()) return
+        val profile = profileName ?: NO_PROFILE
+        remove(url, profile)
+        val stillOpen = this.inql.scanner.getScannerTabs().any { it.url == url }
+        if (!stillOpen) {
+            this.cache.remove(url)
+        }
     }
 
     fun populateFromScanner() {

@@ -127,9 +127,10 @@ interface SavesDataToProject : BurpSerializable {
         this.saveToProjectFile(false)
     }
 
-    fun deleteChildObjectAsync(obj: SavesDataToProject) {
+    fun deleteChildObjectAsync(obj: SavesDataToProject, onComplete: (() -> Unit)? = null) {
         coroutineScope.launch {
             this@SavesDataToProject.deleteChildObject(obj)
+            onComplete?.invoke()
         }
     }
 }

@@ -107,7 +107,7 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         override fun appendBottomContextMenuItems(popup: JPopupMenu) {
             val row = table.selectedRow
             val canCopy = row >= 0 && tableModel.cycleAt(row) != null
-            val action = MenuAction("Copy path preview", null) {
+            val action = MenuAction("Copy Cycle Path", null) {
                 copySelectedPathPreviewToClipboard()
             }
             action.isEnabled = canCopy
@@ -209,7 +209,7 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         if (row < 0) return null
         val cycle = tableModel.cycleAt(row) ?: return null
         val json = QueryToRequestConverter(sr).buildCyclePocJson(cycle)
-        return view.requestTemplateWithBody(sr.requestTemplate, json)
+        return view.requestTemplateWithBody(view.effectiveRequestTemplate(), json)
     }
 
     /** Full cycle report text (same as Export All), for Save to file from the scanner context menu. */
@@ -246,6 +246,12 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         } catch (e: Exception) {
             Logger.error("Export cycles failed: ${e.message}")
         }
+    }
+
+    fun release() {
+        scanResult = null
+        allCycles = emptyList()
+        tableModel.setAllCycles(emptyList())
     }
 
     fun showLoading() {

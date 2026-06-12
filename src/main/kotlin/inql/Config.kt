@@ -80,6 +80,7 @@ class Config private constructor() {
 
         "history.tracking_enabled" to true,
         "history.in_scope_only" to false,
+        "history.display.depth" to 6,
     )
 
     val hooks = hashMapOf<String, (Any) -> Unit>(
@@ -207,6 +208,21 @@ class Config private constructor() {
 
     fun get(key: String, scope: Scope = Scope.EFFECTIVE): Any? {
         return getBoolean(key, scope) ?: getInt(key, scope) ?: getString(key, scope)
+    }
+
+    /** Matches the Settings UI (global preference, not per-project overrides). */
+    fun codegenDepth(): Int {
+        return getInt("codegen.depth", Scope.EFFECTIVE_GLOBAL) ?: (defaults["codegen.depth"] as Int)
+    }
+
+    /** Matches the Settings UI (global preference, not per-project overrides). */
+    fun codegenPad(): Int {
+        return getInt("codegen.pad", Scope.EFFECTIVE_GLOBAL) ?: (defaults["codegen.pad"] as Int)
+    }
+
+    fun historyDisplayDepth(): Int {
+        return getInt("history.display.depth", Scope.EFFECTIVE_GLOBAL)
+            ?: (defaults["history.display.depth"] as Int)
     }
 
     fun set(key: String, value: Boolean, scope: Scope = Scope.PROJECT) {

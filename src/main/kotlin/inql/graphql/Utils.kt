@@ -41,21 +41,25 @@ object Utils {
         return looksLikeGraphQLDocument(stripBom(document.trim()))
     }
 
-    fun getGraphQLOperation(request: HttpRequest): GraphQLOperation? {
+    fun getGraphQLOperations(request: HttpRequest): List<GraphQLOperation> {
         return try {
             when (request.method().uppercase()) {
-                "POST" -> getGraphQLOperationFromPost(request)
-                "GET" -> getGraphQLOperationFromGet(request)
-                else -> null
+                "POST" -> getGraphQLOperationsFromPost(request)
+                "GET" -> getGraphQLOperationFromGet(request)?.let { listOf(it) } ?: emptyList()
+                else -> emptyList()
             }
         } catch (_: Exception) {
-            null
+            emptyList()
         }
     }
 
-    private fun getGraphQLOperationFromPost(request: HttpRequest): GraphQLOperation? {
+    fun getGraphQLOperation(request: HttpRequest): GraphQLOperation? {
+        return getGraphQLOperations(request).firstOrNull()
+    }
+
+    private fun getGraphQLOperationsFromPost(request: HttpRequest): List<GraphQLOperation> {
         val body = request.bodyToString()
-        if (body.isBlank()) return null
+        if (body.isBlank()) return emptyList()
 
         val contentType = request.headers().get("content-type")
             ?.lowercase()
@@ -64,25 +68,26 @@ object Utils {
 
         when (contentType) {
             "application/graphql" -> {
-                return toGraphQLOperation(stripBom(body.trim()))
+                return toGraphQLOperation(stripBom(body.trim()))?.let { listOf(it) } ?: emptyList()
             }
             "application/x-www-form-urlencoded" -> {
-                return parseFormUrlEncodedBody(body)
+                return parseFormUrlEncodedBody(body)?.let { listOf(it) } ?: emptyList()
             }
             "application/json" -> {
-                parseJsonGraphQLBody(body)?.let { return it }
+                return parseJsonGraphQLBodies(body)
             }
         }
 
         // JSON envelope or raw document — do not require a specific URL path or Content-Type.
-        parseJsonGraphQLBody(body)?.let { return it }
+        val fromJson = parseJsonGraphQLBodies(body)
+        if (fromJson.isNotEmpty()) return fromJson
 
         val trimmed = stripBom(body.trim())
         if (looksLikeJsonGraphQLEnvelope(trimmed)) {
-            val query = extractQueryDocumentFromJson(trimmed) ?: return null
-            return toGraphQLOperation(query)
+            val query = extractQueryDocumentFromJson(trimmed) ?: return emptyList()
+            return toGraphQLOperation(query)?.let { listOf(it) } ?: emptyList()
         }
-        return toGraphQLOperation(trimmed)
+        return toGraphQLOperation(trimmed)?.let { listOf(it) } ?: emptyList()
     }
 
     private fun getGraphQLOperationFromGet(request: HttpRequest): GraphQLOperation? {
@@ -93,48 +98,63 @@ object Utils {
         return toGraphQLOperation(decoded)
     }
 
-    private fun parseJsonGraphQLBody(body: String): GraphQLOperation? {
+    private fun parseJsonGraphQLBodies(body: String): List<GraphQLOperation> {
         val trimmed = stripBom(body.trim())
-        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null
-        if (!looksLikeJsonGraphQLEnvelope(trimmed) && !trimmed.startsWith("[")) return null
+        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return emptyList()
+        if (!looksLikeJsonGraphQLEnvelope(trimmed) && !trimmed.startsWith("[")) return emptyList()
 
         if (trimmed.startsWith("[")) {
             return try {
-                val array = gson.fromJson(trimmed, JsonArray::class.java) ?: return null
-                for (element in array) {
-                    if (!element.isJsonObject) continue
-                    parseJsonGraphQLObject(element.asJsonObject)?.let { return it }
-                }
-                null
+                parseJsonGraphQLArray(gson.fromJson(trimmed, JsonArray::class.java))
             } catch (_: Exception) {
-                parseJsonGraphQLBodyWithOrgJson(trimmed)
+                parseJsonGraphQLBodiesWithOrgJson(trimmed)
             }
         }
 
         return try {
-            val jsonObject = gson.fromJson(trimmed, JsonObject::class.java) ?: return null
-            parseJsonGraphQLObject(jsonObject) ?: extractQueryDocumentFromJson(trimmed)?.let { query ->
-                toGraphQLOperation(query)
-            }
+            val jsonObject = gson.fromJson(trimmed, JsonObject::class.java) ?: return emptyList()
+            parseJsonGraphQLObject(jsonObject)?.let { listOf(it) }
+                ?: extractQueryDocumentFromJson(trimmed)?.let { query ->
+                    toGraphQLOperation(query)?.let { listOf(it) }
+                }
+                ?: emptyList()
         } catch (_: Exception) {
             extractQueryDocumentFromJson(trimmed)?.let { query ->
-                toGraphQLOperation(query)
-            }
+                toGraphQLOperation(query)?.let { listOf(it) }
+            } ?: emptyList()
         }
     }
 
-    private fun parseJsonGraphQLBodyWithOrgJson(body: String): GraphQLOperation? {
+    private fun parseJsonGraphQLArray(array: JsonArray?): List<GraphQLOperation> {
+        if (array == null) return emptyList()
+        val operations = mutableListOf<GraphQLOperation>()
+        val seenQueries = linkedSetOf<String>()
+        for (element in array) {
+            if (!element.isJsonObject) continue
+            val operation = parseJsonGraphQLObject(element.asJsonObject) ?: continue
+            if (seenQueries.add(operation.query)) {
+                operations.add(operation)
+            }
+        }
+        return operations
+    }
+
+    private fun parseJsonGraphQLBodiesWithOrgJson(body: String): List<GraphQLOperation> {
         return try {
             val array = JSONArray(body)
+            val operations = mutableListOf<GraphQLOperation>()
+            val seenQueries = linkedSetOf<String>()
             for (i in 0 until array.length()) {
                 val obj = array.optJSONObject(i) ?: continue
-                extractQueryDocumentFromJsonObject(obj)?.let { query ->
-                    return toGraphQLOperation(query)
+                val query = extractQueryDocumentFromJsonObject(obj) ?: continue
+                val operation = toGraphQLOperation(query) ?: continue
+                if (seenQueries.add(operation.query)) {
+                    operations.add(operation)
                 }
             }
-            null
+            operations
         } catch (_: Exception) {
-            null
+            emptyList()
         }
     }
 

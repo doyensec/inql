@@ -11,6 +11,8 @@ internal enum class ReferencedTypeKind {
 
 internal data class ValueInferenceContext(
     val operationType: String = "query",
+    /** GraphQL output type that declares [parentFieldName] (e.g. DiscoveryCollections for queryCollections). */
+    val parentOutputTypeName: String? = null,
     val parentFieldName: String? = null,
     val argumentName: String? = null,
     val inputTypeName: String? = null,
@@ -25,14 +27,6 @@ internal object GraphQLTypeInference {
         "Date", "DateTime", "Time", "JSON", "JSONObject", "UUID", "Url", "URI",
         "BigInt", "Long", "Upload", "Void",
     )
-    private val intFieldNames = setOf(
-        "count", "total", "limit", "offset", "page", "size", "age", "year",
-        "length", "num", "number", "quantity", "index", "timestamp",
-    )
-    private val enumFieldNames = setOf(
-        "status", "type", "category", "role", "state", "kind", "mode", "level",
-    )
-
     fun typeToSdl(type: Type<*>): String {
         return when (type) {
             is NonNullType -> "${typeToSdl(type.type)}!"
@@ -52,18 +46,18 @@ internal object GraphQLTypeInference {
         value: Value<*>,
         variableTypes: Map<String, String>,
         context: ValueInferenceContext = ValueInferenceContext(),
-    ): String {
+    ): String? {
         return when (value) {
-            is VariableReference -> variableTypes[value.name] ?: "String"
+            is VariableReference -> variableTypes[value.name]
             is StringValue -> "String"
             is IntValue -> "Int"
             is FloatValue -> "Float"
             is BooleanValue -> "Boolean"
             is EnumValue -> inferEnumValueType(value, context)
-            is NullValue -> "String"
+            is NullValue -> null
             is ArrayValue -> inferListValueType(value, variableTypes, context)
-            is ObjectValue -> inferObjectValueType(value, variableTypes, context)
-            else -> "String"
+            is ObjectValue -> inferObjectValueType(context)
+            else -> null
         }
     }
 
@@ -72,14 +66,44 @@ internal object GraphQLTypeInference {
         variableTypes: Map<String, String>,
         inputTypeName: String,
         context: ValueInferenceContext,
+        inlineInputFields: MutableMap<String, MutableMap<String, String>>? = null,
     ): Map<String, String> {
-        return objectValue.objectFields.associate { objectField ->
+        val fields = linkedMapOf<String, String>()
+        for (objectField in objectValue.objectFields) {
             val fieldContext = context.copy(
                 inputTypeName = inputTypeName,
                 objectFieldName = objectField.name,
             )
-            objectField.name to inferValueType(objectField.value, variableTypes, fieldContext)
+            when (val value = objectField.value) {
+                is ObjectValue -> {
+                    val nestedTypeName = syntheticNestedInputFieldType(inputTypeName, objectField.name)
+                    val nestedFields = extractObjectFields(
+                        value,
+                        variableTypes,
+                        nestedTypeName,
+                        fieldContext.copy(inputTypeName = nestedTypeName),
+                        inlineInputFields,
+                    )
+                    if (nestedFields.isNotEmpty()) {
+                        inlineInputFields?.getOrPut(nestedTypeName) { linkedMapOf() }?.let { bucket ->
+                            for ((name, type) in nestedFields) {
+                                bucket[name] = mergeSdlTypes(bucket[name], type)
+                            }
+                        }
+                        fields[objectField.name] = mergeSdlTypes(
+                            fields[objectField.name],
+                            ensureNonNullSdlType(nestedTypeName),
+                        )
+                    }
+                }
+                else -> {
+                    inferValueType(value, variableTypes, fieldContext)?.let { fieldType ->
+                        fields[objectField.name] = mergeSdlTypes(fields[objectField.name], fieldType)
+                    }
+                }
+            }
         }
+        return fields
     }
 
     fun mergeSdlTypes(current: String?, incoming: String): String {
@@ -96,6 +120,34 @@ internal object GraphQLTypeInference {
         if (incomingBase == "String" && currentBase != "String") return current
 
         return if (typeSpecificity(incoming) > typeSpecificity(current)) incoming else current
+    }
+
+    /**
+     * Merges argument types without collapsing unrelated input object names that happen to
+     * share a field name across different parent types (e.g. paging on latestPostsConnection).
+     */
+    fun mergeArgumentSdlTypes(
+        current: String?,
+        incoming: String,
+        parentType: String,
+        fieldName: String,
+        argumentName: String,
+    ): String {
+        if (current.isNullOrBlank()) return incoming
+        val currentBase = baseTypeName(current)
+        val incomingBase = baseTypeName(incoming)
+        if (currentBase == incomingBase) {
+            return mergeSdlTypes(current, incoming)
+        }
+        if (currentBase in builtInScalars || incomingBase in builtInScalars) {
+            return mergeSdlTypes(current, incoming)
+        }
+        val synthetic = syntheticInputTypeForArgument(parentType, fieldName, argumentName)
+        return when {
+            currentBase == synthetic -> current
+            incomingBase == synthetic -> incoming
+            else -> current
+        }
     }
 
     fun inferScalarFromJson(value: Any?): String? {
@@ -127,15 +179,7 @@ internal object GraphQLTypeInference {
         return "String"
     }
 
-    fun inferScalarFromFieldName(fieldName: String): String {
-        if (fieldName == "id" || fieldName.endsWith("Id")) return "ID"
-        val lower = fieldName.lowercase()
-        if (lower.startsWith("is") || lower.startsWith("has") || lower.startsWith("can")) return "Boolean"
-        if (lower in intFieldNames || lower.endsWith("count") || lower.endsWith("total")) return "Int"
-        return "String"
-    }
-
-    fun inferReturnTypeFromResponse(fieldResponse: Any?, fieldName: String): String? {
+    fun inferReturnTypeFromResponse(fieldResponse: Any?): String? {
         return when (fieldResponse) {
             is List<*>, is org.json.JSONArray -> {
                 val elements = when (fieldResponse) {
@@ -143,13 +187,14 @@ internal object GraphQLTypeInference {
                     is org.json.JSONArray -> (0 until fieldResponse.length()).map { index -> fieldResponse.opt(index) }
                     else -> emptyList()
                 }
-                if (elements.isEmpty()) return "[String]"
+                if (elements.isEmpty()) return null
                 val merged = elements
-                    .map { inferScalarFromJson(it) ?: inferScalarFromFieldName(fieldName) }
-                    .reduce { left, right -> mergeSdlTypes(left, right) }
+                    .mapNotNull { inferScalarFromJson(it) }
+                    .reduceOrNull { left, right -> mergeSdlTypes(left, right) }
+                    ?: return null
                 wrapListType(merged)
             }
-            else -> inferScalarFromJson(fieldResponse) ?: inferScalarFromFieldName(fieldName)
+            else -> inferScalarFromJson(fieldResponse)
         }
     }
 
@@ -158,6 +203,8 @@ internal object GraphQLTypeInference {
     }
 
     fun isBuiltInScalar(typeName: String): Boolean = typeName in builtInScalars
+
+    fun isKnownCustomScalar(typeName: String): Boolean = typeName in knownCustomScalars
 
     fun extractReferencedBaseTypes(sdlType: String): Set<String> {
         val base = peelTypeModifiers(sdlType)
@@ -168,63 +215,73 @@ internal object GraphQLTypeInference {
 
     fun stubKindForReferencedType(typeName: String): ReferencedTypeKind? {
         return when {
-            typeName.endsWith("Result", ignoreCase = true) -> null
-            typeName.endsWith("Input", ignoreCase = true) -> ReferencedTypeKind.INPUT
             typeName in knownCustomScalars -> ReferencedTypeKind.SCALAR
-            typeName.endsWith("Enum", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            typeName.endsWith("Status", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            typeName.endsWith("Type", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            typeName.endsWith("Category", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            typeName.endsWith("Role", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            typeName.endsWith("State", ignoreCase = true) -> ReferencedTypeKind.ENUM
-            else -> ReferencedTypeKind.INPUT
+            else -> null
         }
     }
 
-    private fun inferObjectValueType(
-        objectValue: ObjectValue,
-        variableTypes: Map<String, String>,
-        context: ValueInferenceContext,
+    /**
+     * GraphQL arguments may only be scalars, enums, or input objects. When a custom type name is
+     * evidenced in a variable declaration or argument reference, stub it so generated SDL parses.
+     */
+    fun argumentStubKind(
+        typeName: String,
+        enumValues: Map<String, Collection<String>> = emptyMap(),
+    ): ReferencedTypeKind {
+        if (typeName in knownCustomScalars) return ReferencedTypeKind.SCALAR
+        if (enumValues[typeName]?.isNotEmpty() == true) return ReferencedTypeKind.ENUM
+        if (typeName.endsWith("Enum") || typeName.endsWith("Sizes")) return ReferencedTypeKind.ENUM
+        return ReferencedTypeKind.INPUT
+    }
+
+    fun syntheticInputTypeForArgument(
+        parentOutputTypeName: String,
+        fieldName: String,
+        argumentName: String,
     ): String {
-        return resolveInputTypeName(context)
+        val fieldPart = fieldName.toPascalCase()
+        return when (argumentName) {
+            "input" -> "${parentOutputTypeName}${fieldPart}Input"
+            else -> "${parentOutputTypeName}${fieldPart}${argumentName.toPascalCase()}Input"
+        }
+    }
+
+    fun syntheticNestedInputFieldType(parentInputTypeName: String, fieldName: String): String {
+        return "${parentInputTypeName}${fieldName.toPascalCase()}"
+    }
+
+    private fun inferObjectValueType(context: ValueInferenceContext): String? {
+        resolveInputTypeName(context)?.let { return it }
+        val parentType = context.parentOutputTypeName ?: return null
+        val fieldName = context.parentFieldName ?: return null
+        val argumentName = context.argumentName ?: return null
+        return syntheticInputTypeForArgument(parentType, fieldName, argumentName)
     }
 
     private fun inferEnumValueType(value: EnumValue, context: ValueInferenceContext): String {
-        val enumName = enumTypeNameForField(context.objectFieldName, context.inputTypeName)
-        context.enumValues?.getOrPut(enumName) { linkedSetOf() }?.add(value.name)
-        return enumName
+        context.argumentName?.let { argumentName ->
+            context.argumentTypeHints[argumentName]?.let { hintedType ->
+                val enumName = baseTypeName(hintedType)
+                context.enumValues?.getOrPut(enumName) { linkedSetOf() }?.add(value.name)
+                return hintedType
+            }
+        }
+        context.inputTypeName?.let { parentInput ->
+            context.objectFieldName?.let { fieldName ->
+                val enumName = "${parentInput.removeSuffix("Input")}${fieldName.toPascalCase()}"
+                context.enumValues?.getOrPut(enumName) { linkedSetOf() }?.add(value.name)
+            }
+        }
+        return "String"
     }
 
-    private fun resolveInputTypeName(context: ValueInferenceContext): String {
+    private fun resolveInputTypeName(context: ValueInferenceContext): String? {
         context.argumentName?.let { argumentName ->
             context.argumentTypeHints[argumentName]?.let { hintedType ->
                 return hintedType.trim()
             }
         }
-
-        if (context.inputTypeName != null && context.objectFieldName != null) {
-            return nestedInputTypeName(context.inputTypeName, context.objectFieldName)
-        }
-
-        val fieldBase = context.parentFieldName?.toPascalCase() ?: "Unknown"
-        val argumentName = context.argumentName
-
-        val baseName = when {
-            context.operationType == "mutation" && argumentName == "input" ->
-                "${fieldBase}MutationInput"
-            argumentName == "input" ->
-                "${fieldBase}Input"
-            !argumentName.isNullOrBlank() ->
-                "${fieldBase}${argumentName.toPascalCase()}Input"
-            else ->
-                "${fieldBase}Input"
-        }
-
-        return if (context.inputTypeName == null && context.argumentName != null) {
-            ensureNonNullSdlType(baseName)
-        } else {
-            baseName
-        }
+        return null
     }
 
     fun ensureNonNullSdlType(type: String): String {
@@ -232,32 +289,16 @@ internal object GraphQLTypeInference {
         return if (trimmed.endsWith("!")) trimmed else "$trimmed!"
     }
 
-    private fun nestedInputTypeName(parentInputType: String, fieldName: String): String {
-        val parentBase = parentInputType.removeSuffix("Input")
-        return "${parentBase}${fieldName.toPascalCase()}Input"
-    }
-
-    private fun enumTypeNameForField(fieldName: String?, parentInputType: String?): String {
-        if (fieldName.isNullOrBlank()) return "String"
-        val parentBase = parentInputType
-            ?.removeSuffix("Input")
-            ?.removeSuffix("Mutation")
-            ?: fieldName.toPascalCase()
-        return when (fieldName.lowercase()) {
-            in enumFieldNames -> "${parentBase}${fieldName.toPascalCase()}"
-            else -> "${fieldName.toPascalCase()}Enum"
-        }
-    }
-
     private fun inferListValueType(
         value: ArrayValue,
         variableTypes: Map<String, String>,
         context: ValueInferenceContext,
-    ): String {
-        if (value.values.isEmpty()) return "[String]"
+    ): String? {
+        if (value.values.isEmpty()) return null
         val mergedElement = value.values
-            .map { inferValueType(it, variableTypes, context) }
-            .reduce { left, right -> mergeSdlTypes(left, right) }
+            .mapNotNull { inferValueType(it, variableTypes, context) }
+            .reduceOrNull { left, right -> mergeSdlTypes(left, right) }
+            ?: return null
         return wrapListType(mergedElement)
     }
 
@@ -267,11 +308,11 @@ internal object GraphQLTypeInference {
             is org.json.JSONArray -> (0 until value.length()).map { index -> value.opt(index) }
             else -> return null
         }
-        if (elements.isEmpty()) return "[String]"
+        if (elements.isEmpty()) return null
         val merged = elements
             .mapNotNull { inferScalarFromJson(it) }
             .reduceOrNull { left, right -> mergeSdlTypes(left, right) }
-            ?: return "[String]"
+            ?: return null
         return wrapListType(merged)
     }
 

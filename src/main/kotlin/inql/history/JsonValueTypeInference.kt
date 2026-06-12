@@ -7,9 +7,9 @@ import org.json.JSONObject
  * Infers GraphQL SDL types from JSON variable values and response payloads.
  */
 internal object JsonValueTypeInference {
-    fun inferSdlType(value: Any?): String {
+    fun inferSdlType(value: Any?): String? {
         return when (value) {
-            null -> "String"
+            null -> null
             is Boolean -> "Boolean"
             is Int, is Long -> "Int"
             is Float, is Double -> {
@@ -21,18 +21,38 @@ internal object JsonValueTypeInference {
                 if (numeric % 1.0 == 0.0) "Int" else "Float"
             }
             is String -> GraphQLTypeInference.inferScalarFromStringValue(value)
-            is Map<*, *> -> inferObjectTypeName(value)
-            is JSONObject -> inferObjectTypeName(jsonObjectToMap(value))
+            is Map<*, *>, is JSONObject -> null
             is List<*>, is JSONArray -> inferListType(value)
-            else -> "String"
+            else -> null
         }
     }
 
-    fun extractInputFields(value: Any?, parentInputType: String? = null): Map<String, String> {
+    fun extractInputFields(
+        value: Any?,
+        parentInputType: String,
+        registry: SdlTypeRegistry? = null,
+    ): Map<String, String> {
         val objectValue = asObjectMap(value) ?: return emptyMap()
-        return objectValue.mapValues { (fieldName, fieldValue) ->
-            inferFieldType(fieldName, fieldValue, parentInputType)
+        val fields = linkedMapOf<String, String>()
+        for ((fieldName, fieldValue) in objectValue) {
+            val nestedObject = asObjectMap(fieldValue)
+            if (nestedObject != null) {
+                val nestedTypeName = GraphQLTypeInference.syntheticNestedInputFieldType(parentInputType, fieldName)
+                val nestedFields = extractInputFields(fieldValue, nestedTypeName, registry)
+                if (nestedFields.isNotEmpty()) {
+                    registry?.registerInputFields(nestedTypeName, nestedFields)
+                    fields[fieldName] = GraphQLTypeInference.mergeSdlTypes(
+                        fields[fieldName],
+                        GraphQLTypeInference.ensureNonNullSdlType(nestedTypeName),
+                    )
+                }
+            } else {
+                inferSdlType(fieldValue)?.let { fieldType ->
+                    fields[fieldName] = GraphQLTypeInference.mergeSdlTypes(fields[fieldName], fieldType)
+                }
+            }
         }
+        return fields
     }
 
     fun applyVariableValues(
@@ -49,6 +69,10 @@ internal object JsonValueTypeInference {
 
     private fun registerValueShape(registry: SdlTypeRegistry, declaredType: String, value: Any?) {
         val baseType = GraphQLTypeInference.baseTypeName(declaredType)
+        if (GraphQLTypeInference.isKnownCustomScalar(baseType)) {
+            registry.ensureArgumentTypeStub(baseType)
+            return
+        }
         when (value) {
             is List<*>, is JSONArray -> {
                 val elements = asList(value)
@@ -61,43 +85,26 @@ internal object JsonValueTypeInference {
                     }
                 }
             }
+            is String -> registry.registerEnumValues(baseType, listOf(value))
             else -> registerObjectFields(registry, baseType, value)
         }
     }
 
     private fun registerObjectFields(registry: SdlTypeRegistry, typeName: String, value: Any?) {
-        val objectValue = asObjectMap(value) ?: return
-        val fields = extractInputFields(value, typeName)
+        val fields = extractInputFields(value, typeName, registry)
         if (fields.isNotEmpty()) {
             registry.registerInputFields(typeName, fields)
         }
-        for ((fieldName, fieldValue) in objectValue) {
-            if (fieldValue is String && isEnumLikeFieldName(fieldName)) {
-                val enumName = enumTypeNameForField(fieldName, typeName)
-                registry.registerEnumValues(enumName, listOf(fieldValue))
-            }
-        }
     }
 
-    private fun inferFieldType(fieldName: String, fieldValue: Any?, parentInputType: String?): String {
-        if (fieldValue is String && isEnumLikeFieldName(fieldName)) {
-            return enumTypeNameForField(fieldName, parentInputType)
-        }
-        return inferSdlType(fieldValue)
-    }
-
-    private fun inferListType(value: Any?): String {
+    private fun inferListType(value: Any?): String? {
         val elements = asList(value)
-        if (elements.isEmpty()) return "[String]"
+        if (elements.isEmpty()) return null
         val merged = elements
-            .map { inferSdlType(it) }
-            .reduce { left, right -> GraphQLTypeInference.mergeSdlTypes(left, right) }
+            .mapNotNull { inferSdlType(it) }
+            .reduceOrNull { left, right -> GraphQLTypeInference.mergeSdlTypes(left, right) }
+            ?: return null
         return wrapListType(merged)
-    }
-
-    private fun inferObjectTypeName(value: Map<*, *>): String {
-        if (value.isEmpty()) return "String"
-        return "String"
     }
 
     private fun listElementType(declaredType: String): String? {
@@ -150,21 +157,5 @@ internal object JsonValueTypeInference {
             is JSONArray -> (0 until value.length()).map { index -> jsonValueToKotlin(value.opt(index)) }
             else -> value
         }
-    }
-
-    private val enumFieldNames = setOf(
-        "status", "type", "category", "role", "state", "kind", "mode", "level",
-    )
-
-    private fun isEnumLikeFieldName(fieldName: String): Boolean {
-        return fieldName.lowercase() in enumFieldNames
-    }
-
-    private fun enumTypeNameForField(fieldName: String, parentInputType: String?): String {
-        val parentBase = parentInputType
-            ?.removeSuffix("Input")
-            ?.removeSuffix("Mutation")
-            ?: fieldName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        return "${parentBase}${fieldName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}"
     }
 }

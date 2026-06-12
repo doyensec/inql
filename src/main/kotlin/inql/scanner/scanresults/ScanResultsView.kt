@@ -4,8 +4,14 @@ import burp.api.montoya.http.HttpService
 import burp.api.montoya.http.message.requests.HttpRequest
 import inql.Config
 import inql.Logger
+import inql.graphql.GQLSchema
+import inql.history.HistoryTracker
 import inql.scanner.ScanResult
+import inql.scanner.SchemaDiscoverySource
 import inql.scanner.ScannerTab
+import inql.schema.corrections.SchemaCorrectionValidator
+import inql.schema.corrections.SchemaCorrections
+import inql.schema.corrections.SchemaCorrectionsService
 import inql.ui.BorderPanel
 import inql.ui.SendFromInqlHandler
 import java.lang.ref.WeakReference
@@ -58,18 +64,49 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     }
 
     fun dispose() {
-        // Remove from our registry
         instances.removeIf { it.get() === this || it.get() == null }
-
         for (l in hierarchyListeners) removeHierarchyListener(l)
+    }
+
+    fun release() {
+        currentNode = null
+        treeView.release()
+        payloadView.release()
+        dispose()
     }
 
     fun refresh() {
         this.treeView.refresh()
     }
 
+    fun syncScanResult(updated: ScanResult): Boolean {
+        return this.treeView.syncScanResult(updated)
+    }
+
     fun repairTreeDisplay() {
         this.treeView.repairTreeDisplay()
+    }
+
+    fun openSchemaCorrections(scanResultUuid: String) {
+        treeView.refreshKeepingSchemaCorrections(scanResultUuid)
+    }
+
+    fun loadSchemaCorrections(
+        scanResult: ScanResult,
+        focusArgumentTypesTab: Boolean = false,
+        argumentParentType: String? = null,
+        argumentFieldName: String? = null,
+        argumentName: String? = null,
+        argumentType: String? = null,
+    ) {
+        payloadView.loadSchemaCorrections(
+            scanResult,
+            focusArgumentTypesTab,
+            argumentParentType,
+            argumentFieldName,
+            argumentName,
+            argumentType,
+        )
     }
 
     fun ensureDefaultTreeExpansion() {
@@ -79,8 +116,8 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     private fun getNodeScanResult(node: DefaultMutableTreeNode): ScanResult? {
         var n = node
         while (n.userObject !is ScanResult && n.parent is DefaultMutableTreeNode) n = n.parent as DefaultMutableTreeNode
-        if (n.userObject !is ScanResult) return null
-        return n.userObject as ScanResult
+        val embedded = n.userObject as? ScanResult ?: return null
+        return getScanResult(embedded.uuid) ?: embedded
     }
 
     /**
@@ -93,6 +130,7 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
     }
 
     fun selectionChangeListener(node: DefaultMutableTreeNode) {
+        commitRequestTemplateEdits()
         when (val content = node.userObject) {
             is String -> {
                 this.payloadView.load(content)
@@ -104,12 +142,28 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 this.sendToHandler.setEnabled(true)
                 this.currentNode = node
             }
+            is GQLTypeElement -> {
+                this.payloadView.load(content)
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
+            }
             is CycleDetectionEntry -> {
                 content.ensureLoaded { this.selectionChangeListener(node) }
                 when (val payload = content.payload) {
                     CycleDetectionPayload.Loading -> this.payloadView.loadCycleLoading()
                     is CycleDetectionPayload.Ready -> this.payloadView.loadCycleResults(payload.scanResult, payload.cycles)
                 }
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
+            }
+            is SchemaCorrectionsEntry -> {
+                val scanResult = getNodeScanResult(node) ?: content.scanResult
+                this.payloadView.loadSchemaCorrections(scanResult)
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
+            }
+            is RequestTemplateEntry -> {
+                this.payloadView.loadRequestTemplate(scannerTab.requestTemplate)
                 this.currentNode = null
                 this.sendToHandler.setEnabled(false)
             }
@@ -125,6 +179,92 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
 
     fun getPayloadText(): String = payloadView.getText()
 
+    fun commitRequestTemplateEdits() {
+        if (payloadView.selectedCard != ScanResultsContentView.REQUEST_TEMPLATE_CARD) return
+        scannerTab.applyRequestTemplate(payloadView.currentRequestTemplate())
+    }
+
+    fun effectiveRequestTemplate(): HttpRequest {
+        commitRequestTemplateEdits()
+        return scannerTab.requestTemplate
+    }
+
+    fun getScanResult(uuid: String): ScanResult? {
+        return scannerTab.scanResults.find { it.uuid == uuid }
+    }
+
+    fun applySchemaCorrections(scanResult: ScanResult, corrections: SchemaCorrections): Boolean {
+        val (schema, errors) = SchemaCorrectionsService.validateAndApply(
+            scanResult.parsedSchema.schema,
+            corrections,
+        )
+        if (schema == null) {
+            Logger.error("Schema correction failed: ${errors.joinToString("; ")}")
+            return false
+        }
+        val updated = scanResult.withCorrectionsOnly(corrections)
+        if (scanResult.schemaDiscoverySource == SchemaDiscoverySource.HISTORY) {
+            HistoryTracker.storeCorrections(
+                scanResult.host,
+                corrections,
+                scanResult.parsedSchema.schema,
+            )
+        }
+        return updateScanResult(updated, keepSchemaCorrectionsOpen = true)
+    }
+
+    fun revertSchemaCorrections(scanResult: ScanResult): Boolean {
+        val cleared = scanResult.withCorrectionsOnly(SchemaCorrections.EMPTY)
+        if (!updateScanResult(cleared, keepSchemaCorrectionsOpen = true)) {
+            return false
+        }
+        if (scanResult.schemaDiscoverySource == SchemaDiscoverySource.HISTORY && HistoryTracker.isRunning()) {
+            HistoryTracker.storeCorrections(
+                scanResult.host,
+                SchemaCorrections.EMPTY,
+                scanResult.parsedSchema.schema,
+            )
+        }
+        return true
+    }
+
+    fun saveSdlSchema(scanResult: ScanResult, sdl: String): Boolean {
+        val validation = SchemaCorrectionValidator.validateSdl(sdl)
+        if (!validation.valid) {
+            Logger.error("SDL validation failed: ${validation.errors.joinToString("; ")}")
+            return false
+        }
+        val corrections = scanResult.schemaCorrections.withSdlOverride(sdl)
+        if (scanResult.schemaDiscoverySource == SchemaDiscoverySource.HISTORY) {
+            HistoryTracker.storeCorrections(
+                scanResult.host,
+                corrections,
+                scanResult.parsedSchema.schema,
+            )
+        }
+        return updateScanResult(scanResult.withCorrectionsOnly(corrections), keepSchemaCorrectionsOpen = true)
+    }
+
+    private fun updateScanResult(updated: ScanResult, keepSchemaCorrectionsOpen: Boolean = false): Boolean {
+        val idx = scannerTab.scanResults.indexOfFirst { it.uuid == updated.uuid }
+        if (idx < 0) return false
+        scannerTab.scanResults[idx] = updated
+        scannerTab.scanner.updateChildObjectAsync(updated)
+        scannerTab.scanner.updateChildObjectAsync(scannerTab)
+        if (scannerTab.url.isNotBlank()) {
+            scannerTab.scanner.introspectionCache.putIfNewer(
+                scannerTab.url,
+                scanResult = updated.withUpdatedSchema(updated.effectiveParsedSchema()),
+            )
+        }
+        if (!keepSchemaCorrectionsOpen) {
+            refresh()
+        } else {
+            treeView.syncScanResult(updated)
+        }
+        return true
+    }
+
     class ScannerResultSendFromInqlHandler(val view: ScanResultsView) :
         SendFromInqlHandler(view.scannerTab.inql, false) {
 
@@ -132,10 +272,12 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
             val node = view.currentNode ?: return null
             val scanResult = view.getNodeScanResult(node) ?: return null
             val converter = QueryToRequestConverter(scanResult)
-            val query = converter.convert(node.toString(), node.parent.toString(), Config.getInstance().getInt("codegen.depth")!!)
-            val requestTemplate = scanResult.requestTemplate
-
-            return view.requestTemplateWithBody(requestTemplate, query)
+            val query = converter.convert(
+                node.toString(),
+                node.parent.toString(),
+                Config.getInstance().codegenDepth(),
+            )
+            return view.requestTemplateWithBody(view.effectiveRequestTemplate(), query)
         }
 
         override fun getText(): String {
