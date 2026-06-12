@@ -1,7 +1,6 @@
 package inql.history
 
 import burp.Burp
-import burp.api.montoya.http.message.HttpRequestResponse
 import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.http.message.responses.HttpResponse
 import graphql.schema.GraphQLSchema
@@ -49,12 +48,6 @@ class HistorySchemaService(private val inql: InQL) {
     private val extractionJobs = ConcurrentHashMap<String, Job>()
     private val updateMutex = Mutex()
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    fun processRequestResponse(requestResponse: HttpRequestResponse) {
-        serviceScope.launch {
-            processRequest(requestResponse.request(), requestResponse.response())
-        }
-    }
 
     suspend fun processRequest(request: HttpRequest, response: HttpResponse? = null) {
         if (!isTrackingEnabled()) return
@@ -105,12 +98,6 @@ class HistorySchemaService(private val inql: InQL) {
                 extractionJobs.remove(normalizedHost)
             }
         }
-    }
-
-    fun resetHostForReextract(host: String) {
-        val normalizedHost = HistoryHostKey.normalize(host)
-        clearHostState(normalizedHost)
-        extractSchemaForHost(host, freshStart = true)
     }
 
     fun stop() {

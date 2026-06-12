@@ -3,6 +3,7 @@ package inql.utils
 import graphql.schema.*
 import inql.Config
 import inql.graphql.GQLSchema
+import inql.graphql.Utils
 import inql.graphql.scanners.CycleResult
 import inql.scanner.ScanResult
 import inql.schema.corrections.InputEnumTypeMatching
@@ -175,7 +176,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     }
 
     private fun cycleFieldsContainer(type: GraphQLType): GraphQLFieldsContainer? {
-        val u = unwrapType(type)
+        val u = Utils.unwrapType(type)
         return when (u) {
             is GraphQLObjectType -> u
             is GraphQLInterfaceType -> u
@@ -213,7 +214,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
 
         val indent = "  ".repeat(baseIndent)
         val isLast = pathIndex == path.lastIndex
-        val unwrapped = unwrapType(field.type)
+        val unwrapped = Utils.unwrapType(field.type)
 
         return buildString {
             append(indent).append(fieldName).append(args)
@@ -360,7 +361,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
                 schema, container, currentDepth, maxDepth, visitedTypes,
                 variablesMap, variableDefinitions, nestedVarCounter,
             )
-            else -> when (val unwrapped = unwrapType(resolved)) {
+            else -> when (val unwrapped = Utils.unwrapType(resolved)) {
                 is GraphQLUnionType -> handleUnionType(
                     schema, unwrapped, currentDepth, maxDepth, visitedTypes,
                     variablesMap, variableDefinitions, nestedVarCounter,
@@ -423,7 +424,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         if (isSchemaPlaceholderField(field.name)) return null
         val nextDepth = currentDepth + 1
         val fieldType = resolveSchemaType(schema, field.type)
-        val unwrappedFieldType = unwrapType(fieldType)
+        val unwrappedFieldType = Utils.unwrapType(fieldType)
         val args = processFieldArguments(
             schema = schema,
             field = field,
@@ -574,7 +575,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         inputContext: InputFieldContext,
     ): Any? {
         val resolved = resolveSchemaType(schema, type)
-        return when (val unwrapped = unwrapType(resolved)) {
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
             is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
             is GraphQLScalarType -> generateLeafExampleValue(schema, resolved, 0, 3, inputContext)
             is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, 0, 3).takeIf { it.isNotEmpty() }
@@ -720,14 +721,8 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             .toMap()
     }
 
-    private fun unwrapType(type: GraphQLType): GraphQLType = when (type) {
-        is GraphQLNonNull -> unwrapType(type.wrappedType)
-        is GraphQLList -> unwrapType(type.wrappedType)
-        else -> type
-    }
-
     private fun isScalarOrEnum(type: GraphQLType): Boolean {
-        val unwrapped = unwrapType(type)
+        val unwrapped = Utils.unwrapType(type)
         return unwrapped is GraphQLScalarType || unwrapped is GraphQLEnumType
     }
 
@@ -763,7 +758,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         inputContext: InputFieldContext?,
     ): Any? {
         val resolved = resolveSchemaType(schema, type)
-        return when (val unwrapped = unwrapType(resolved)) {
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
             is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
             is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, currentDepth, maxDepth)
                 .takeIf { it.isNotEmpty() }
@@ -788,8 +783,8 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         ctx: InputFieldContext,
     ): Any? {
         correctionEnumValue(ctx)?.let { return it }
-        val resolved = resolveNamedType(schema, type)
-        val unwrapped = unwrapType(resolved)
+        val resolved = resolveSchemaType(schema, type)
+        val unwrapped = Utils.unwrapType(resolved)
         if (unwrapped is GraphQLEnumType) {
             return preferredEnumValue(unwrapped, ctx)
         }
@@ -814,12 +809,8 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             ?.firstOrNull { !isSchemaPlaceholderField(it) }
     }
 
-    private fun resolveNamedType(schema: GraphQLSchema, type: GraphQLType): GraphQLType {
-        return resolveSchemaType(schema, type)
-    }
-
     private fun resolveSchemaType(schema: GraphQLSchema, type: GraphQLType): GraphQLType {
-        val unwrapped = unwrapType(type)
+        val unwrapped = Utils.unwrapType(type)
         val name = when (unwrapped) {
             is GraphQLNamedType -> unwrapped.name
             is GraphQLTypeReference -> unwrapped.name
@@ -835,10 +826,8 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         }
     }
 
-    private fun isRequiredType(type: GraphQLType): Boolean = type is GraphQLNonNull
-
     private fun namedTypeName(type: GraphQLType): String? {
-        return when (val unwrapped = unwrapType(type)) {
+        return when (val unwrapped = Utils.unwrapType(type)) {
             is GraphQLNamedType -> unwrapped.name
             is GraphQLTypeReference -> unwrapped.name
             else -> null
@@ -852,7 +841,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     ): Any? {
         if (type !is GraphQLNonNull) return null
         val resolved = resolveSchemaType(schema, type)
-        return when (val unwrapped = unwrapType(resolved)) {
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
             is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
             is GraphQLScalarType -> generateLeafExampleValue(schema, resolved, 0, 3, inputContext)
             is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, 0, 3).takeIf { it.isNotEmpty() }
@@ -897,15 +886,6 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
 
     private fun escapeJson(value: String): String {
         return "\"${value.replace("\n", "\\n").replace("\"", "\\\"")}\""
-    }
-
-    private fun getTypeName(type: GraphQLType): String {
-        return when (type) {
-            is GraphQLNonNull -> getTypeName(type.wrappedType)
-            is GraphQLList -> getTypeName(type.wrappedType)
-            is GraphQLNamedType -> type.name
-            else -> "UnknownType"
-        }
     }
 
     private fun formatVariablesToJson(value: Any?): String {

@@ -10,7 +10,6 @@ internal enum class ReferencedTypeKind {
 }
 
 internal data class ValueInferenceContext(
-    val operationType: String = "query",
     /** GraphQL output type that declares [parentFieldName] (e.g. DiscoveryCollections for queryCollections). */
     val parentOutputTypeName: String? = null,
     val parentFieldName: String? = null,
@@ -180,22 +179,7 @@ internal object GraphQLTypeInference {
     }
 
     fun inferReturnTypeFromResponse(fieldResponse: Any?): String? {
-        return when (fieldResponse) {
-            is List<*>, is org.json.JSONArray -> {
-                val elements = when (fieldResponse) {
-                    is List<*> -> fieldResponse
-                    is org.json.JSONArray -> (0 until fieldResponse.length()).map { index -> fieldResponse.opt(index) }
-                    else -> emptyList()
-                }
-                if (elements.isEmpty()) return null
-                val merged = elements
-                    .mapNotNull { inferScalarFromJson(it) }
-                    .reduceOrNull { left, right -> mergeSdlTypes(left, right) }
-                    ?: return null
-                wrapListType(merged)
-            }
-            else -> inferScalarFromJson(fieldResponse)
-        }
+        return inferScalarFromJson(fieldResponse)
     }
 
     fun baseTypeName(type: String): String {
@@ -239,15 +223,15 @@ internal object GraphQLTypeInference {
         fieldName: String,
         argumentName: String,
     ): String {
-        val fieldPart = fieldName.toPascalCase()
+        val fieldPart = fieldName.toGraphQLPascalCase()
         return when (argumentName) {
             "input" -> "${parentOutputTypeName}${fieldPart}Input"
-            else -> "${parentOutputTypeName}${fieldPart}${argumentName.toPascalCase()}Input"
+            else -> "${parentOutputTypeName}${fieldPart}${argumentName.toGraphQLPascalCase()}Input"
         }
     }
 
     fun syntheticNestedInputFieldType(parentInputTypeName: String, fieldName: String): String {
-        return "${parentInputTypeName}${fieldName.toPascalCase()}"
+        return "${parentInputTypeName}${fieldName.toGraphQLPascalCase()}"
     }
 
     private fun inferObjectValueType(context: ValueInferenceContext): String? {
@@ -268,7 +252,7 @@ internal object GraphQLTypeInference {
         }
         context.inputTypeName?.let { parentInput ->
             context.objectFieldName?.let { fieldName ->
-                val enumName = "${parentInput.removeSuffix("Input")}${fieldName.toPascalCase()}"
+                val enumName = "${parentInput.removeSuffix("Input")}${fieldName.toGraphQLPascalCase()}"
                 context.enumValues?.getOrPut(enumName) { linkedSetOf() }?.add(value.name)
             }
         }
@@ -350,10 +334,5 @@ internal object GraphQLTypeInference {
             return peelTypeModifiers(current.substring(1, current.length - 1))
         }
         return current
-    }
-
-    private fun String.toPascalCase(): String {
-        if (isBlank()) return this
-        return replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 }

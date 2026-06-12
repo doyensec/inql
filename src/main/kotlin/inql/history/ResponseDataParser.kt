@@ -13,7 +13,7 @@ internal object ResponseDataParser {
                 else -> {
                     val root = JSONObject(trimmed)
                     val data = root.optJSONObject("data") ?: return null
-                    jsonObjectToMap(data)
+                    JsonKotlinBridge.jsonObjectToMap(data)
                 }
             }
         } catch (_: Exception) {
@@ -26,7 +26,7 @@ internal object ResponseDataParser {
         for (index in 0 until array.length()) {
             val entry = array.optJSONObject(index) ?: continue
             val data = entry.optJSONObject("data") ?: continue
-            return jsonObjectToMap(data)
+            return JsonKotlinBridge.jsonObjectToMap(data)
         }
         return null
     }
@@ -34,20 +34,12 @@ internal object ResponseDataParser {
     fun responseValueForField(parent: Any?, fieldName: String, alias: String?): Any? {
         if (parent == null) return null
         val key = alias ?: fieldName
-        return when (parent) {
-            is Map<*, *> -> parent[key]
-            is JSONObject -> parent.opt(key)
-            else -> null
-        }
+        return (parent as? Map<*, *>)?.get(key)
     }
 
     fun extractTypename(node: Any?): String? {
         val normalized = normalizeResponseNode(node) ?: return null
-        return when (normalized) {
-            is Map<*, *> -> normalized["__typename"] as? String
-            is JSONObject -> normalized.optString("__typename").takeIf { it.isNotBlank() }
-            else -> null
-        }
+        return (normalized as? Map<*, *>)?.get("__typename") as? String
     }
 
     fun normalizeResponseNode(node: Any?): Any? {
@@ -55,28 +47,9 @@ internal object ResponseDataParser {
             null -> null
             is JSONArray -> if (node.length() == 0) null else normalizeResponseNode(node.opt(0))
             is List<*> -> node.firstOrNull()?.let { normalizeResponseNode(it) }
-            is JSONObject -> jsonObjectToMap(node)
+            is JSONObject -> JsonKotlinBridge.jsonObjectToMap(node)
             is Map<*, *> -> node
             else -> node
-        }
-    }
-
-    private fun jsonObjectToMap(jsonObject: JSONObject): Map<String, Any?> {
-        val map = linkedMapOf<String, Any?>()
-        for (key in jsonObject.keys()) {
-            map[key] = jsonValueToKotlin(jsonObject.get(key))
-        }
-        return map
-    }
-
-    private fun jsonValueToKotlin(value: Any?): Any? {
-        return when (value) {
-            null, JSONObject.NULL -> null
-            is JSONObject -> jsonObjectToMap(value)
-            is JSONArray -> (0 until value.length()).map { index ->
-                jsonValueToKotlin(value.opt(index))
-            }
-            else -> value
         }
     }
 }

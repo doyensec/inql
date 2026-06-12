@@ -89,19 +89,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         this.show(RAW_EDITOR_CARD)
     }
 
-    fun load(elem: ByteArray) {
-        this.rawEditor.contents = elem
-        this.show(RAW_EDITOR_CARD)
-    }
-
-    fun loadSchemaCorrections(
-        scanResult: ScanResult,
-        focusArgumentTypesTab: Boolean = false,
-        argumentParentType: String? = null,
-        argumentFieldName: String? = null,
-        argumentName: String? = null,
-        argumentType: String? = null,
-    ) {
+    fun loadSchemaCorrections(scanResult: ScanResult) {
         val fresh = view.getScanResult(scanResult.uuid) ?: scanResult
         val panel = schemaCorrectionsPanel
         if (panel == null) {
@@ -110,14 +98,6 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
             }
         } else {
             panel.load(fresh)
-        }
-        if (focusArgumentTypesTab) {
-            schemaCorrectionsPanel?.focusArgumentTypesTab(
-                parentType = argumentParentType,
-                fieldName = argumentFieldName,
-                argumentName = argumentName,
-                argumentType = argumentType,
-            )
         }
         this.show(SCHEMA_CORRECTIONS_CARD)
     }

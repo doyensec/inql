@@ -2,7 +2,6 @@ package inql.history
 
 import graphql.language.*
 import graphql.parser.Parser
-import graphql.schema.GraphQLSchema
 import inql.Logger
 import inql.graphql.Utils
 
@@ -34,30 +33,6 @@ internal object QueryAstToSchema {
         val enumValues: MutableMap<String, LinkedHashSet<String>>,
         val inlineInputFields: MutableMap<String, MutableMap<String, String>>,
     )
-
-    fun buildSchema(
-        query: String,
-        operationType: String,
-        rejectedFieldNames: Set<String> = emptySet(),
-        responseBody: String? = null,
-        variables: Map<String, Any?>? = null,
-        errorHints: GraphQLErrorTypeHints.Hints = GraphQLErrorTypeHints.Hints(),
-    ): GraphQLSchema? {
-        val registry = SdlTypeRegistry()
-        if (!populateRegistry(
-                registry,
-                query,
-                operationType,
-                rejectedFieldNames,
-                responseBody,
-                variables,
-                errorHints,
-            )
-        ) {
-            return null
-        }
-        return registry.toSchema()
-    }
 
     /**
      * Merges one operation into [registry] without a GraphQLSchema round-trip.
@@ -175,7 +150,6 @@ internal object QueryAstToSchema {
 
                     val args = selection.arguments.mapNotNull { arg ->
                         val inferenceContext = ValueInferenceContext(
-                            operationType = operationType,
                             parentOutputTypeName = parentOutputTypeName,
                             parentFieldName = fieldName,
                             argumentName = arg.name,

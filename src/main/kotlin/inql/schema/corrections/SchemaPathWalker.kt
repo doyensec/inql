@@ -14,17 +14,6 @@ object SchemaPathWalker {
     private val relayStructuralSegments = setOf("edges", "nodes", "node", "pageinfo")
     private val placeholderFields = setOf("_inql_placeholder", "PLACEHOLDER")
 
-    data class SegmentOption(
-        val label: String,
-        val kind: Kind,
-    ) {
-        enum class Kind {
-            FIELD,
-            RELAY_EDGES,
-            RELAY_NODES,
-        }
-    }
-
     fun rootTypeNames(schema: GraphQLSchema): List<String> {
         return buildList {
             schema.queryType?.name?.let { add(it) }
@@ -39,29 +28,29 @@ object SchemaPathWalker {
         }.distinct()
     }
 
-    fun container(schema: GraphQLSchema, typeName: String): GraphQLFieldsContainer? {
-        return schema.getType(typeName) as? GraphQLFieldsContainer
-    }
-
-    fun segmentOptions(schema: GraphQLSchema, container: GraphQLFieldsContainer): List<SegmentOption> {
-        val options = mutableListOf<SegmentOption>()
+    fun segmentOptions(schema: GraphQLSchema, container: GraphQLFieldsContainer): List<String> {
+        val options = mutableListOf<String>()
         if (container is GraphQLObjectType && container.name.endsWith("Connection")) {
             if (container.getFieldDefinition("edges") != null) {
-                options.add(SegmentOption("edges", SegmentOption.Kind.RELAY_EDGES))
+                options.add("edges")
             }
             if (container.getFieldDefinition("nodes") != null) {
-                options.add(SegmentOption("nodes", SegmentOption.Kind.RELAY_NODES))
+                options.add("nodes")
             }
         }
         for (field in container.fieldDefinitions.sortedBy { it.name }) {
             if (field.name in placeholderFields || field.name.startsWith("__")) continue
             if (field.name.lowercase() in relayStructuralSegments) continue
-            options.add(SegmentOption(field.name, SegmentOption.Kind.FIELD))
+            options.add(field.name)
         }
         return options
     }
 
-    fun follow(
+    private fun container(schema: GraphQLSchema, typeName: String): GraphQLFieldsContainer? {
+        return schema.getType(typeName) as? GraphQLFieldsContainer
+    }
+
+    private fun follow(
         schema: GraphQLSchema,
         container: GraphQLFieldsContainer,
         segment: String,
@@ -140,7 +129,7 @@ object SchemaPathWalker {
         return null
     }
 
-    fun formatPath(segments: List<String>): String {
+    private fun formatPath(segments: List<String>): String {
         return segments.filter { it.isNotBlank() }.joinToString(".")
     }
 

@@ -179,7 +179,7 @@ class ScanResultTreeNode(scanResult: ScanResult) :
         loadNodes()
     }
 
-    fun loadNodes() {
+    private fun loadNodes() {
         removeAllChildren()
         val gqlSchema = scanResult.effectiveParsedSchema()
         for (node in buildSchemaBranchNodes(gqlSchema, scanResult)) {

@@ -25,7 +25,6 @@ object TypeCorrectionTargetResolver {
     fun argumentSitesInQuery(
         schema: GraphQLSchema,
         query: String,
-        operationType: String,
         wrongType: String,
     ): List<SchemaArgumentPathResolver.ResolvedArgument> {
         val document = runCatching { Parser().parseDocument(Utils.normalizeGraphQLDocument(query)) }.getOrNull()

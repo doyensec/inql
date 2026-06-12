@@ -4,7 +4,7 @@ import graphql.schema.GraphQLFieldsContainer
 import graphql.schema.GraphQLInterfaceType
 import graphql.schema.GraphQLObjectType
 import graphql.schema.GraphQLSchema
-import inql.schema.corrections.SchemaCorrectionValidator
+import inql.schema.corrections.GraphQLErrorPathParser
 import inql.schema.corrections.SchemaCorrections
 import inql.schema.corrections.SchemaPathWalker
 import inql.schema.corrections.SchemaTypeCatalog
@@ -128,47 +128,6 @@ class SchemaCorrectionsPanel(
         reloadFromScanResult()
     }
 
-    fun focusArgumentTypesTab(
-        parentType: String? = null,
-        fieldName: String? = null,
-        argumentName: String? = null,
-        argumentType: String? = null,
-    ) {
-        val index = correctionsTabs.indexOfTab("Argument Types")
-        if (index >= 0) {
-            correctionsTabs.selectedIndex = index
-        }
-        if (!parentType.isNullOrBlank()) {
-            refreshArgumentTypePickers(parentType, fieldName, argumentName, argumentType)
-        }
-    }
-
-    fun focusEnumValuesTab(
-        enumTypeName: String? = null,
-        inputTypeName: String? = null,
-        inputFieldPath: List<String>? = null,
-        allowedValues: List<String>? = null,
-    ) {
-        val index = correctionsTabs.indexOfTab("Enum Values")
-        if (index >= 0) {
-            correctionsTabs.selectedIndex = index
-        }
-        when {
-            !enumTypeName.isNullOrBlank() -> {
-                selectComboValue(enumKindCombo, ENUM_KIND_STANDALONE)
-                refreshEnumValuesFormVisibility()
-                refreshEnumStandalonePickers(enumTypeName)
-                allowedValues?.let { enumValuesField.text = it.joinToString(", ") }
-            }
-            !inputTypeName.isNullOrBlank() -> {
-                selectComboValue(enumKindCombo, ENUM_KIND_INPUT_FIELD)
-                refreshEnumValuesFormVisibility()
-                refreshEnumInputPickers(inputTypeName, inputFieldPath.orEmpty())
-                allowedValues?.let { enumValuesField.text = it.joinToString(", ") }
-            }
-        }
-    }
-
     fun load(result: ScanResult) {
         val sameResult = result.uuid == scanResult.uuid
         scanResult = result
@@ -245,7 +204,7 @@ class SchemaCorrectionsPanel(
         }
 
         updateComboModel(renameOldCombo, typeCatalog.renameSourceTypes, preferredOldType, dropMissingPreferred = true)
-        updateComboModel(renameNewCombo, SchemaTypeCatalog.renameTargetOptions(typeCatalog), preferredNewType, dropMissingPreferred = true)
+        updateComboModel(renameNewCombo, typeCatalog.renameTargetTypes, preferredNewType, dropMissingPreferred = true)
     }
 
     private fun updateComboModel(
@@ -338,8 +297,9 @@ class SchemaCorrectionsPanel(
         top.layout = BoxLayout(top, BoxLayout.Y_AXIS)
         top.add(
             plainHint(
-                "Walk from Query through fields. For connections, add edges then node.",
-                "Example: Query → leaderboard_entries → edges → node → user resolves to User.",
+                "Walk from Query/Mutation through fields. For root fields (e.g. Query.surveys),",
+                "leave Steps empty — do not pick the field name as a step.",
+                "For connections, add edges then node before nested fields.",
             ),
         )
         top.add(sectionSpacer())
@@ -357,6 +317,12 @@ class SchemaCorrectionsPanel(
                 content.add(formRow("Field:", argumentFieldCombo))
                 content.add(formRow("Argument:", argumentNameCombo))
                 content.add(formRow("Correct type:", argumentTypeCombo))
+                content.add(
+                    plainHint(
+                        "Types not in the schema yet (e.g. SurveyCategoryEnum) can be typed manually.",
+                        "Save corrections to create the enum stub, then add values on the Enum Values tab.",
+                    ),
+                )
                 content.add(formActionsRow(noFocusButton("Add / update override") { addArgumentTypeOverride() }))
             },
         )
@@ -417,8 +383,8 @@ class SchemaCorrectionsPanel(
             addArgumentPathSegment()
         } else {
             refreshAllArgumentPathSegmentOptions()
-            onArgumentPathChanged()
         }
+        onArgumentPathChanged()
     }
 
     private fun onArgumentPathRootChanged() {
@@ -480,7 +446,7 @@ class SchemaCorrectionsPanel(
             .mapNotNull { selectedComboText(it) }
             .filter { it.isNotBlank() }
         val container = SchemaPathWalker.walk(schema, root, priorSegments) ?: return
-        val options = SchemaPathWalker.segmentOptions(schema, container).map { it.label }
+        val options = SchemaPathWalker.segmentOptions(schema, container)
         val combo = argumentPathSegmentCombos[segmentIndex]
         val preferred = selectedComboText(combo)
         updateComboModel(combo, options, preferred, dropMissingPreferred = true)
@@ -513,7 +479,6 @@ class SchemaCorrectionsPanel(
         val segments = argumentPathSegmentCombos
             .mapNotNull { selectedComboText(it) }
             .filter { it.isNotBlank() }
-        if (segments.isEmpty()) return null
         val container = SchemaPathWalker.walk(schema, root, segments) ?: return null
         return containerTypeName(container)
     }
@@ -525,7 +490,7 @@ class SchemaCorrectionsPanel(
         preferredArgumentType: String? = null,
     ) {
         val parentTypes = buildList {
-            addAll(typeCatalog.outputTypes)
+            addAll(typeCatalog.argumentParentTypes)
             addAll(workingCorrections.argumentTypeOverrides.keys)
         }.distinct().sorted()
         updateComboModel(argumentParentTypeCombo, parentTypes, preferredParentType, dropMissingPreferred = true)
@@ -533,10 +498,17 @@ class SchemaCorrectionsPanel(
         refreshArgumentNamePicker(preferredArgumentName)
         updateComboModel(
             argumentTypeCombo,
-            typeCatalog.argumentTypeOptions(),
+            typeCatalog.argumentTypeOptions(referencedTypesFromCorrections()),
             preferredArgumentType,
             dropMissingPreferred = false,
         )
+    }
+
+    private fun referencedTypesFromCorrections(): List<String> {
+        val fromArgs = workingCorrections.argumentTypeOverrides.values
+            .flatMap { fields -> fields.values.flatMap { args -> args.values } }
+            .mapNotNull { sdlType -> GraphQLErrorPathParser.normalizeTypeName(sdlType) }
+        return (fromArgs + workingCorrections.enumValueOverrides.keys).distinct()
     }
 
     private fun refreshArgumentFieldPicker(preferredFieldName: String? = null) {
@@ -604,6 +576,7 @@ class SchemaCorrectionsPanel(
             preferredArgumentName = argumentName,
             preferredArgumentType = normalizedType,
         )
+        refreshEnumStandalonePickers(preferredEnumType = normalizedType.removeSuffix("!"))
         statusLabel.text = "Argument type override added. Save corrections to apply."
     }
 
@@ -1064,6 +1037,7 @@ class SchemaCorrectionsPanel(
         val enumTypes = buildList {
             addAll(typeCatalog.enumTypes.map { it.name })
             addAll(workingCorrections.enumValueOverrides.keys)
+            addAll(referencedTypesFromCorrections().filter { it.endsWith("Enum") || it.endsWith("Sizes") })
         }.distinct().sorted()
         updateComboModel(enumTypeCombo, enumTypes, preferredEnumType, dropMissingPreferred = true)
     }
@@ -1212,13 +1186,10 @@ class SchemaCorrectionsPanel(
 
     private fun saveSdl() {
         val sdl = sdlEditor.getQuery()
-        val validation = SchemaCorrectionValidator.validateSdl(sdl)
-        if (!validation.valid) {
-            showError("SDL validation failed:\n${validation.errors.joinToString("\n")}")
-            return
-        }
         if (view.saveSdlSchema(scanResult, sdl)) {
             refreshAfterSave()
+        } else {
+            showError("SDL validation failed. Check the error log for details.")
         }
     }
 

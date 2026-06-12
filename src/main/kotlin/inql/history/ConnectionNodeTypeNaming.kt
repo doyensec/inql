@@ -21,11 +21,6 @@ internal object ConnectionNodeTypeNaming {
     }
 
     fun synthetic(parentType: String, connectionField: String): String {
-        return parentType + connectionField.toPascalCase()
-    }
-
-    private fun String.toPascalCase(): String {
-        if (isBlank()) return this
-        return replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        return parentType + connectionField.toGraphQLPascalCase()
     }
 }

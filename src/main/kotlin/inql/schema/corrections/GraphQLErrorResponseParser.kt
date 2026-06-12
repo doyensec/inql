@@ -6,14 +6,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Reads `errors[].message` strings from standard GraphQL HTTP response bodies.
+ * Reads `errors[]` entries from standard GraphQL HTTP response bodies.
  */
 object GraphQLErrorResponseParser {
     private val gson = Gson()
 
     fun errorMessages(responseBody: String?): List<String> {
         if (responseBody.isNullOrBlank()) return emptyList()
-        val errors = parseErrors(responseBody) ?: return emptyList()
+        val errors = parseErrorsArray(responseBody) ?: return emptyList()
         return buildList {
             for (index in 0 until errors.length()) {
                 val error = errors.optJSONObject(index) ?: continue
@@ -22,7 +22,8 @@ object GraphQLErrorResponseParser {
         }
     }
 
-    private fun parseErrors(responseBody: String): JSONArray? {
+    fun parseErrorsArray(responseBody: String?): JSONArray? {
+        if (responseBody.isNullOrBlank()) return null
         val trimmed = responseBody.trim()
         if (trimmed.startsWith("[")) {
             return parseBatchErrors(trimmed)

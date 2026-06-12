@@ -41,7 +41,7 @@ class GQLSchema {
                 introspectionSchema = introspectionSchema["data"] as Map<String, Any>
             }
 
-            if (!introspectionSchema.containsKey("__schema") && introspectionSchema["__schema"] !is Map<*, *>) {
+            if (!introspectionSchema.containsKey("__schema") || introspectionSchema["__schema"] !is Map<*, *>) {
                 throw RuntimeException("Could not identify schema.")
             }
 

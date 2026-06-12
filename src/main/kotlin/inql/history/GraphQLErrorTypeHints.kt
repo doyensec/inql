@@ -1,10 +1,8 @@
 package inql.history
 
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import inql.schema.corrections.GraphQLErrorPathParser
+import inql.schema.corrections.GraphQLErrorResponseParser
 import inql.schema.corrections.SchemaArgumentPathResolver
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -23,8 +21,6 @@ internal object GraphQLErrorTypeHints {
         val typeRenames: List<Pair<String, String>> = emptyList(),
     )
 
-    private val gson = Gson()
-
     private val argumentMismatchMessage = Regex(
         """(?:Type|Nullability) mismatch on variable \$(?<variable>\w+) and argument (?<argument>\w+) \((?<variableType>[^/]+) / (?<argumentType>[^)]+)\)""",
         RegexOption.IGNORE_CASE,
@@ -32,7 +28,7 @@ internal object GraphQLErrorTypeHints {
 
     fun parse(responseBody: String?): Hints {
         if (responseBody.isNullOrBlank()) return Hints()
-        val errors = parseErrors(responseBody) ?: return Hints()
+        val errors = GraphQLErrorResponseParser.parseErrorsArray(responseBody) ?: return Hints()
         val argumentHints = mutableListOf<ArgumentTypeHint>()
         val renames = mutableListOf<Pair<String, String>>()
 
@@ -56,7 +52,14 @@ internal object GraphQLErrorTypeHints {
         val argumentType = extractArgumentTypeFromMessage(message)
             ?: extensions?.optString("argumentType")?.takeIf { it.isNotBlank() }
 
-        val fieldLocation = SchemaArgumentPathResolver.parseArgumentLocation(path)
+        val argumentNameFromMessage = extractArgumentNameFromMessage(message)
+        val fieldLocation = SchemaArgumentPathResolver.parseArgumentLocation(path, argumentNameFromMessage)
+            ?: extensions?.let { ext ->
+                val extField = ext.optString("fieldName").takeIf { it.isNotBlank() }
+                val extArg = ext.optString("argumentName").takeIf { it.isNotBlank() }
+                    ?: argumentNameFromMessage
+                if (extField != null && extArg != null) extField to extArg else null
+            }
         if (fieldLocation == null || argumentType.isNullOrBlank()) {
             return emptyList()
         }
@@ -88,49 +91,19 @@ internal object GraphQLErrorTypeHints {
         ) ?: return emptyList()
 
         if (variableType == argumentType) return emptyList()
+        if (variableType in builtInScalars) return emptyList()
         return listOf(variableType to argumentType)
+    }
+
+    private val builtInScalars = setOf("String", "Int", "Float", "Boolean", "ID")
+
+    private fun extractArgumentNameFromMessage(message: String): String? {
+        val match = argumentMismatchMessage.find(message) ?: return null
+        return match.groups["argument"]?.value?.trim()
     }
 
     private fun extractArgumentTypeFromMessage(message: String): String? {
         val match = argumentMismatchMessage.find(message) ?: return null
         return match.groups["argumentType"]?.value?.trim()
-    }
-
-    private fun parseErrors(responseBody: String): JSONArray? {
-        val trimmed = responseBody.trim()
-        if (trimmed.startsWith("[")) {
-            return parseBatchErrors(trimmed)
-        }
-        return try {
-            val json = gson.fromJson(trimmed, JsonObject::class.java)
-            when {
-                json.has("errors") && json.get("errors").isJsonArray ->
-                    JSONArray(json.getAsJsonArray("errors").toString())
-                else -> null
-            }
-        } catch (_: Exception) {
-            try {
-                JSONObject(trimmed).optJSONArray("errors")
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
-    private fun parseBatchErrors(responseBody: String): JSONArray? {
-        return try {
-            val array = JSONArray(responseBody)
-            val merged = JSONArray()
-            for (index in 0 until array.length()) {
-                val entry = array.optJSONObject(index) ?: continue
-                val errors = entry.optJSONArray("errors") ?: continue
-                for (errorIndex in 0 until errors.length()) {
-                    merged.put(errors.opt(errorIndex))
-                }
-            }
-            if (merged.length() == 0) null else merged
-        } catch (_: Exception) {
-            null
-        }
     }
 }

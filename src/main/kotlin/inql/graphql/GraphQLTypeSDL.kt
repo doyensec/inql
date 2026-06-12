@@ -18,7 +18,7 @@ object GraphQLTypeSDL {
         return formatType(type)
     }
 
-    fun formatType(type: GraphQLNamedType): String {
+    private fun formatType(type: GraphQLNamedType): String {
         return when (type) {
             is GraphQLObjectType -> formatObjectType(type)
             is GraphQLInputObjectType -> formatInputObjectType(type)

@@ -351,6 +351,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<Component> {
         if (event == null) return mutableListOf()
+        this.selectedHost = null
         this.request = this.requestFromIssues(event) ?: return mutableListOf()
         return this.sendToInqlComponents()
     }

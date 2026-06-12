@@ -73,10 +73,6 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
                     printUnionType(unionInnerType, sb, depth + 1, maxDepth, padSize)
                 }
             }
-
-            else -> {
-                throw NotImplementedError("Unknown field type: $innerType")
-            }
         }
         sb.appendLine("$padding}")
     }

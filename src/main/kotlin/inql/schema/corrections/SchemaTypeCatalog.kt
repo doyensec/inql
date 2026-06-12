@@ -29,6 +29,7 @@ object SchemaTypeCatalog {
     data class Catalog(
         val inputTypes: List<String>,
         val inputTypeFields: Map<String, List<String>>,
+        val operationRootTypes: List<String>,
         val outputTypes: List<String>,
         val outputTypeFields: Map<String, List<String>>,
         val fieldArguments: Map<String, Map<String, List<String>>>,
@@ -36,6 +37,8 @@ object SchemaTypeCatalog {
         val scalarTypes: List<String>,
         val unionTypes: List<String>,
     ) {
+        val argumentParentTypes: List<String>
+            get() = (operationRootTypes + outputTypes).distinct().sorted()
         val allUserTypes: List<String>
             get() = (inputTypes + outputTypes + enumTypes.map { it.name } + scalarTypes + unionTypes)
                 .distinct()
@@ -49,14 +52,6 @@ object SchemaTypeCatalog {
                 .distinct()
                 .sorted()
 
-        fun enumValues(typeName: String): List<String> {
-            return enumTypes.find { it.name == typeName }?.values.orEmpty()
-        }
-
-        fun inputFieldsFor(inputTypeName: String): List<String> {
-            return inputTypeFields[inputTypeName].orEmpty()
-        }
-
         fun outputFieldsFor(outputTypeName: String): List<String> {
             return outputTypeFields[outputTypeName].orEmpty()
         }
@@ -65,8 +60,9 @@ object SchemaTypeCatalog {
             return fieldArguments[parentType]?.get(fieldName).orEmpty()
         }
 
-        fun argumentTypeOptions(): List<String> {
-            return (enumTypes.map { it.name } + inputTypes + scalarTypes + listOf("String", "Int", "Float", "Boolean", "ID"))
+        fun argumentTypeOptions(extraTypes: Collection<String> = emptyList()): List<String> {
+            return (enumTypes.map { it.name } + inputTypes + scalarTypes + listOf("String", "Int", "Float", "Boolean", "ID") + extraTypes)
+                .mapNotNull { GraphQLErrorPathParser.normalizeTypeName(it) ?: it.trim().takeIf { name -> name.isNotEmpty() } }
                 .distinct()
                 .sorted()
         }
@@ -94,6 +90,11 @@ object SchemaTypeCatalog {
         val enumTypes = mutableListOf<EnumTypeInfo>()
         val scalarTypes = mutableListOf<String>()
         val unionTypes = mutableListOf<String>()
+        val operationRootTypes = buildList {
+            schema.queryType?.name?.let { add(it) }
+            schema.mutationType?.name?.let { add(it) }
+            schema.subscriptionType?.name?.let { add(it) }
+        }
 
         for ((name, type) in schema.typeMap) {
             if (name.startsWith("__") || name in builtInScalars) continue
@@ -109,7 +110,7 @@ object SchemaTypeCatalog {
                     }
                 }
                 is GraphQLObjectType -> {
-                    if (name !in setOf("Query", "Mutation", "Subscription")) {
+                    if (name !in operationRootTypes) {
                         outputTypes.add(name)
                     }
                     registerOutputFields(name, type, outputTypeFields, fieldArguments)
@@ -128,6 +129,7 @@ object SchemaTypeCatalog {
         return Catalog(
             inputTypes = inputTypes.sorted(),
             inputTypeFields = inputTypeFields.mapValues { (_, fields) -> fields.sorted() },
+            operationRootTypes = operationRootTypes,
             outputTypes = outputTypes.sorted(),
             outputTypeFields = outputTypeFields.mapValues { (_, fields) -> fields.sorted() },
             fieldArguments = fieldArguments.mapValues { (_, fields) ->
@@ -177,9 +179,5 @@ object SchemaTypeCatalog {
         addSection("Union types", catalog.unionTypes)
         addSection("Scalar types", catalog.scalarTypes)
         return entries
-    }
-
-    fun renameTargetOptions(catalog: Catalog): List<String> {
-        return catalog.renameTargetTypes
     }
 }

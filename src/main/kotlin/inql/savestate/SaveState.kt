@@ -39,12 +39,6 @@ interface LoadsDataFromProject : BurpDeserializable {
         Logger.info("[$key] Load from project completed")
         return true
     }
-
-    fun loadFromProjectFileAsync() {
-        coroutineScope.launch {
-            this@LoadsDataFromProject.loadFromProjectFile()
-        }
-    }
 }
 
 interface SavesDataToProject : BurpSerializable {

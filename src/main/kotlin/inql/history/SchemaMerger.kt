@@ -7,22 +7,13 @@ import graphql.schema.GraphQLSchema
 import graphql.schema.GraphQLUnionType
 
 /**
- * Merges two partial GraphQL schemas by combining their SDL type definitions.
+ * Imports GraphQL schema types into an [SdlTypeRegistry].
  */
 object SchemaMerger {
     private val builtInScalars = setOf("String", "Int", "Float", "Boolean", "ID")
 
     private fun isUserDefinedType(name: String): Boolean {
         return !name.startsWith("__") && name !in builtInScalars
-    }
-
-    fun merge(base: GraphQLSchema?, addition: GraphQLSchema): GraphQLSchema? {
-        val registry = SdlTypeRegistry()
-        if (base != null) {
-            importIntoRegistry(registry, base)
-        }
-        importIntoRegistry(registry, addition)
-        return registry.toSchema()
     }
 
     internal fun importToRegistry(schema: GraphQLSchema): SdlTypeRegistry {
@@ -32,10 +23,6 @@ object SchemaMerger {
     }
 
     internal fun importIntoRegistry(registry: SdlTypeRegistry, schema: GraphQLSchema) {
-        importSchema(registry, schema)
-    }
-
-    private fun importSchema(registry: SdlTypeRegistry, schema: GraphQLSchema) {
         for ((name, type) in schema.typeMap) {
             if (!isUserDefinedType(name)) continue
             when (type) {

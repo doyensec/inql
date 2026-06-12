@@ -195,7 +195,6 @@ class EditableTab(val tabTitle: EditableTabTitle, val isDarkMode: Boolean) : Box
         this.closeButton.isBorderPainted = false
         this.closeButton.iconTextGap = 0
         this.closeButton.margin = Insets(4, 4, 0, 0)
-        this.closeButton
         this.closeButton.addActionListener {
             this.closeListeners.forEach { it(this) }
         }
@@ -362,11 +361,5 @@ open class EditableTabbedPane : TabbedPane() {
 
     open fun closeTab(idx: Int) {
         this.tabbedPane.removeTabAt(idx)
-    }
-
-    fun closeAllTabs() {
-        for (idx in 0..<this.tabCount) {
-            this.closeTab(0)
-        }
     }
 }

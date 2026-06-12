@@ -289,25 +289,6 @@ object Utils {
             else -> "query"
         }
     }
-fun formatComment(string: String, maxLength: Int = 100): String {
-    val sb = StringBuilder()
-    for (line in string.lines()) {
-        var currentLine = line
-        while (currentLine.length > maxLength) {
-            // Split the line into multiple lines
-            val splitOn = currentLine.lastIndexOf(' ', maxLength)
-            if (splitOn == -1) {
-                // Weird?
-                break
-            }
-            sb.appendLine("# ${currentLine.substring(0, splitOn)}")
-            currentLine = currentLine.substring(splitOn + 1)
-        }
-        sb.appendLine("# $currentLine")
-    }
-    return sb.toString()
-}
-
     fun formatComment(strings: List<String>, maxLength: Int = 100): List<String> {
         val out = mutableListOf<String>()
         for (line in strings) {

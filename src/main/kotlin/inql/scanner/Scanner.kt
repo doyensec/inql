@@ -36,8 +36,6 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
             return "[${source.treeLabelSuffix}] ${HistoryHostKey.normalize(host)}"
         }
 
-        fun historyTabTitle(host: String): String = sourceTabTitle(SchemaDiscoverySource.HISTORY, host)
-
         fun tabTitleForSourceParsing(tab: ScannerTab): String {
             var title = tab.getTabTitle().trim()
             tab.linkedProfile?.let { profile ->
@@ -62,8 +60,6 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
             return tab.scanResults.isNotEmpty() &&
                 tab.scanResults.all { it.schemaDiscoverySource == source }
         }
-
-        fun isHistoryTab(tab: ScannerTab): Boolean = isSourceTab(tab, SchemaDiscoverySource.HISTORY)
 
         fun isAnySourceTab(tab: ScannerTab): Boolean {
             if (parseSourceTabTitle(tabTitleForSourceParsing(tab)) != null) return true
@@ -211,9 +207,6 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         return tab
     }
 
-    fun getOrCreateHistoryTab(host: String, requestTemplate: HttpRequest): ScannerTab =
-        getOrCreateSourceTab(host, SchemaDiscoverySource.HISTORY, requestTemplate, focus = false)
-
     fun applyScanResult(
         host: String,
         source: SchemaDiscoverySource,
@@ -345,7 +338,6 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
             TypeCorrectionTargetResolver.argumentSitesInQuery(
                 schema = effectiveSchema,
                 query = op.query,
-                operationType = op.operationType,
                 wrongType = wrongType,
             )
         }.orEmpty()
@@ -393,9 +385,10 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         normalizedHost: String,
         source: SchemaDiscoverySource? = null,
     ): Boolean {
-        val titleSource = source ?: parseSourceTabTitle(tabTitleForSourceParsing(tab))?.first
+        val parsedTitle = parseSourceTabTitle(tabTitleForSourceParsing(tab))
+        val titleSource = source ?: parsedTitle?.first
         if (titleSource != null) {
-            parseSourceTabTitle(tabTitleForSourceParsing(tab))?.let { (_, titleHost) ->
+            parsedTitle?.let { (_, titleHost) ->
                 if (HistoryHostKey.matches(titleHost, normalizedHost)) return true
             }
         }

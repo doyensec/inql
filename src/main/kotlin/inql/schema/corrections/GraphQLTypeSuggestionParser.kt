@@ -7,7 +7,6 @@ object GraphQLTypeSuggestionParser {
     data class TypeRenameSuggestion(
         val wrongType: String,
         val suggestedType: String,
-        val message: String,
     )
 
     private val unknownTypeDidYouMean = Regex(
@@ -21,7 +20,7 @@ object GraphQLTypeSuggestionParser {
             .distinctBy { it.wrongType to it.suggestedType }
     }
 
-    fun parseTypeRenameFromMessage(message: String): List<TypeRenameSuggestion> {
+    private fun parseTypeRenameFromMessage(message: String): List<TypeRenameSuggestion> {
         val match = unknownTypeDidYouMean.find(message) ?: return emptyList()
         val wrong = GraphQLErrorPathParser.normalizeTypeName(match.groups["wrong"]?.value) ?: return emptyList()
         val suggested = GraphQLErrorPathParser.normalizeTypeName(match.groups["suggested"]?.value) ?: return emptyList()
@@ -30,7 +29,6 @@ object GraphQLTypeSuggestionParser {
             TypeRenameSuggestion(
                 wrongType = wrong,
                 suggestedType = suggested,
-                message = message,
             ),
         )
     }

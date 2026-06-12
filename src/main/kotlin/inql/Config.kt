@@ -4,7 +4,6 @@ import burp.Burp
 import burp.api.montoya.core.HighlightColor
 import inql.graphql.formatting.Formatter
 import inql.graphql.formatting.SizedLRUCache
-import inql.InQLHolder
 import inql.history.HistoryTracker
 import kotlin.collections.set
 

@@ -2,7 +2,6 @@ package inql.scanner.scanresults
 
 import inql.Config
 import inql.graphql.GQLSchema
-import inql.graphql.scanners.CycleDetectionExport
 import inql.graphql.scanners.CycleResult
 import inql.graphql.scanners.CyclesScanner
 import inql.scanner.ScanResult
@@ -44,15 +43,11 @@ class CycleDetectionEntry(
     }
 }
 
-sealed class CycleDetectionPayload : ScanResultElement("Cycle Detection") {
-    object Loading : CycleDetectionPayload() {
-        override fun content(): String = ""
-    }
+sealed class CycleDetectionPayload {
+    object Loading : CycleDetectionPayload()
 
     class Ready(
         val cycles: List<CycleResult>,
         val scanResult: ScanResult,
-    ) : CycleDetectionPayload() {
-        override fun content(): String = CycleDetectionExport.formatAll(cycles)
-    }
+    ) : CycleDetectionPayload()
 }

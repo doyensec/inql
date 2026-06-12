@@ -7,10 +7,6 @@ import inql.history.HistorySchemaCorrections
 import inql.Logger
 
 object SchemaCorrectionsService {
-    fun apply(schema: GraphQLSchema, corrections: SchemaCorrections): GraphQLSchema? {
-        return HistorySchemaCorrections.apply(schema, corrections)
-    }
-
     fun applyToGqlSchema(gqlSchema: GQLSchema, corrections: SchemaCorrections): GQLSchema {
         if (!corrections.hasActiveCorrections()) return gqlSchema
 
@@ -19,7 +15,7 @@ object SchemaCorrectionsService {
         if (!overlay.hasActiveCorrections()) return baseGql
 
         val corrected = apply(baseGql.schema, overlay) ?: return baseGql
-        return buildGqlSchema(corrected)
+        return GQLSchema(corrected)
     }
 
     private fun baseGqlSchema(gqlSchema: GQLSchema, corrections: SchemaCorrections): GQLSchema {
@@ -29,24 +25,8 @@ object SchemaCorrectionsService {
         return gqlSchema
     }
 
-    fun buildGqlSchema(schema: GraphQLSchema): GQLSchema {
-        return GQLSchema(schema)
-    }
-
-    fun mergeInferredWithCorrections(
-        base: GraphQLSchema?,
-        addition: GraphQLSchema,
-        corrections: SchemaCorrections,
-    ): GraphQLSchema? {
-        return HistorySchemaCorrections.mergeInferredWithCorrections(base, addition, corrections)
-    }
-
-    fun shouldBlockInferredType(typeName: String, corrections: SchemaCorrections): Boolean {
-        return typeName in corrections.blockedSyntheticTypeNames()
-    }
-
-    fun resolveInferredTypeName(typeName: String, corrections: SchemaCorrections): String {
-        return corrections.typeAliasMap()[typeName] ?: typeName
+    private fun apply(schema: GraphQLSchema, corrections: SchemaCorrections): GraphQLSchema? {
+        return HistorySchemaCorrections.apply(schema, corrections)
     }
 
     fun validateAndApply(

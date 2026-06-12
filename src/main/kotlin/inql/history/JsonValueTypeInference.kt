@@ -9,21 +9,8 @@ import org.json.JSONObject
 internal object JsonValueTypeInference {
     fun inferSdlType(value: Any?): String? {
         return when (value) {
-            null -> null
-            is Boolean -> "Boolean"
-            is Int, is Long -> "Int"
-            is Float, is Double -> {
-                val numeric = (value as Number).toDouble()
-                if (numeric % 1.0 == 0.0) "Int" else "Float"
-            }
-            is Number -> {
-                val numeric = value.toDouble()
-                if (numeric % 1.0 == 0.0) "Int" else "Float"
-            }
-            is String -> GraphQLTypeInference.inferScalarFromStringValue(value)
             is Map<*, *>, is JSONObject -> null
-            is List<*>, is JSONArray -> inferListType(value)
-            else -> null
+            else -> GraphQLTypeInference.inferScalarFromJson(value)
         }
     }
 
@@ -97,16 +84,6 @@ internal object JsonValueTypeInference {
         }
     }
 
-    private fun inferListType(value: Any?): String? {
-        val elements = asList(value)
-        if (elements.isEmpty()) return null
-        val merged = elements
-            .mapNotNull { inferSdlType(it) }
-            .reduceOrNull { left, right -> GraphQLTypeInference.mergeSdlTypes(left, right) }
-            ?: return null
-        return wrapListType(merged)
-    }
-
     private fun listElementType(declaredType: String): String? {
         var current = declaredType.trim()
         while (current.endsWith('!')) {
@@ -116,12 +93,6 @@ internal object JsonValueTypeInference {
         return current.substring(1, current.length - 1).trim().ifBlank { null }
     }
 
-    private fun wrapListType(elementType: String): String {
-        val nullableElement = elementType.removeSuffix("!")
-        val listType = "[$nullableElement]"
-        return if (elementType.endsWith("!")) "$listType!" else listType
-    }
-
     private fun asObjectMap(value: Any?): Map<String, Any?>? {
         return when (value) {
             is Map<*, *> -> value.entries
@@ -129,7 +100,7 @@ internal object JsonValueTypeInference {
                     (key as? String)?.let { it to entryValue }
                 }
                 .toMap()
-            is JSONObject -> jsonObjectToMap(value)
+            is JSONObject -> JsonKotlinBridge.jsonObjectToMap(value)
             else -> null
         }
     }
@@ -139,23 +110,6 @@ internal object JsonValueTypeInference {
             is List<*> -> value
             is JSONArray -> (0 until value.length()).map { index -> value.opt(index) }
             else -> emptyList()
-        }
-    }
-
-    private fun jsonObjectToMap(jsonObject: JSONObject): Map<String, Any?> {
-        val map = linkedMapOf<String, Any?>()
-        for (key in jsonObject.keys()) {
-            map[key] = jsonValueToKotlin(jsonObject.get(key))
-        }
-        return map
-    }
-
-    private fun jsonValueToKotlin(value: Any?): Any? {
-        return when (value) {
-            null, JSONObject.NULL -> null
-            is JSONObject -> jsonObjectToMap(value)
-            is JSONArray -> (0 until value.length()).map { index -> jsonValueToKotlin(value.opt(index)) }
-            else -> value
         }
     }
 }

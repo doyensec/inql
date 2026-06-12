@@ -19,9 +19,6 @@ import inql.schema.corrections.SchemaCorrections
  * Builds partial GraphQL schemas via SDL text to avoid graphql-java type reference casting issues.
  */
 internal class SdlTypeRegistry {
-    companion object {
-        internal var lastGeneratedSdl: String? = null
-    }
     data class SdlField(
         var returnType: String,
         val arguments: MutableMap<String, String> = mutableMapOf(),
@@ -362,7 +359,6 @@ internal class SdlTypeRegistry {
         reconcileAlternateReturnTypes()
         ensureOutputTypesForAllFieldReferences()
         val sdl = toSdl()
-        Companion.lastGeneratedSdl = sdl
         return try {
             val registry = SchemaParser().parse(sdl)
             SchemaGenerator().makeExecutableSchema(
@@ -556,7 +552,7 @@ internal class SdlTypeRegistry {
             inlineFragments = shape.nodeInlineFragments,
         )
         val connectionName = if (shape.nodeInlineFragments.size > 1) {
-            "${parentType}${field.name.toPascalCase()}Connection"
+            "${parentType}${field.name.toGraphQLPascalCase()}Connection"
         } else {
             "${nodeTypeName.removeSuffix("Connection")}Connection"
         }
@@ -763,11 +759,6 @@ internal class SdlTypeRegistry {
             return stripped
         }
         return null
-    }
-
-    private fun String.toPascalCase(): String {
-        if (isBlank()) return this
-        return replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
     private fun mergeField(

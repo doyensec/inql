@@ -40,12 +40,6 @@ class HistoryTracker private constructor(private val inql: InQL) {
             }
         }
 
-        fun resetHostSchema(host: String) {
-            if (this::instance.isInitialized) {
-                instance.schemaService.resetHostForReextract(host)
-            }
-        }
-
         fun isRunning(): Boolean = this::instance.isInitialized
 
         fun releaseHostIfNoOpenTabs(host: String) {

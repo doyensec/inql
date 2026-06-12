@@ -91,24 +91,6 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         treeView.refreshKeepingSchemaCorrections(scanResultUuid)
     }
 
-    fun loadSchemaCorrections(
-        scanResult: ScanResult,
-        focusArgumentTypesTab: Boolean = false,
-        argumentParentType: String? = null,
-        argumentFieldName: String? = null,
-        argumentName: String? = null,
-        argumentType: String? = null,
-    ) {
-        payloadView.loadSchemaCorrections(
-            scanResult,
-            focusArgumentTypesTab,
-            argumentParentType,
-            argumentFieldName,
-            argumentName,
-            argumentType,
-        )
-    }
-
     fun ensureDefaultTreeExpansion() {
         this.treeView.ensureDefaultTreeExpansion()
     }
@@ -164,12 +146,6 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
             }
             is RequestTemplateEntry -> {
                 this.payloadView.loadRequestTemplate(scannerTab.requestTemplate)
-                this.currentNode = null
-                this.sendToHandler.setEnabled(false)
-            }
-            is ScanResultElement -> {
-                // If it's something else (e.g. PoI), show as text
-                this.payloadView.load(content.content())
                 this.currentNode = null
                 this.sendToHandler.setEnabled(false)
             }

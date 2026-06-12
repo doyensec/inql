@@ -33,11 +33,6 @@ object InputEnumTypeMatching {
         return all.filterNot { it.equals(generic, ignoreCase = true) }
     }
 
-    fun matchesEnumToInputField(enumName: String, inputTypeName: String, fieldName: String): Boolean {
-        return strongEnumNameCandidates(inputTypeName, fieldName)
-            .any { it.equals(enumName, ignoreCase = true) }
-    }
-
     fun preferredEnumNameForInputField(inputTypeName: String, fieldName: String): String {
         return strongEnumNameCandidates(inputTypeName, fieldName).firstOrNull()
             ?: "${inputTypeName.removeSuffix("Input")}${pascalCase(fieldName)}"
