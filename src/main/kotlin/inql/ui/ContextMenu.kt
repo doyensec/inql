@@ -275,22 +275,29 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
     }
 
     private fun requestFromContext(event: ContextMenuEvent): HttpRequest? {
-        return requestResponseFromContext(event)?.first
-    }
-
-    private fun requestResponseFromContext(event: ContextMenuEvent): Pair<HttpRequest, HttpResponse>? {
         val invocationType = event.invocationType()
         if (invocationType.containsHttpRequestResponses()) {
             val requestResponses = event.selectedRequestResponses()
             if (requestResponses.size != 1) return null
-            val response = requestResponses[0].response() ?: return null
-            return requestResponses[0].request() to response
+            return requestResponses[0].request()
         }
         if (invocationType.containsHttpMessage()) {
             val msg = event.messageEditorRequestResponse().orElse(null) ?: return null
-            val requestResponse = msg.requestResponse() ?: return null
-            val response = requestResponse.response() ?: return null
-            return requestResponse.request() to response
+            return msg.requestResponse().request()
+        }
+        return null
+    }
+
+    private fun responseFromContext(event: ContextMenuEvent): HttpResponse? {
+        val invocationType = event.invocationType()
+        if (invocationType.containsHttpRequestResponses()) {
+            val requestResponses = event.selectedRequestResponses()
+            if (requestResponses.size != 1) return null
+            return requestResponses[0].response()
+        }
+        if (invocationType.containsHttpMessage()) {
+            val msg = event.messageEditorRequestResponse().orElse(null) ?: return null
+            return msg.requestResponse().response()
         }
         return null
     }
@@ -343,9 +350,11 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         if (event.invocationType() == InvocationType.SITE_MAP_TREE && this.selectedHost != null) {
             return mutableListOf(BurpMenuItem(extractHistorySchemaAction))
         }
-        val requestResponse = this.requestResponseFromContext(event) ?: return null
-        this.request = requestResponse.first
-        val typeRenameActions = typeRenameActionsFromResponse(requestResponse.first, requestResponse.second)
+        val request = this.requestFromContext(event) ?: return null
+        this.request = request
+        val typeRenameActions = responseFromContext(event)?.let { response ->
+            typeRenameActionsFromResponse(request, response)
+        } ?: emptyList()
         return this.sendToInqlComponents(typeRenameActions)
     }
 

@@ -53,6 +53,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
 
         // Past depth limit: omit composite fields (do not emit invalid/truncated selections).
         if (depth > maxDepth) {
+            sb.appendLine("$padding$name$args # { Truncated by depth limit }")
             return
         }
 
