@@ -627,6 +627,17 @@ class Bruteforcer(private val inql: InQL) {
 
         Logger.debug("Discovered implementations for '$abstractTypeName': $implementations")
 
+        val existingType = schema.getType(abstractTypeName)
+        if (existingType is GraphQLObjectType) {
+            val concreteFields = existingType.fieldDefinitions.filter { it.name != "_inql_placeholder" }
+            if (concreteFields.isNotEmpty()) {
+                Logger.debug(
+                    "Skipping union replacement for object type '$abstractTypeName' (${concreteFields.size} fields)",
+                )
+                return@coroutineScope Pair(schema, implementations)
+            }
+        }
+
         val unionTypeBuilder = GraphQLUnionType.newUnionType()
             .name(abstractTypeName)
 

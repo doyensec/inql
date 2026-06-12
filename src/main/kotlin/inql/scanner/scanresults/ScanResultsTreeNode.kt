@@ -3,10 +3,11 @@ package inql.scanner.scanresults
 import com.google.gson.Gson
 import inql.Config
 import inql.graphql.GQLSchema
-import inql.graphql.scanners.CyclesScanner
 import inql.graphql.scanners.POIScanner
 import inql.graphql.scanners.POIScanner.Companion.getActiveKeywordsCount
 import inql.scanner.ScanResult
+import inql.scanner.SchemaDiscoverySource
+import inql.schema.corrections.SchemaTypeCatalog
 import inql.utils.JsonPrettifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,9 +17,18 @@ import kotlinx.coroutines.withContext
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
-open class TreeNodeWithCustomLabel(val label: String, obj: Any?, val forceDirectory: Boolean = false) : DefaultMutableTreeNode(obj) {
+open class TreeNodeWithCustomLabel(var label: String, obj: Any?, val forceDirectory: Boolean = false) : DefaultMutableTreeNode(obj) {
+    init {
+        allowsChildren = forceDirectory
+    }
+
     override fun toString(): String {
         return this.label
+    }
+
+    override fun getAllowsChildren(): Boolean {
+        if (forceDirectory) return true
+        return super.getAllowsChildren()
     }
 
     override fun isLeaf(): Boolean {
@@ -94,122 +104,204 @@ class LazyLeafTreeNode(
     }
 }
 
-class CycleDetectionLazyNode(
+class GQLElementListTreeNode(
     label: String,
-    private val scanResult: ScanResult,
-    private val gqlSchema: GQLSchema,
-) : TreeNodeWithCustomLabel(label, CycleDetectionPayload.Loading, forceDirectory = false) {
-
-    private var loaded = false
-    private var selectionRefreshCallback: (() -> Unit)? = null
-
-    fun setSelectionRefreshCallback(callback: () -> Unit) {
-        this.selectionRefreshCallback = callback
-    }
-
-    fun ensureLoaded(model: DefaultTreeModel) {
-        if (loaded) return
-        loaded = true
-
-        CoroutineScope(Dispatchers.Default).launch {
-            val payload = try {
-                val config = Config.getInstance()
-                val maxDepth = config.getInt("report.cycles.depth")!!
-                val maxCycles = config.getInt("report.cycles.max")!!
-                val scanner = CyclesScanner(gqlSchema, maxDepth, maxCycles)
-                scanner.detect()
-                CycleDetectionPayload.Ready(scanner.cycleResults(), scanResult)
-            } catch (e: Exception) {
-                CycleDetectionPayload.Ready(emptyList(), scanResult)
-            }
-
-            withContext(Dispatchers.Swing) {
-                this@CycleDetectionLazyNode.userObject = payload
-                model.nodeChanged(this@CycleDetectionLazyNode)
-                selectionRefreshCallback?.invoke()
-            }
-        }
-    }
-}
-
-class GQLElementListTreeNode(label: String, val list: List<String>, val type: GQLSchema.OperationType, val schema: GQLSchema) :
-    TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
+    val list: List<String>,
+    val type: GQLSchema.OperationType,
+    private val schemaSupplier: () -> GQLSchema,
+    private val maxDepth: Int? = null,
+) : TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
     init {
         list.forEach {
-            this.add(TreeNodeWithCustomLabel(it, GQLQueryElement(it, type, schema)))
+            this.add(TreeNodeWithCustomLabel(it, GQLQueryElement(it, type, schemaSupplier, maxDepth)))
         }
     }
 }
 
+class GQLTypeCategoryTreeNode(
+    label: String,
+    typeNames: List<String>,
+    private val schemaSupplier: () -> GQLSchema,
+) : TreeNodeWithCustomLabel(label, null, forceDirectory = true) {
+    init {
+        typeNames.forEach { typeName ->
+            add(TreeNodeWithCustomLabel(typeName, GQLTypeElement(typeName, schemaSupplier)))
+        }
+    }
+}
 
-class ScanResultTreeNode(val scanResult: ScanResult) :
+class GQLTypesTreeNode(private val schemaSupplier: () -> GQLSchema) :
+    TreeNodeWithCustomLabel("Types", null, forceDirectory = true) {
+    init {
+        val catalog = SchemaTypeCatalog.fromSchema(schemaSupplier().schema)
+        addCategory("Object types", catalog.outputTypes)
+        addCategory("Input types", catalog.inputTypes)
+        addCategory("Enum types", catalog.enumTypes.map { it.name })
+        addCategory("Union types", catalog.unionTypes)
+        addCategory("Scalar types", catalog.scalarTypes)
+    }
+
+    private fun addCategory(label: String, typeNames: List<String>) {
+        if (typeNames.isEmpty()) return
+        add(GQLTypeCategoryTreeNode(label, typeNames, schemaSupplier))
+    }
+}
+
+
+class ScanResultTreeNode(scanResult: ScanResult) :
     TreeNodeWithCustomLabel(
-        "${scanResult.host} (${scanResult.schemaDiscoverySource.treeLabelSuffix})",
+        buildScanResultLabel(scanResult),
         scanResult,
+        forceDirectory = true,
     ) {
+
+    var scanResult: ScanResult = scanResult
+        private set
+
+    companion object {
+        private val SCHEMA_BRANCH_LABELS = setOf(
+            "Queries",
+            "Mutations",
+            "Subscriptions",
+            "Types",
+            "Points of Interest",
+            "Cycle Detection",
+            "JSON schema",
+            "SDL schema",
+        )
+
+        private fun buildScanResultLabel(scanResult: ScanResult): String {
+            return "${scanResult.host} (${scanResult.schemaDiscoverySource.treeLabelSuffix})"
+        }
+    }
 
     init {
         loadNodes()
     }
 
-    fun loadNodes() {
-        val gqlSchema = this.scanResult.parsedSchema
-        val config = Config.getInstance()
+    private fun loadNodes() {
+        removeAllChildren()
+        val gqlSchema = scanResult.effectiveParsedSchema()
+        for (node in buildSchemaBranchNodes(gqlSchema, scanResult)) {
+            add(node)
+        }
+        addContentNode("Schema Corrections", SchemaCorrectionsEntry(scanResult))
+        addContentNode("Request Template", RequestTemplateEntry())
+    }
 
-        // Add queries and mutations
-        this.add(GQLElementListTreeNode("Queries", gqlSchema.queries.keys.sorted(), GQLSchema.OperationType.QUERY, gqlSchema))
-        this.add(GQLElementListTreeNode("Mutations", gqlSchema.mutations.keys.sorted(), GQLSchema.OperationType.MUTATION, gqlSchema))
-        this.add(GQLElementListTreeNode("Subscriptions", gqlSchema.subscriptions.keys.sorted(), GQLSchema.OperationType.SUBSCRIPTION, gqlSchema))
+    fun reloadSchemaBranches(updated: ScanResult) {
+        scanResult = updated
+        userObject = updated
+        label = buildScanResultLabel(updated)
 
-        // Add Points of Interest
-        POIScanner.registerHooks()
+        val removable = (0 until childCount).mapNotNull { index ->
+            val child = getChildAt(index) as? TreeNodeWithCustomLabel ?: return@mapNotNull null
+            if (child.label in SCHEMA_BRANCH_LABELS) child else null
+        }
+        removable.forEach { remove(it) }
 
-        if (config.getBoolean("report.poi") == true && getActiveKeywordsCount() > 0) {
-            val poiNode = LazyTreeNodeWithCustomLabel("Points of Interest") { parent ->
-                val poiScanner = POIScanner(gqlSchema)
-                val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+        val gqlSchema = updated.effectiveParsedSchema()
+        val freshBranches = buildSchemaBranchNodes(gqlSchema, updated)
+        freshBranches.reversed().forEach { insert(it, 0) }
 
-                val resultNodes = mutableListOf<DefaultMutableTreeNode>()
-                val poiFormat = config.getString("report.poi.format")
-
-                if (poiFormat == "text" || poiFormat == "both") {
-                    for ((category, results) in pois) {
-                        if (results.isEmpty()) continue
-                        val categoryText = buildString {
-                            for (poi in results) {
-                                appendLine("(${poi.queryType})${poi.path}")
-                            }
-                        }
-                        resultNodes.add(TreeNodeWithCustomLabel(category, categoryText))
-                    }
-                }
-                if (poiFormat == "json" || poiFormat == "both") {
-                    val jsonPoi = Gson().toJson(pois)
-                    if (!jsonPoi.isNullOrBlank()) {
-                        resultNodes.add(TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi), forceDirectory = false))
-                    }
-                }
-                resultNodes
+        for (index in 0 until childCount) {
+            val child = getChildAt(index) as? DefaultMutableTreeNode ?: continue
+            val childLabel = (child as? TreeNodeWithCustomLabel)?.label ?: continue
+            when (childLabel) {
+                "Schema Corrections" -> child.userObject = SchemaCorrectionsEntry(updated)
             }
+        }
+    }
 
-            this.add(poiNode)
+    private fun buildSchemaBranchNodes(gqlSchema: GQLSchema, result: ScanResult): List<DefaultMutableTreeNode> {
+        val config = Config.getInstance()
+        val nodes = mutableListOf<DefaultMutableTreeNode>()
+
+        val schemaSupplier = { result.effectiveParsedSchema() }
+        val historyDisplayDepth = if (result.schemaDiscoverySource == SchemaDiscoverySource.HISTORY) {
+            Config.getInstance().historyDisplayDepth()
+        } else {
+            null
+        }
+        nodes.add(
+            GQLElementListTreeNode(
+                "Queries",
+                gqlSchema.queries.keys.sorted(),
+                GQLSchema.OperationType.QUERY,
+                schemaSupplier,
+                historyDisplayDepth,
+            ),
+        )
+        nodes.add(
+            GQLElementListTreeNode(
+                "Mutations",
+                gqlSchema.mutations.keys.sorted(),
+                GQLSchema.OperationType.MUTATION,
+                schemaSupplier,
+                historyDisplayDepth,
+            ),
+        )
+        nodes.add(
+            GQLElementListTreeNode(
+                "Subscriptions",
+                gqlSchema.subscriptions.keys.sorted(),
+                GQLSchema.OperationType.SUBSCRIPTION,
+                schemaSupplier,
+                historyDisplayDepth,
+            ),
+        )
+        nodes.add(GQLTypesTreeNode(schemaSupplier))
+
+        POIScanner.registerHooks()
+        if (config.getBoolean("report.poi") == true && getActiveKeywordsCount() > 0) {
+            nodes.add(
+                LazyTreeNodeWithCustomLabel("Points of Interest") {
+                    val poiScanner = POIScanner(gqlSchema)
+                    val pois = poiScanner.scan(config.getInt("report.poi.depth")!!)
+                    val resultNodes = mutableListOf<DefaultMutableTreeNode>()
+                    val poiFormat = config.getString("report.poi.format")
+
+                    if (poiFormat == "text" || poiFormat == "both") {
+                        for ((category, poiResults) in pois) {
+                            if (poiResults.isEmpty()) continue
+                            val categoryText = buildString {
+                                for (poi in poiResults) {
+                                    appendLine("(${poi.queryType})${poi.path}")
+                                }
+                            }
+                            resultNodes.add(TreeNodeWithCustomLabel(category, categoryText))
+                        }
+                    }
+                    if (poiFormat == "json" || poiFormat == "both") {
+                        val jsonPoi = Gson().toJson(pois)
+                        if (!jsonPoi.isNullOrBlank()) {
+                            resultNodes.add(
+                                TreeNodeWithCustomLabel("points_of_interest.json", JsonPrettifier.prettify(jsonPoi), forceDirectory = false),
+                            )
+                        }
+                    }
+                    resultNodes
+                },
+            )
         }
 
         if (config.getBoolean("report.cycles") == true) {
-            this.add(CycleDetectionLazyNode("Cycle Detection", this.scanResult, gqlSchema))
+            nodes.add(TreeNodeWithCustomLabel("Cycle Detection", CycleDetectionEntry(result, gqlSchema), forceDirectory = false))
         }
 
-        // Add request template
-        this.add(TreeNodeWithCustomLabel("Request Template", scanResult.requestTemplate.withBody("").toString()))
-
-        // Add JSON schema
-        if (config.getBoolean("report.json") == true && scanResult.jsonSchema != null) {
-            this.add(TreeNodeWithCustomLabel("JSON schema", JsonPrettifier.prettify(scanResult.jsonSchema)))
+        if (config.getBoolean("report.json") == true) {
+            nodes.add(TreeNodeWithCustomLabel("JSON schema", JsonPrettifier.prettify(gqlSchema.jsonSchema), forceDirectory = false))
         }
 
-        // Add SDL schema
-        if (config.getBoolean("report.sdl") == true && scanResult.sdlSchema != null) {
-            this.add(TreeNodeWithCustomLabel("SDL schema", scanResult.sdlSchema))
+        val sdl = gqlSchema.sdlSchema ?: result.sdlSchema
+        if (config.getBoolean("report.sdl") == true && sdl != null) {
+            nodes.add(TreeNodeWithCustomLabel("SDL schema", sdl, forceDirectory = false))
         }
+
+        return nodes
+    }
+
+    private fun addContentNode(label: String, content: Any) {
+        this.add(TreeNodeWithCustomLabel(label, content, forceDirectory = false))
     }
 }

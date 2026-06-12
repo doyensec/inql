@@ -3,13 +3,24 @@ package inql.utils
 import graphql.schema.*
 import inql.Config
 import inql.graphql.GQLSchema
+import inql.graphql.Utils
 import inql.graphql.scanners.CycleResult
 import inql.scanner.ScanResult
+import inql.schema.corrections.InputEnumTypeMatching
 
 data class QueryWithVariables(
     val query: String,
-    val variables: Map<String, Any>
+    val variables: Map<String, Any?>,
 )
+
+private data class InputFieldContext(
+    val inputTypeName: String,
+    val fieldName: String,
+)
+
+private fun isSchemaPlaceholderField(fieldName: String): Boolean {
+    return fieldName == "_inql_placeholder" || fieldName == "PLACEHOLDER"
+}
 
 class QueryToRequestConverter(private val scanResults: ScanResult) {
     fun convert(fieldName: String, operationType: String, maxDepth: Int): String {
@@ -20,7 +31,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         }
 
         val queryWithVars = generateOperation(
-            schema = scanResults.parsedSchema.schema,
+            schema = scanResults.effectiveGraphQLSchema(),
             operationType = tmpOperationType,
             fieldName = fieldName,
             maxDepth = maxDepth
@@ -32,9 +43,9 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
      * Builds a JSON HTTP body (query + variables) that walks [cycle] along the schema, for Repeater / clipboard.
      */
     fun buildCyclePocJson(cycle: CycleResult): String {
-        val schema = scanResults.parsedSchema.schema
+        val schema = scanResults.effectiveGraphQLSchema()
         val config = Config.getInstance()
-        val argDepth = config.getInt("codegen.depth")!!
+        val argDepth = config.codegenDepth()
         val cycleRepetitions = config.getInt("report.cycles.poc.repetitions")!!.coerceIn(1, 500)
 
         val rootType = when (cycle.operationType) {
@@ -57,11 +68,12 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             )
         }
 
-        val variablesMap = mutableMapOf<String, Any>()
+        val variablesMap = mutableMapOf<String, Any?>()
         val variableDefinitions = mutableListOf<String>()
         val nestedVarCounter = mutableListOf(0)
 
         val inner = buildCyclePathSelection(
+            schema = schema,
             container = rootType,
             path = path,
             pathIndex = 0,
@@ -164,21 +176,22 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     }
 
     private fun cycleFieldsContainer(type: GraphQLType): GraphQLFieldsContainer? {
-        val u = unwrapType(type)
+        val u = Utils.unwrapType(type)
         return when (u) {
             is GraphQLObjectType -> u
             is GraphQLInterfaceType -> u
-            is GraphQLUnionType -> u.types.firstOrNull() as? GraphQLObjectType
+            is GraphQLUnionType -> null
             else -> null
         }
     }
 
     private fun buildCyclePathSelection(
+        schema: GraphQLSchema,
         container: GraphQLFieldsContainer,
         path: List<String>,
         pathIndex: Int,
         baseIndent: Int,
-        variablesMap: MutableMap<String, Any>,
+        variablesMap: MutableMap<String, Any?>,
         variableDefinitions: MutableList<String>,
         nestedVarCounter: MutableList<Int>,
         maxDepth: Int,
@@ -190,17 +203,18 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             ?: throw IllegalArgumentException("Field '$fieldName' not found on type '${container.name}'")
 
         val args = processFieldArguments(
-            field,
-            pathIndex + 1,
-            maxDepth,
-            variablesMap,
-            variableDefinitions,
-            nestedVarCounter,
+            schema = schema,
+            field = field,
+            currentDepth = pathIndex + 1,
+            maxDepth = maxDepth,
+            variablesMap = variablesMap,
+            variableDefinitions = variableDefinitions,
+            nestedVarCounter = nestedVarCounter,
         )
 
         val indent = "  ".repeat(baseIndent)
         val isLast = pathIndex == path.lastIndex
-        val unwrapped = unwrapType(field.type)
+        val unwrapped = Utils.unwrapType(field.type)
 
         return buildString {
             append(indent).append(fieldName).append(args)
@@ -217,6 +231,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
                 append(" {\n")
                 append(
                     buildCyclePathSelection(
+                        schema = schema,
                         container = next,
                         path = path,
                         pathIndex = pathIndex + 1,
@@ -250,30 +265,42 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         val targetField = rootType.getFieldDefinition(fieldName)
             ?: throw IllegalArgumentException("Field '$fieldName' not found in $operationType type")
 
-        val variablesMap = mutableMapOf<String, Any>()
+        val variablesMap = mutableMapOf<String, Any?>()
         val variableDefinitions = mutableListOf<String>()
         val nestedVarCounter = mutableListOf(0)
 
-        // Process root arguments first
+        // Root variables only when values can be built from known schema input types.
+        val argValueDepth = maxDepth + 3
+        val rootArgs = mutableListOf<GraphQLArgument>()
         targetField.arguments.forEach { arg ->
-            val argName = arg.name
-            val varType = getVariableType(arg.type)
-            variableDefinitions.add("$$argName: $varType")
-            val value = arguments[argName] ?: generateExampleValue(arg.type, 0, maxDepth)
-            if (value != null) {
-                variablesMap[argName] = value
-            }
+            val inputContext = InputFieldContext(
+                inputTypeName = fieldName,
+                fieldName = arg.name,
+            )
+            val value = buildRootArgumentValue(
+                schema = schema,
+                type = arg.type,
+                explicit = arguments[arg.name],
+                argValueDepth = argValueDepth,
+            )
+                ?: requiredArgumentFallback(schema, arg.type, inputContext)
+                ?: permissiveArgumentFallback(schema, arg.type, inputContext)
+            if (value == null) return@forEach
+            val varType = getVariableType(schema, arg.type)
+            variableDefinitions.add("$${arg.name}: $varType")
+            variablesMap[arg.name] = value
+            rootArgs.add(arg)
         }
 
-        // Process selection set to collect NESTED variables BEFORE building query string
         val selectionSet = getSelectionSet(
+            schema = schema,
             type = targetField.type,
-            currentDepth = 0,
+            currentDepth = 1,
             maxDepth = maxDepth,
             visitedTypes = mutableSetOf(),
             variablesMap = variablesMap,
             variableDefinitions = variableDefinitions,
-            nestedVarCounter = nestedVarCounter
+            nestedVarCounter = nestedVarCounter,
         )
 
         val query = buildString {
@@ -286,10 +313,9 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             append(" {\n")
             append("  $fieldName")
 
-            // Root arguments
-            if (targetField.arguments.isNotEmpty()) {
+            if (rootArgs.isNotEmpty()) {
                 append("(")
-                targetField.arguments.joinTo(this, ", ") { arg ->
+                rootArgs.joinTo(this, ", ") { arg ->
                     "${arg.name}: $${arg.name}"
                 }
                 append(")")
@@ -307,96 +333,75 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         return QueryWithVariables(query, variablesMap)
     }
 
+    private fun buildRootArgumentValue(
+        schema: GraphQLSchema,
+        type: GraphQLType,
+        explicit: Any?,
+        argValueDepth: Int,
+    ): Any? {
+        if (explicit != null) return explicit
+        return generateExampleValue(schema, type, 0, argValueDepth)
+    }
 
     private fun getSelectionSet(
+        schema: GraphQLSchema,
         type: GraphQLType,
         currentDepth: Int,
         maxDepth: Int,
         visitedTypes: MutableSet<String> = mutableSetOf(),
-        variablesMap: MutableMap<String, Any>,
+        variablesMap: MutableMap<String, Any?>,
         variableDefinitions: MutableList<String>,
-        nestedVarCounter: MutableList<Int>
+        nestedVarCounter: MutableList<Int>,
     ): String {
-        if (currentDepth >= maxDepth) return ""
+        if (currentDepth > maxDepth) return ""
 
-        return when (val unwrappedType = unwrapType(type)) {
-            is GraphQLObjectType -> handleObjectType(unwrappedType, currentDepth, maxDepth, visitedTypes, variablesMap, variableDefinitions, nestedVarCounter)
-            is GraphQLInterfaceType -> handleObjectType(unwrappedType, currentDepth, maxDepth, visitedTypes, variablesMap, variableDefinitions, nestedVarCounter)
-            is GraphQLUnionType -> handleUnionType(unwrappedType, currentDepth, maxDepth, visitedTypes, variablesMap, variableDefinitions, nestedVarCounter)
-            else -> ""
+        val resolved = resolveSchemaType(schema, type)
+        return when (val container = resolveFieldsContainer(schema, type)) {
+            is GraphQLObjectType, is GraphQLInterfaceType -> handleObjectType(
+                schema, container, currentDepth, maxDepth, visitedTypes,
+                variablesMap, variableDefinitions, nestedVarCounter,
+            )
+            else -> when (val unwrapped = Utils.unwrapType(resolved)) {
+                is GraphQLUnionType -> handleUnionType(
+                    schema, unwrapped, currentDepth, maxDepth, visitedTypes,
+                    variablesMap, variableDefinitions, nestedVarCounter,
+                )
+                else -> ""
+            }
         }
     }
 
-
     private fun handleObjectType(
+        schema: GraphQLSchema,
         type: GraphQLFieldsContainer,
         currentDepth: Int,
         maxDepth: Int,
         visitedTypes: MutableSet<String>,
-        variablesMap: MutableMap<String, Any>,
+        variablesMap: MutableMap<String, Any?>,
         variableDefinitions: MutableList<String>,
-        nestedVarCounter: MutableList<Int>
+        nestedVarCounter: MutableList<Int>,
     ): String {
         if (visitedTypes.contains(type.name)) return ""
         visitedTypes.add(type.name)
 
         val fields = type.fieldDefinitions
-            .filterNot { it.isDeprecated }
-            .joinToString("\n") { field ->
-                val fieldType = unwrapType(field.type)
-                val nextDepth = currentDepth + 1
-
-                // First determine if we should include this field
-                val includeField = when {
-                    isScalarOrEnum(fieldType) -> true
-                    fieldType is GraphQLFieldsContainer && nextDepth < maxDepth -> true
-                    else -> false
-                }
-
-                if (!includeField) {
-                    return@joinToString ""
-                }
-
-                // Process arguments ONLY if field is included
-                val args = processFieldArguments(
+            .filterNot { it.isDeprecated || isSchemaPlaceholderField(it.name) }
+            .sortedBy { it.name }
+            .mapNotNull { field ->
+                buildFieldSelection(
+                    schema = schema,
                     field = field,
-                    currentDepth = nextDepth,
+                    currentDepth = currentDepth,
                     maxDepth = maxDepth,
+                    visitedTypes = visitedTypes,
                     variablesMap = variablesMap,
                     variableDefinitions = variableDefinitions,
-                    nestedVarCounter = nestedVarCounter
+                    nestedVarCounter = nestedVarCounter,
                 )
+            }
+            .joinToString("\n")
 
-                // Build field string
-                when {
-                    isScalarOrEnum(fieldType) -> {
-                        "  ".repeat(nextDepth) + field.name + args
-                    }
-                    fieldType is GraphQLFieldsContainer -> {
-                        val nested = getSelectionSet(
-                            type = field.type,
-                            currentDepth = nextDepth,
-                            maxDepth = maxDepth,
-                            visitedTypes = visitedTypes.toMutableSet(),
-                            variablesMap = variablesMap,
-                            variableDefinitions = variableDefinitions,
-                            nestedVarCounter = nestedVarCounter
-                        )
-                        if (nested.isNotEmpty()) {
-                            """
-                        |${"  ".repeat(nextDepth)}${field.name}$args {
-                        |$nested
-                        |${"  ".repeat(nextDepth)}}
-                        """.trimMargin()
-                        } else {
-                            "  ".repeat(nextDepth) + "${field.name}$args { __typename }"
-                        }
-                    }
-                    else -> ""
-                }
-            }.trim()
-
-        val finalFields = if (fields.isEmpty()) {
+        val finalFields = if (fields.isBlank()) {
             "  ".repeat(currentDepth + 1) + "__typename"
         } else {
             fields
@@ -406,27 +411,153 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         return finalFields
     }
 
-    // Modified processFieldArguments to skip null values
-    private fun processFieldArguments(
+    private fun buildFieldSelection(
+        schema: GraphQLSchema,
         field: GraphQLFieldDefinition,
         currentDepth: Int,
         maxDepth: Int,
-        variablesMap: MutableMap<String, Any>,
+        visitedTypes: MutableSet<String>,
+        variablesMap: MutableMap<String, Any?>,
         variableDefinitions: MutableList<String>,
-        nestedVarCounter: MutableList<Int>
+        nestedVarCounter: MutableList<Int>,
+    ): String? {
+        if (isSchemaPlaceholderField(field.name)) return null
+        val nextDepth = currentDepth + 1
+        val fieldType = resolveSchemaType(schema, field.type)
+        val unwrappedFieldType = Utils.unwrapType(fieldType)
+        val args = processFieldArguments(
+            schema = schema,
+            field = field,
+            currentDepth = nextDepth,
+            maxDepth = maxDepth,
+            variablesMap = variablesMap,
+            variableDefinitions = variableDefinitions,
+            nestedVarCounter = nestedVarCounter,
+        )
+        val padding = "  ".repeat(nextDepth)
+
+        if (isScalarOrEnum(unwrappedFieldType)) {
+            return padding + field.name + args
+        }
+
+        if (unwrappedFieldType is GraphQLUnionType) {
+            return wrapCompositeFieldSelection(
+                fieldName = field.name,
+                args = args,
+                padding = padding,
+            ) {
+                if (nextDepth > maxDepth) {
+                    depthLimitUnionSelection(
+                        schema,
+                        nextDepth,
+                        unwrappedFieldType,
+                        maxDepth,
+                        variablesMap,
+                        variableDefinitions,
+                        nestedVarCounter,
+                    )
+                } else {
+                    handleUnionType(
+                        schema = schema,
+                        type = unwrappedFieldType,
+                        currentDepth = nextDepth,
+                        maxDepth = maxDepth,
+                        visitedTypes = visitedTypes.toMutableSet(),
+                        variablesMap = variablesMap,
+                        variableDefinitions = variableDefinitions,
+                        nestedVarCounter = nestedVarCounter,
+                    )
+                }
+            }
+        }
+
+        val container = resolveFieldsContainer(schema, field.type) ?: return null
+
+        return wrapCompositeFieldSelection(
+            fieldName = field.name,
+            args = args,
+            padding = padding,
+        ) {
+            if (nextDepth > maxDepth) {
+                depthLimitSelection(
+                    schema,
+                    nextDepth,
+                    container,
+                    maxDepth,
+                    variablesMap,
+                    variableDefinitions,
+                    nestedVarCounter,
+                )
+            } else {
+                val nested = getSelectionSet(
+                    schema = schema,
+                    type = field.type,
+                    currentDepth = nextDepth,
+                    maxDepth = maxDepth,
+                    visitedTypes = visitedTypes.toMutableSet(),
+                    variablesMap = variablesMap,
+                    variableDefinitions = variableDefinitions,
+                    nestedVarCounter = nestedVarCounter,
+                )
+                if (nested.isNotBlank()) {
+                    nested
+                } else {
+                    depthLimitSelection(
+                        schema,
+                        nextDepth,
+                        container,
+                        maxDepth,
+                        variablesMap,
+                        variableDefinitions,
+                        nestedVarCounter,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun wrapCompositeFieldSelection(
+        fieldName: String,
+        args: String,
+        padding: String,
+        bodyProvider: () -> String,
+    ): String {
+        val body = bodyProvider()
+        return """
+            |$padding$fieldName$args {
+            |$body
+            |$padding}
+            """.trimMargin()
+    }
+
+    private fun processFieldArguments(
+        schema: GraphQLSchema,
+        field: GraphQLFieldDefinition,
+        currentDepth: Int,
+        maxDepth: Int,
+        variablesMap: MutableMap<String, Any?>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
     ): String {
         if (field.arguments.isEmpty()) return ""
 
         val argsList = mutableListOf<String>()
+        val argValueDepth = maxDepth + 3
 
         field.arguments.forEach { arg ->
-            generateExampleValue(arg.type, currentDepth, maxDepth)?.let { exampleValue ->
+            val inputContext = InputFieldContext(
+                inputTypeName = field.name,
+                fieldName = arg.name,
+            )
+            val exampleValue = generateExampleValue(schema, arg.type, 0, argValueDepth, inputContext)
+                ?: requiredArgumentFallback(schema, arg.type, inputContext)
+                ?: permissiveArgumentFallback(schema, arg.type, inputContext)
+            exampleValue?.let { value ->
                 val varName = "${field.name}_${arg.name}_${nestedVarCounter[0]++}"
-                val varType = getVariableType(arg.type)
+                val varType = getVariableType(schema, arg.type)
 
-                // Only add if value is actually usable
                 variableDefinitions.add("$$varName: $varType")
-                variablesMap[varName] = exampleValue
+                variablesMap[varName] = value
                 argsList.add("${arg.name}: $${varName}")
             }
         }
@@ -434,88 +565,313 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         return if (argsList.isNotEmpty()) "(${argsList.joinToString(", ")})" else ""
     }
 
+    /**
+     * History schemas often omit `!` on arguments the server still requires.
+     * Emit a best-effort value so generated requests stay executable.
+     */
+    private fun permissiveArgumentFallback(
+        schema: GraphQLSchema,
+        type: GraphQLType,
+        inputContext: InputFieldContext,
+    ): Any? {
+        val resolved = resolveSchemaType(schema, type)
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
+            is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
+            is GraphQLScalarType -> generateLeafExampleValue(schema, resolved, 0, 3, inputContext)
+            is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, 0, 3).takeIf { it.isNotEmpty() }
+            else -> namedTypeName(resolved)?.let { typeName ->
+                (schema.getType(typeName) as? GraphQLEnumType)?.let { preferredEnumValue(it, inputContext) }
+            }
+        }
+    }
 
-    // Fixed handleUnionType call
+
     private fun handleUnionType(
+        schema: GraphQLSchema,
         type: GraphQLUnionType,
         currentDepth: Int,
         maxDepth: Int,
         visitedTypes: MutableSet<String>,
-        variablesMap: MutableMap<String, Any>,
+        variablesMap: MutableMap<String, Any?>,
         variableDefinitions: MutableList<String>,
-        nestedVarCounter: MutableList<Int>
+        nestedVarCounter: MutableList<Int>,
     ): String {
-        val selections = type.types.joinToString("\n") { possibleType ->
-            getSelectionSet(
-                type = possibleType,
-                currentDepth = currentDepth,
+        val fragmentDepth = currentDepth + 1
+        val selections = type.types.mapNotNull { possibleType ->
+            val member = resolveFieldsContainer(schema, possibleType) as? GraphQLObjectType ?: return@mapNotNull null
+            val nested = getSelectionSet(
+                schema = schema,
+                type = member,
+                currentDepth = fragmentDepth + 1,
                 maxDepth = maxDepth,
-                visitedTypes = visitedTypes,
+                visitedTypes = visitedTypes.toMutableSet(),
                 variablesMap = variablesMap,
                 variableDefinitions = variableDefinitions,
-                nestedVarCounter = nestedVarCounter
+                nestedVarCounter = nestedVarCounter,
             )
-        }
+            if (nested.isBlank()) {
+                return@mapNotNull """
+                    |${"  ".repeat(fragmentDepth)}... on ${member.name} {
+                    |${scalarFieldsSelection(schema, member, fragmentDepth + 1, maxDepth, variablesMap, variableDefinitions, nestedVarCounter)}
+                    |${"  ".repeat(fragmentDepth)}}
+                    """.trimMargin()
+            }
+            """
+            |${"  ".repeat(fragmentDepth)}... on ${member.name} {
+            |$nested
+            |${"  ".repeat(fragmentDepth)}}
+            """.trimMargin()
+        }.joinToString("\n")
 
         return if (selections.isEmpty()) {
-            "  ".repeat(currentDepth + 1) + "__typename"
+            "  ".repeat(fragmentDepth) + "__typename"
         } else {
             selections
         }
     }
 
-    private fun unwrapType(type: GraphQLType): GraphQLType = when (type) {
-        is GraphQLNonNull -> unwrapType(type.wrappedType)
-        is GraphQLList -> unwrapType(type.wrappedType)
-        else -> type
+    private fun depthLimitUnionSelection(
+        schema: GraphQLSchema,
+        depth: Int,
+        union: GraphQLUnionType,
+        maxDepth: Int,
+        variablesMap: MutableMap<String, Any?>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
+    ): String {
+        val fragmentDepth = depth + 1
+        return union.types.mapNotNull { possibleType ->
+            val member = resolveFieldsContainer(schema, possibleType) as? GraphQLObjectType ?: return@mapNotNull null
+            """
+            |${"  ".repeat(fragmentDepth)}... on ${member.name} {
+            |${scalarFieldsSelection(schema, member, fragmentDepth + 1, maxDepth, variablesMap, variableDefinitions, nestedVarCounter)}
+            |${"  ".repeat(fragmentDepth)}}
+            """.trimMargin()
+        }.joinToString("\n").ifBlank {
+            "  ".repeat(fragmentDepth) + "__typename"
+        }
+    }
+
+    private fun depthLimitSelection(
+        schema: GraphQLSchema,
+        depth: Int,
+        container: GraphQLFieldsContainer,
+        maxDepth: Int,
+        variablesMap: MutableMap<String, Any?>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
+    ): String {
+        return scalarFieldsSelection(
+            schema,
+            container,
+            depth + 1,
+            maxDepth,
+            variablesMap,
+            variableDefinitions,
+            nestedVarCounter,
+        )
+    }
+
+    private fun scalarFieldsSelection(
+        schema: GraphQLSchema,
+        container: GraphQLFieldsContainer,
+        depth: Int,
+        maxDepth: Int,
+        variablesMap: MutableMap<String, Any?>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
+    ): String {
+        val padding = "  ".repeat(depth)
+        val scalars = container.fieldDefinitions
+            .filterNot { it.isDeprecated || isSchemaPlaceholderField(it.name) }
+            .sortedBy { it.name }
+            .mapNotNull { field ->
+                if (!isScalarOrEnum(resolveSchemaType(schema, field.type))) return@mapNotNull null
+                val args = processFieldArguments(
+                    schema = schema,
+                    field = field,
+                    currentDepth = depth,
+                    maxDepth = maxDepth,
+                    variablesMap = variablesMap,
+                    variableDefinitions = variableDefinitions,
+                    nestedVarCounter = nestedVarCounter,
+                )
+                padding + field.name + args
+            }
+        if (scalars.isEmpty()) {
+            return padding + "__typename"
+        }
+        return scalars.joinToString("\n")
+    }
+
+    private fun buildInputObjectValue(
+        schema: GraphQLSchema,
+        inputType: GraphQLInputObjectType,
+        depth: Int,
+        maxDepth: Int,
+    ): Map<String, Any?> {
+        return inputType.fieldDefinitions
+            .filterNot { isSchemaPlaceholderField(it.name) }
+            .mapNotNull { field ->
+                val ctx = InputFieldContext(inputType.name, field.name)
+                val value = generateExampleValue(schema, field.type, depth + 1, maxDepth, ctx)
+                    ?: exampleValueForInputField(schema, field.type, ctx)
+                value?.let { field.name to it }
+            }
+            .toMap()
     }
 
     private fun isScalarOrEnum(type: GraphQLType): Boolean {
-        val unwrapped = unwrapType(type)
+        val unwrapped = Utils.unwrapType(type)
         return unwrapped is GraphQLScalarType || unwrapped is GraphQLEnumType
     }
 
     private fun generateExampleValue(
+        schema: GraphQLSchema,
         type: GraphQLType,
         currentDepth: Int = 0,
-        maxDepth: Int = 3
+        maxDepth: Int = 3,
+        inputContext: InputFieldContext? = null,
     ): Any? {
         if (currentDepth > maxDepth) {
-            return null
+            return inputContext?.let { correctionEnumValue(it) }
         }
 
-        val unwrappedType = unwrapType(type)
-        return when (getTypeName(unwrappedType)) {
-            "String" -> "exampleString"
-            "Int" -> 42
-            "Float" -> 3.14
-            "Boolean" -> true
-            "ID" -> "123"
-            else -> when (unwrappedType) {
-                is GraphQLEnumType -> unwrappedType.values.first().name
-                is GraphQLInputObjectType -> {
-                    val fields = unwrappedType.fields
-                        .mapNotNull { field ->
-                            generateExampleValue(field.type, currentDepth + 1, maxDepth)
-                                ?.let { field.name to it }
-                        }
-                        .toMap()
+        inputContext?.let { correctionEnumValue(it) }?.let { return it }
 
-                    fields.ifEmpty { null }
-                }
-                else -> null
+        return when (type) {
+            is GraphQLNonNull -> generateExampleValue(schema, type.wrappedType, currentDepth, maxDepth, inputContext)
+            is GraphQLList -> {
+                val element = generateExampleValue(schema, type.wrappedType, currentDepth + 1, maxDepth, inputContext)
+                    ?: inputContext?.let { correctionEnumValue(it) }
+                if (element != null) listOf(element) else null
+            }
+            else -> generateLeafExampleValue(schema, type, currentDepth, maxDepth, inputContext)
+        }
+    }
+
+    private fun generateLeafExampleValue(
+        schema: GraphQLSchema,
+        type: GraphQLType,
+        currentDepth: Int,
+        maxDepth: Int,
+        inputContext: InputFieldContext?,
+    ): Any? {
+        val resolved = resolveSchemaType(schema, type)
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
+            is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
+            is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, currentDepth, maxDepth)
+                .takeIf { it.isNotEmpty() }
+            is GraphQLScalarType -> when (unwrapped.name) {
+                "String" -> inputContext?.let { exampleValueForInputField(schema, type, it) } ?: "exampleString"
+                "Int" -> 42
+                "Float" -> 3.14
+                "Boolean" -> true
+                "ID" -> "123"
+                else -> "exampleString"
+            }
+            is GraphQLNamedType -> (schema.getType(unwrapped.name) as? GraphQLInputObjectType)
+                ?.let { buildInputObjectValue(schema, it, currentDepth, maxDepth).takeIf { map -> map.isNotEmpty() } }
+                ?: inputContext?.let { exampleValueForInputField(schema, type, it) }
+            else -> inputContext?.let { exampleValueForInputField(schema, type, it) }
+        }
+    }
+
+    private fun exampleValueForInputField(
+        schema: GraphQLSchema,
+        type: GraphQLType,
+        ctx: InputFieldContext,
+    ): Any? {
+        correctionEnumValue(ctx)?.let { return it }
+        val resolved = resolveSchemaType(schema, type)
+        val unwrapped = Utils.unwrapType(resolved)
+        if (unwrapped is GraphQLEnumType) {
+            return preferredEnumValue(unwrapped, ctx)
+        }
+        if (unwrapped is GraphQLScalarType && unwrapped.name == "String") {
+            return InputEnumTypeMatching.resolveEnumForInputField(schema, ctx.inputTypeName, ctx.fieldName)
+                ?.let { preferredEnumValue(it, ctx) }
+        }
+        val typeName = when (unwrapped) {
+            is GraphQLNamedType -> unwrapped.name
+            is GraphQLTypeReference -> unwrapped.name
+            else -> null
+        }
+        if (typeName != null) {
+            (schema.getType(typeName) as? GraphQLEnumType)?.let { return preferredEnumValue(it, ctx) }
+        }
+        return null
+    }
+
+    private fun correctionEnumValue(ctx: InputFieldContext): String? {
+        return scanResults.schemaCorrections.inputEnumFieldOverrides[ctx.inputTypeName]
+            ?.get(ctx.fieldName)
+            ?.firstOrNull { !isSchemaPlaceholderField(it) }
+    }
+
+    private fun resolveSchemaType(schema: GraphQLSchema, type: GraphQLType): GraphQLType {
+        val unwrapped = Utils.unwrapType(type)
+        val name = when (unwrapped) {
+            is GraphQLNamedType -> unwrapped.name
+            is GraphQLTypeReference -> unwrapped.name
+            else -> return unwrapped
+        }
+        return schema.getType(name) ?: unwrapped
+    }
+
+    private fun resolveFieldsContainer(schema: GraphQLSchema, type: GraphQLType): GraphQLFieldsContainer? {
+        return when (val resolved = resolveSchemaType(schema, type)) {
+            is GraphQLFieldsContainer -> resolved
+            else -> null
+        }
+    }
+
+    private fun namedTypeName(type: GraphQLType): String? {
+        return when (val unwrapped = Utils.unwrapType(type)) {
+            is GraphQLNamedType -> unwrapped.name
+            is GraphQLTypeReference -> unwrapped.name
+            else -> null
+        }
+    }
+
+    private fun requiredArgumentFallback(
+        schema: GraphQLSchema,
+        type: GraphQLType,
+        inputContext: InputFieldContext,
+    ): Any? {
+        if (type !is GraphQLNonNull) return null
+        val resolved = resolveSchemaType(schema, type)
+        return when (val unwrapped = Utils.unwrapType(resolved)) {
+            is GraphQLEnumType -> preferredEnumValue(unwrapped, inputContext)
+            is GraphQLScalarType -> generateLeafExampleValue(schema, resolved, 0, 3, inputContext)
+            is GraphQLInputObjectType -> buildInputObjectValue(schema, unwrapped, 0, 3).takeIf { it.isNotEmpty() }
+            else -> namedTypeName(resolved)?.let { typeName ->
+                (schema.getType(typeName) as? GraphQLEnumType)?.let { preferredEnumValue(it, inputContext) }
             }
         }
     }
 
-    private fun getVariableType(type: GraphQLType): String {
+    private fun preferredEnumValue(enumType: GraphQLEnumType, inputContext: InputFieldContext? = null): String {
+        inputContext?.let { correctionEnumValue(it) }?.let { return it }
+        scanResults.schemaCorrections.enumValueOverrides[enumType.name]
+            ?.firstOrNull { !isSchemaPlaceholderField(it) }
+            ?.let { return it }
+        val values = enumType.values.map { it.name }
+        return values.firstOrNull { !isSchemaPlaceholderField(it) }
+            ?: values.firstOrNull()
+            ?: "PLACEHOLDER"
+    }
+
+    private fun getVariableType(schema: GraphQLSchema, type: GraphQLType): String {
         return when (type) {
-            is GraphQLNonNull -> "${getVariableType(type.wrappedType)}!"
-            is GraphQLList -> "[${getVariableType(type.wrappedType)}]"
+            is GraphQLNonNull -> "${getVariableType(schema, type.wrappedType)}!"
+            is GraphQLList -> "[${getVariableType(schema, type.wrappedType)}]"
             is GraphQLScalarType -> type.name
             is GraphQLEnumType -> type.name
             is GraphQLInputObjectType -> type.name
-            else -> "UNKNOWN"
+            is GraphQLNamedType -> type.name
+            is GraphQLTypeReference -> type.name
+            else -> namedTypeName(resolveSchemaType(schema, type)) ?: "String"
         }
     }
 
@@ -532,23 +888,15 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         return "\"${value.replace("\n", "\\n").replace("\"", "\\\"")}\""
     }
 
-    private fun getTypeName(type: GraphQLType): String {
-        return when (type) {
-            is GraphQLNonNull -> getTypeName(type.wrappedType)
-            is GraphQLList -> getTypeName(type.wrappedType)
-            is GraphQLNamedType -> type.name
-            else -> "UnknownType"
-        }
-    }
-
-    private fun formatVariablesToJson(value: Any): String {
+    private fun formatVariablesToJson(value: Any?): String {
+        if (value == null) return "null"
         return when (value) {
             is String -> "\"${value.replace("\"", "\\\"")}\""
             is Number -> value.toString()
             is Boolean -> value.toString()
             is Map<*, *> -> {
                 val entries = value.entries.joinToString(", ") { (k, v) ->
-                    "\"$k\": ${formatVariablesToJson(v!!)}"
+                    "\"$k\": ${formatVariablesToJson(v)}"
                 }
                 "{$entries}"
             }

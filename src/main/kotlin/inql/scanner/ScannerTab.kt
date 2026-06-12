@@ -16,6 +16,7 @@ import inql.savestate.SavesAndLoadData
 import inql.Config
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
+import inql.history.HistoryHostKey
 import inql.scanner.SchemaDiscoverySource
 import inql.scanner.scanconfig.ScanConfigView
 import inql.scanner.scanresults.ScanResultsView
@@ -25,6 +26,7 @@ import inql.utils.withUpsertedHeaders
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.awt.event.HierarchyEvent
 import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
@@ -32,6 +34,7 @@ import javax.swing.BoxLayout
 import javax.swing.JLabel
 import javax.swing.JOptionPane
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
     companion object {
@@ -84,6 +87,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     private var bruteforcerJob: Job? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var recoverSchemaOnRestore = false
 
     var url: String
         get() = this.scanConfigView.urlField.text
@@ -110,6 +114,17 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             this.scanConfigView.requestTemplate = r
         }
 
+    fun applyRequestTemplate(request: HttpRequest) {
+        val normalized = request.withBody("")
+        requestTemplate = normalized
+        for (index in scanResults.indices) {
+            val updated = scanResults[index].withUpdatedRequestTemplate(normalized)
+            scanResults[index] = updated
+            scanner.updateChildObjectAsync(updated)
+        }
+        scanner.updateChildObjectAsync(this)
+    }
+
     private fun showView(card: String) {
         if (!setOf<String>(
                 SCAN_CONFIG_VIEW,
@@ -123,6 +138,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun showResultsView() {
         this.showView(SCAN_RESULT_VIEW)
+        if (scanResults.isNotEmpty()) {
+            SwingUtilities.invokeLater {
+                scanResultsView.ensureDefaultTreeExpansion()
+            }
+        }
     }
 
     fun cancel() {
@@ -143,6 +163,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         Burp.Montoya.userInterface().applyThemeToComponent(scanConfigView)
         Burp.Montoya.userInterface().applyThemeToComponent(scanResultsView)
+
+        addHierarchyListener { e ->
+            val changed = (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong()) != 0L
+            if (changed && isDisplayable && scanResults.isNotEmpty()) {
+                SwingUtilities.invokeLater {
+                    scanResultsView.ensureDefaultTreeExpansion()
+                }
+            }
+        }
     }
 
     fun loadFromProfile(p: Profile) {
@@ -293,7 +322,6 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             return
         }
 
-        // Create a scan result
         val sr = ScanResult(
             this.host!!,
             this.requestTemplate,
@@ -303,14 +331,12 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             schemaDiscoverySource = SchemaDiscoverySource.BRUTEFORCE,
         )
 
-        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
-        // and multiple scans at the same time for the same ScannerTab are not allowed
-        this.scanResults.add(sr)
-
-        // Update this tab in burp's project file
-        this.setTabTitle(host!!)
-        this.scanner.updateChildObjectAsync(this)
-        this.scanCompleted()
+        withContext(Dispatchers.Main) {
+            val hostKey = HistoryHostKey.normalize(HistoryHostKey.fromRequest(this@ScannerTab.requestTemplate))
+            scanner.applyScanResult(hostKey, SchemaDiscoverySource.BRUTEFORCE, requestTemplate, sr, focus = true)
+            scanConfigView.setBusy(false)
+            scanConfigView.setBruteforcerRunning(false)
+        }
     }
 
     private suspend fun analyze() {
@@ -379,7 +405,6 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             return
         }
 
-        // Create a scan result
         val sr = ScanResult(
             this.host!!,
             this.requestTemplate,
@@ -389,28 +414,30 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             schemaDiscoverySource = schemaDiscoverySource,
         )
 
-        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
-        // and multiple scans at the same time for the same ScannerTab are not allowed
-        this.scanResults.add(sr)
-
-        // Update this tab in burp's project file
-        this.setTabTitle(host!!)
-        this.scanner.updateChildObjectAsync(this)
-        this.scanCompleted()
+        withContext(Dispatchers.Main) {
+            scanResults.add(sr)
+            val hostKey = HistoryHostKey.normalize(HistoryHostKey.fromRequest(requestTemplate))
+            setTabTitle(Scanner.sourceTabTitle(schemaDiscoverySource, hostKey))
+            scanner.updateChildObjectAsync(this@ScannerTab)
+            scanCompleted()
+            scanResultsView.ensureDefaultTreeExpansion()
+        }
     }
 
     private fun scanCompleted() {
-        this.scanConfigView.setBusy(false) // Do we need this?
-        this.scanConfigView.setBruteforcerRunning(false)
-        this.showView(SCAN_RESULT_VIEW)
-        this.scanResultsView.refresh()
-        this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
+        scanConfigView.setBusy(false)
+        scanConfigView.setBruteforcerRunning(false)
+        showResultsView()
+        scanResultsView.refresh()
+        scanner.introspectionCache.putIfNewer(url = url, scanResult = scanResults.last())
     }
 
-    private fun scanFailed(reason: String?, logToError: Boolean = true) {
-        if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
-        this.scanConfigView.setBusy(false)
-        this.scanConfigView.setBruteforcerRunning(false)
+    private suspend fun scanFailed(reason: String?, logToError: Boolean = true) {
+        withContext(Dispatchers.Main) {
+            if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
+            scanConfigView.setBusy(false)
+            scanConfigView.setBruteforcerRunning(false)
+        }
     }
 
     fun getTabTitle(): String {
@@ -430,9 +457,35 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         title.text = text
     }
 
+    fun referencedHosts(): Set<String> {
+        val hosts = linkedSetOf<String>()
+        if (url.isNotBlank()) {
+            HistoryHostKey.fromUrl(url)?.let { hosts.add(HistoryHostKey.normalize(it)) }
+        }
+        runCatching {
+            hosts.add(HistoryHostKey.normalize(HistoryHostKey.fromRequest(requestTemplate)))
+        }
+        for (result in scanResults) {
+            hosts.add(HistoryHostKey.normalize(result.host))
+        }
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.let { (_, host) ->
+            hosts.add(HistoryHostKey.normalize(host))
+        }
+        return hosts
+    }
+
     fun onClose() {
-        this.cancel()
-        if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
+        cancel()
+        coroutineScope.cancel()
+        scanResultsView.release()
+        scanner.onTabClosed(this)
+        if (scanResults.isNotEmpty()) {
+            scanner.deleteChildObjectAsync(this) {
+                scanResults.clear()
+            }
+        } else {
+            scanResults.clear()
+        }
     }
 
     override val saveStateKey: String
@@ -463,17 +516,36 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val resultsIdLst = obj.getStringList("results")
         if (!resultsIdLst.isNullOrEmpty()) {
             for (resultId in resultsIdLst) {
-                this.scanResults.add(ScanResult.Deserializer(resultId).get() ?: continue)
+                val result = ScanResult.Deserializer(resultId).get()
+                if (result == null) {
+                    Logger.warning("[$saveStateKey] Failed to load persisted scan result: $resultId")
+                    continue
+                }
+                scanResults.add(result)
+            }
+            if (scanResults.isEmpty()) {
+                recoverSchemaOnRestore = true
             }
         }
 
         // Set the tab title AFTER setting the linked profile to prevent double suffix
         this.setTabTitle(obj.getString("tabTitle"))
 
-        // Set the UI to show the results
-        if (this.scanResults.isNotEmpty()) {
-            this.showResultsView()
-            this.scanResultsView.refresh()
+    }
+
+    fun restoreResultsViewIfNeeded() {
+        if (scanResults.isEmpty()) return
+        showResultsView()
+        scanResultsView.refresh()
+        scanResultsView.ensureDefaultTreeExpansion()
+    }
+
+    fun recoverHostKeyIfNeeded(): String? {
+        if (!recoverSchemaOnRestore) return null
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.second?.let { return it }
+        if (url.isNotBlank()) {
+            runCatching { HistoryHostKey.fromUrl(url) }.getOrNull()?.let { return HistoryHostKey.normalize(it) }
         }
+        return null
     }
 }

@@ -2,14 +2,20 @@ package inql.ui
 
 import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
+import burp.api.montoya.http.message.responses.HttpResponse
 import burp.api.montoya.ui.contextmenu.AuditIssueContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
+import burp.api.montoya.ui.contextmenu.InvocationType
+import inql.history.HistoryHostKey
+import inql.history.HistoryTracker
 import inql.Config
 import inql.InQL
 import inql.Logger
 import inql.externaltools.ExternalToolsService
 import inql.externaltools.ExternalToolsService.Companion.sendRequestToEmbeddedTool
+import inql.schema.corrections.GraphQLTypeSuggestionParser
+import javax.swing.SwingUtilities
 import java.awt.Component
 import java.awt.Toolkit
 import java.awt.event.ActionEvent
@@ -49,13 +55,13 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     ) {
         this.sendRequestToRepeater()
     }
-    protected val sendToInqlScannerAction = MenuAction("Generate queries", null) {
+    protected val sendToInqlScannerAction = MenuAction("Analyse in Introspection Scanner", null) {
         this.sendRequestToInqlScanner()
     }
-    protected val sendToInqlAttackerAction = MenuAction("Batch attack", null) {
+    protected val sendToInqlAttackerAction = MenuAction("Open in Batch Queries", null) {
         this.sendRequestToInqlAttacker()
     }
-    protected val sendToInqlFingerprinterAction = MenuAction("Engine fingerprinter", null) {
+    protected val sendToInqlFingerprinterAction = MenuAction("Open in Engine Fingerprinter", null) {
         this.sendRequestToInqlFingerprinter()
     }
     protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL", null) {
@@ -213,16 +219,59 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
 
     // This only sets Right Click handlers for the Burp's own menus. Menus added by InQL are handled
     // in setContextActions()
-    private fun sendToInqlComponents(): MutableList<JMenuItem> {
-        return mutableListOf<JMenuItem>(
+    private val extractHistorySchemaAction = MenuAction("Extract Schema from History", null) {
+        this.extractGraphQLSchemaFromHost()
+    }
+
+    private fun typeRenameSubmenu(actions: List<MenuAction>): JMenu? {
+        if (actions.isEmpty()) return null
+        return JMenu("Add type correction").also { submenu ->
+            for (action in actions) {
+                submenu.add(BurpMenuItem(action))
+            }
+        }
+    }
+
+    private fun sendToInqlComponents(
+        typeRenameActions: List<MenuAction> = emptyList(),
+    ): MutableList<Component> {
+        return mutableListOf<Component>(
             BurpMenuItem(super.sendToInqlScannerAction),
             BurpMenuItem(super.sendToInqlAttackerAction),
-            BurpMenuItem(super.sendToInqlFingerprinterAction)
+            BurpMenuItem(super.sendToInqlFingerprinterAction),
         ).apply {
             for (action in super.sendToEmbeddedToolActions) {
                 this.add(BurpMenuItem(action))
             }
+            if (this@SendToInqlHandler.selectedHost != null) {
+                this.add(BurpMenuItem(extractHistorySchemaAction))
+            }
+            typeRenameSubmenu(typeRenameActions)?.let { add(it) }
         }
+    }
+
+    private var selectedHost: String? = null
+
+    private fun extractGraphQLSchemaFromHost() {
+        val host = this.selectedHost ?: return
+        if (!HistoryTracker.isRunning()) {
+            HistoryTracker.start(inql)
+        }
+        HistoryTracker.extractSchemaForHost(host)
+    }
+
+    private fun hostFromContext(event: ContextMenuEvent): String? {
+        if (event.invocationType() == InvocationType.SITE_MAP_TREE) {
+            val requestResponses = event.selectedRequestResponses()
+            if (requestResponses.isNotEmpty()) {
+                return HistoryHostKey.fromRequest(requestResponses[0].request())
+            }
+        }
+        val request = requestFromContext(event)
+        if (request != null) {
+            return HistoryHostKey.fromRequest(request)
+        }
+        return null
     }
 
     private fun requestFromContext(event: ContextMenuEvent): HttpRequest? {
@@ -231,11 +280,57 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
             val requestResponses = event.selectedRequestResponses()
             if (requestResponses.size != 1) return null
             return requestResponses[0].request()
-        } else if (invocationType.containsHttpMessage()) {
+        }
+        if (invocationType.containsHttpMessage()) {
             val msg = event.messageEditorRequestResponse().orElse(null) ?: return null
             return msg.requestResponse().request()
         }
         return null
+    }
+
+    private fun responseFromContext(event: ContextMenuEvent): HttpResponse? {
+        val invocationType = event.invocationType()
+        if (invocationType.containsHttpRequestResponses()) {
+            val requestResponses = event.selectedRequestResponses()
+            if (requestResponses.size != 1) return null
+            return requestResponses[0].response()
+        }
+        if (invocationType.containsHttpMessage()) {
+            val msg = event.messageEditorRequestResponse().orElse(null) ?: return null
+            return msg.requestResponse().response()
+        }
+        return null
+    }
+
+    private fun typeRenameActionsFromResponse(
+        request: HttpRequest,
+        response: HttpResponse,
+    ): List<MenuAction> {
+        val suggestions = GraphQLTypeSuggestionParser.parseTypeRenameSuggestions(response.bodyToString())
+        if (suggestions.isEmpty()) return emptyList()
+        return suggestions.map { suggestion ->
+            MenuAction(
+                "${suggestion.wrongType} → ${suggestion.suggestedType}",
+                null,
+            ) {
+                applyTypeRenameCorrection(request, suggestion.wrongType, suggestion.suggestedType)
+            }
+        }
+    }
+
+    private fun applyTypeRenameCorrection(request: HttpRequest, wrongType: String, suggestedType: String) {
+        val host = HistoryHostKey.fromRequest(request)
+        val applied = inql.scanner.applyTypeRenameCorrection(request, host, wrongType, suggestedType)
+        if (applied) return
+        SwingUtilities.invokeLater {
+            JOptionPane.showMessageDialog(
+                Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                "Could not apply type rename for $host.\n" +
+                    "Open or extract a schema for this host in InQL Scanner first.",
+                "InQL",
+                JOptionPane.WARNING_MESSAGE,
+            )
+        }
     }
 
     private fun requestFromIssues(event: AuditIssueContextMenuEvent): HttpRequest? {
@@ -250,13 +345,22 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         return null
     }
 
-    override fun provideMenuItems(event: ContextMenuEvent): MutableList<JMenuItem>? {
-        this.request = this.requestFromContext(event) ?: return null
-        return this.sendToInqlComponents()
+    override fun provideMenuItems(event: ContextMenuEvent): MutableList<Component>? {
+        this.selectedHost = this.hostFromContext(event)
+        if (event.invocationType() == InvocationType.SITE_MAP_TREE && this.selectedHost != null) {
+            return mutableListOf(BurpMenuItem(extractHistorySchemaAction))
+        }
+        val request = this.requestFromContext(event) ?: return null
+        this.request = request
+        val typeRenameActions = responseFromContext(event)?.let { response ->
+            typeRenameActionsFromResponse(request, response)
+        } ?: emptyList()
+        return this.sendToInqlComponents(typeRenameActions)
     }
 
-    override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<JMenuItem> {
+    override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<Component> {
         if (event == null) return mutableListOf()
+        this.selectedHost = null
         this.request = this.requestFromIssues(event) ?: return mutableListOf()
         return this.sendToInqlComponents()
     }

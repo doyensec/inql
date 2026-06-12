@@ -36,6 +36,8 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                     val spinner = this.component as Spinner
                     spinner.setValue(config.getInt(this.key, scope = Config.Scope.EFFECTIVE_GLOBAL)!!)
                     spinner.addChangeListener {
+                        // Codegen prefs are global; drop stale per-project overrides.
+                        config.delete(key, Config.Scope.PROJECT)
                         config.set(key, spinner.getValue(), scope = Config.Scope.GLOBAL)
                     }
                 }
@@ -140,8 +142,14 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
 
         val schemaDiscoverySection = SettingsSection(
             "Schema discovery",
-            "If standard introspection fails, attempt to fetch schema via `_service{sdl}` (common in Apollo Federation environments).",
+            "Configure how InQL discovers and reconstructs GraphQL schemas.",
             SettingsElement("schema.federation_sdl_fallback", CheckBox("Enable Apollo Federation SDL Fallback")),
+            SettingsElement("history.tracking_enabled", CheckBox("Enable live history tracking")),
+            SettingsElement("history.in_scope_only", CheckBox("Track in-Scope hosts only")),
+            SettingsElement(
+                "history.display.depth",
+                Spinner("History schema query preview depth", 1, 12),
+            ),
         )
 
         val reportSection = SettingsSection(

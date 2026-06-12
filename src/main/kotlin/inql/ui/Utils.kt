@@ -360,8 +360,19 @@ class SettingsTabButton() : JPanel() {
 
 class ErrorDialog(val msg: String, logToError: Boolean = true) {
     init {
-        if(logToError) Logger.error(msg)
-        val burpWindow = Burp.Montoya.userInterface().swingUtils().suiteFrame()
-        JOptionPane.showMessageDialog(burpWindow, msg, "InQL Error", JOptionPane.ERROR_MESSAGE)
+        if (logToError) Logger.error(msg)
+        val show = Runnable {
+            val burpWindow = Burp.Montoya.userInterface().swingUtils().suiteFrame()
+            JOptionPane.showMessageDialog(burpWindow, msg, "InQL Error", JOptionPane.ERROR_MESSAGE)
+        }
+        if (SwingUtilities.isEventDispatchThread()) {
+            show.run()
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(show)
+            } catch (e: Exception) {
+                Logger.error("Failed to show error dialog: ${e.message}")
+            }
+        }
     }
 }

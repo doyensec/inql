@@ -4,6 +4,7 @@ import burp.Burp
 import burp.api.montoya.core.HighlightColor
 import inql.graphql.formatting.Formatter
 import inql.graphql.formatting.SizedLRUCache
+import inql.history.HistoryTracker
 import kotlin.collections.set
 
 class Config private constructor() {
@@ -75,6 +76,10 @@ class Config private constructor() {
         "editor.formatting.cache_size_kb" to 102400, // 100 MB Default
 
         "schema.federation_sdl_fallback" to true,
+
+        "history.tracking_enabled" to true,
+        "history.in_scope_only" to false,
+        "history.display.depth" to 6,
     )
 
     val hooks = hashMapOf<String, (Any) -> Unit>(
@@ -97,7 +102,14 @@ class Config private constructor() {
             } else {
                 ProxyRequestHighlighter.stop()
             }
-        }
+        },
+        "history.tracking_enabled" to { enabled ->
+            if (enabled as Boolean) {
+                HistoryTracker.start(InQLHolder.instance)
+            } else {
+                HistoryTracker.stop()
+            }
+        },
     )
 
     fun registerHook(key: String, hook: (Any) -> Unit) {
@@ -195,6 +207,21 @@ class Config private constructor() {
 
     fun get(key: String, scope: Scope = Scope.EFFECTIVE): Any? {
         return getBoolean(key, scope) ?: getInt(key, scope) ?: getString(key, scope)
+    }
+
+    /** Matches the Settings UI (global preference, not per-project overrides). */
+    fun codegenDepth(): Int {
+        return getInt("codegen.depth", Scope.EFFECTIVE_GLOBAL) ?: (defaults["codegen.depth"] as Int)
+    }
+
+    /** Matches the Settings UI (global preference, not per-project overrides). */
+    fun codegenPad(): Int {
+        return getInt("codegen.pad", Scope.EFFECTIVE_GLOBAL) ?: (defaults["codegen.pad"] as Int)
+    }
+
+    fun historyDisplayDepth(): Int {
+        return getInt("history.display.depth", Scope.EFFECTIVE_GLOBAL)
+            ?: (defaults["history.display.depth"] as Int)
     }
 
     fun set(key: String, value: Boolean, scope: Scope = Scope.PROJECT) {

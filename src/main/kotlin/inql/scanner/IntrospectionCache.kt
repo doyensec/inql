@@ -43,6 +43,19 @@ class IntrospectionCache(val inql: InQL) {
 
     fun remove(url: String, profile: String = NO_PROFILE) {
         this.cache[url]?.remove(profile)
+        if (this.cache[url]?.isEmpty() == true) {
+            this.cache.remove(url)
+        }
+    }
+
+    fun evictForClosedTab(url: String, profileName: String?) {
+        if (url.isBlank()) return
+        val profile = profileName ?: NO_PROFILE
+        remove(url, profile)
+        val stillOpen = this.inql.scanner.getScannerTabs().any { it.url == url }
+        if (!stillOpen) {
+            this.cache.remove(url)
+        }
     }
 
     fun populateFromScanner() {
@@ -52,7 +65,11 @@ class IntrospectionCache(val inql: InQL) {
             Logger.debug("Found tab for url ${tab.url}")
             if (tab.scanResults.isNotEmpty()) {
                 Logger.debug("Found result for ${tab.url}, inserting...")
-                this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, tab.scanResults.last())
+                val scanResult = Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(tab))
+                    ?.let { (source, _) -> tab.scanResults.find { it.schemaDiscoverySource == source } }
+                    ?: tab.scanResults.singleOrNull()
+                    ?: tab.scanResults.last()
+                this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, scanResult)
             }
         }
         Logger.debug("All cached urls: ${this.cache.keys}")
