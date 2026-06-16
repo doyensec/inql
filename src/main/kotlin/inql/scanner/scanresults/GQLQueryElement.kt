@@ -11,4 +11,9 @@ class GQLQueryElement(
     override fun content(): String {
         return schemaSupplier().getOperationAsText(name, type, skipCache = true, maxDepth = maxDepth)
     }
+
+    fun matchesSearch(needle: String): Boolean {
+        if (needle.isEmpty()) return true
+        return name.contains(needle, ignoreCase = true)
+    }
 }

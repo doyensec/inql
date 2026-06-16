@@ -3,12 +3,20 @@ package inql.scanner.scanresults
 import inql.Logger
 import inql.scanner.ScanResult
 import inql.ui.BorderPanel
+import inql.ui.FlowPanel
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.awt.event.HierarchyEvent
+import javax.swing.BorderFactory
+import javax.swing.JLabel
 import javax.swing.JScrollPane
+import javax.swing.JTextField
 import javax.swing.JTree
 import javax.swing.SwingUtilities
+import javax.swing.Timer
 import javax.swing.UIManager
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeSelectionEvent
 import javax.swing.event.TreeSelectionListener
@@ -21,6 +29,13 @@ import javax.swing.tree.TreeSelectionModel
 class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelectionListener {
 
     private val tree: JTree
+    private val treeModel: DefaultTreeModel
+    private val filterModel: ScanResultsTreeFilterModel
+    private val searchField = JTextField(24).also {
+        it.putClientProperty("JTextField.showClearButton", true)
+    }
+    private val searchTimer = Timer(300) { applySearchFilter() }.apply { isRepeats = false }
+    private var expansionBeforeFilter: Set<List<String>>? = null
 
     private var root: DefaultMutableTreeNode
     private var wantsDefaultExpansion = true
@@ -36,16 +51,32 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     }
 
     private fun initUI() {
+        val searchBar = FlowPanel(FlowLayout.LEFT, 8).apply {
+            border = BorderFactory.createEmptyBorder(4, 0, 0, 0)
+            add(JLabel("Search:"))
+            add(searchField)
+        }
+
         val nestedPanel = BorderPanel()
         nestedPanel.add(BorderLayout.CENTER, this.tree)
         val scrollPane = JScrollPane()
         scrollPane.viewport.add(nestedPanel)
         this.add(BorderLayout.CENTER, scrollPane)
+        this.add(BorderLayout.SOUTH, searchBar)
+
+        searchField.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = searchTimer.restart()
+            override fun removeUpdate(e: DocumentEvent) = searchTimer.restart()
+            override fun changedUpdate(e: DocumentEvent) = searchTimer.restart()
+        })
     }
 
     init {
         this.setupLookAndFeel()
-        this.tree = JTree(DefaultMutableTreeNode()).also {
+        this.root = DefaultMutableTreeNode("No results yet")
+        this.treeModel = DefaultTreeModel(this.root)
+        this.filterModel = ScanResultsTreeFilterModel(this.treeModel)
+        this.tree = JTree(this.filterModel).also {
             it.isRootVisible = false
             it.showsRootHandles = true
             it.cellRenderer = ScanResultsTreeCellRenderer()
@@ -58,7 +89,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             override fun treeWillExpand(event: TreeExpansionEvent) {
                 val node = event.path.lastPathComponent
                 if (node is LazyTreeNodeWithCustomLabel) {
-                    node.ensureLoaded(tree.model as DefaultTreeModel)
+                    node.ensureLoaded(treeModel)
                 }
             }
 
@@ -72,7 +103,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         tree.addTreeSelectionListener { e ->
             val node = e.path.lastPathComponent
             if (node is LazyLeafTreeNode) {
-                node.ensureLoaded(tree.model as DefaultTreeModel)
+                node.ensureLoaded(treeModel)
                 node.setSelectionRefreshCallback {
                     view.selectionChangeListener(node as DefaultMutableTreeNode)
                 }
@@ -80,8 +111,6 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             triggerCycleDetectionLoad(node)
         }
 
-        this.root = DefaultMutableTreeNode("No results yet")
-        this.tree.model = DefaultTreeModel(this.root)
         this.initUI()
         addHierarchyListener { e ->
             val changed = (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong()) != 0L
@@ -98,8 +127,11 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
 
     fun release() {
         pendingSelectedPath = null
+        searchField.text = ""
+        filterModel.filter = ""
+        expansionBeforeFilter = null
         root.removeAllChildren()
-        (tree.model as DefaultTreeModel).nodeStructureChanged(root)
+        treeModel.nodeStructureChanged(root)
     }
 
     fun syncScanResult(updated: ScanResult): Boolean {
@@ -107,7 +139,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         val expandedPaths = captureExpandedPaths()
         val selectedPath = captureSelectedPath()
 
-        val model = tree.model as DefaultTreeModel
+        val model = treeModel
         for (i in 0 until root.childCount) {
             val node = root.getChildAt(i) as? ScanResultTreeNode ?: continue
             if (node.scanResult.uuid != updated.uuid) continue
@@ -116,6 +148,10 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             node.reloadSchemaBranches(updated)
             model.nodeStructureChanged(node)
             model.nodeChanged(node)
+            filterModel.reloadFromSource()
+            if (filterModel.filter.isNotEmpty()) {
+                expandFilteredTree()
+            }
 
             val currentLabel = nodeLabel(node)
             val restoredExpansion = remapFirstLabel(expandedPaths, previousLabel, currentLabel)
@@ -162,8 +198,12 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         for (result in this.view.scannerTab.scanResults) {
             this.root.add(ScanResultTreeNode(result))
         }
-        val model = tree.model as DefaultTreeModel
+        val model = treeModel
         model.nodeStructureChanged(root)
+        filterModel.reloadFromSource()
+        if (filterModel.filter.isNotEmpty()) {
+            expandFilteredTree()
+        }
 
         scheduleApplyTreeState(expandedPaths)
         if (preserveSchemaCorrectionsFor != null) {
@@ -197,7 +237,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             return
         }
 
-        val model = tree.model as DefaultTreeModel
+        val model = treeModel
 
         if (wantsDefaultExpansion) {
             expandScanResultNodes()
@@ -355,7 +395,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             for (row in 0 until root.childCount) {
                 tree.expandRow(row)
             }
-            refreshDisclosureHandles(tree.model as DefaultTreeModel)
+            refreshDisclosureHandles(treeModel)
         } finally {
             applyingDefaultExpansion = false
         }
@@ -388,5 +428,44 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
         val node = (this.tree.lastSelectedPathComponent ?: return) as DefaultMutableTreeNode
         if (!node.isLeaf) return
         this.view.selectionChangeListener(node)
+    }
+
+    private fun applySearchFilter() {
+        val text = searchField.text ?: ""
+        val hadFilter = filterModel.filter.isNotEmpty()
+        val hasFilter = text.isNotBlank()
+
+        if (!hasFilter && hadFilter) {
+            filterModel.filter = ""
+            expansionBeforeFilter?.let { restoreExpandedPaths(it, treeModel) }
+            expansionBeforeFilter = null
+            tree.revalidate()
+            tree.repaint()
+            return
+        }
+
+        if (hasFilter && !hadFilter) {
+            expansionBeforeFilter = captureExpandedPaths()
+        }
+
+        filterModel.filter = text
+        if (hasFilter) {
+            expandFilteredTree()
+        }
+        tree.revalidate()
+        tree.repaint()
+    }
+
+    private fun expandFilteredTree() {
+        expandFilteredNode(root)
+    }
+
+    private fun expandFilteredNode(node: DefaultMutableTreeNode) {
+        if (filterModel.getChildCount(node) == 0) return
+        tree.expandPath(TreePath(node.path))
+        for (i in 0 until filterModel.getChildCount(node)) {
+            val child = filterModel.getChild(node, i) as DefaultMutableTreeNode
+            expandFilteredNode(child)
+        }
     }
 }
