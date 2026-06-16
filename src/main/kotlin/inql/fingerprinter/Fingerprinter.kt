@@ -2,10 +2,9 @@ package inql.fingerprinter
 
 import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import org.json.JSONObject
 import inql.InQL
+import inql.bruteforcer.ThrottledClient
 import inql.Logger
 import inql.ui.BorderPanel
 import inql.utils.MarkdownToHtmlConverter
@@ -24,6 +23,7 @@ class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var fingerPrinterJob: Job? = null
+    private lateinit var graphQLClient: ThrottledClient
     private val markdownEditorPane = JEditorPane()
     private val urlField = JTextField()
     private val sendButton = JButton("Start fingerprinting").also {
@@ -180,6 +180,11 @@ Fingerprinting...
     }
 
     private suspend fun run() {
+        val req = this.request.withService(
+            burp.api.montoya.http.HttpService.httpService(this.url),
+        )
+        graphQLClient = ThrottledClient(req)
+
         if (check()) {
             val engine = execute()
             Logger.debug(engine.toString())
@@ -200,7 +205,7 @@ If you want to help us fix this, please submit a pull request.<br/>
         }
     }
 
-    fun check(): Boolean {
+    private suspend fun check(): Boolean {
         val query = """
             query { __typename }
         """.trimIndent()
@@ -258,20 +263,8 @@ If you want to help us fix this, please submit a pull request.<br/>
         }
     }
 
-    private fun graphQuery(query: String): JSONObject {
-        try {
-            val newQuery = JsonObject()
-            newQuery.addProperty("query", query)
-            val newBody = Gson().toJson(newQuery)
-            val req =
-                this.request.withService(burp.api.montoya.http.HttpService.httpService(this.url)).withBody(newBody)
-            val response = Burp.Montoya.http().sendRequest(req)
-            val resp = response.response()
-
-            return JSONObject(resp.body().toString())
-        } catch (e: Exception) {
-            return JSONObject()
-        }
+    private suspend fun graphQuery(query: String): JSONObject {
+        return graphQLClient.send(query)
     }
 
     private fun errorContains(resp: JSONObject, msg: String): Boolean {
