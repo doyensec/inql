@@ -138,6 +138,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
                 this.currentNode = null
                 this.sendToHandler.setEnabled(false)
             }
+            is PathEnumerationEntry -> {
+                this.payloadView.loadPathEnumeration(content)
+                this.currentNode = null
+                this.sendToHandler.setEnabled(false)
+            }
             is SchemaCorrectionsEntry -> {
                 val scanResult = getNodeScanResult(node) ?: content.scanResult
                 this.payloadView.loadSchemaCorrections(scanResult)

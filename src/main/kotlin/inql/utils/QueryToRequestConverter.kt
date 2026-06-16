@@ -5,6 +5,8 @@ import inql.Config
 import inql.graphql.GQLSchema
 import inql.graphql.Utils
 import inql.graphql.scanners.CycleResult
+import inql.graphql.scanners.PathResult
+import inql.graphql.scanners.PathTargetKind
 import inql.scanner.ScanResult
 import inql.schema.corrections.InputEnumTypeMatching
 
@@ -37,6 +39,64 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             maxDepth = maxDepth
         )
         return formatToJson(queryWithVars)
+    }
+
+    /**
+     * Builds a JSON HTTP body (query + variables) that walks [path] along the schema, for Repeater / clipboard.
+     */
+    fun buildPathPocJson(path: PathResult): String {
+        val schema = scanResults.effectiveGraphQLSchema()
+        val config = Config.getInstance()
+        val argDepth = config.codegenDepth()
+
+        val rootType = when (path.operationType) {
+            GQLSchema.OperationType.QUERY -> schema.queryType
+            GQLSchema.OperationType.MUTATION -> schema.mutationType
+                ?: throw IllegalArgumentException("Schema does not support mutations")
+            GQLSchema.OperationType.SUBSCRIPTION -> schema.subscriptionType
+                ?: throw IllegalArgumentException("Schema does not support subscriptions")
+        }
+
+        if (path.pathFieldNames.isEmpty()) {
+            throw IllegalArgumentException("Path has no fields")
+        }
+
+        val variablesMap = mutableMapOf<String, Any?>()
+        val variableDefinitions = mutableListOf<String>()
+        val nestedVarCounter = mutableListOf(0)
+
+        val inner = buildPathSelection(
+            schema = schema,
+            container = rootType,
+            path = path.pathFieldNames,
+            pathIndex = 0,
+            baseIndent = 1,
+            variablesMap = variablesMap,
+            variableDefinitions = variableDefinitions,
+            nestedVarCounter = nestedVarCounter,
+            maxDepth = argDepth,
+            expandObjectLeaf = path.targetKind == PathTargetKind.TYPE,
+        )
+
+        val opKeyword = when (path.operationType) {
+            GQLSchema.OperationType.QUERY -> "query"
+            GQLSchema.OperationType.MUTATION -> "mutation"
+            GQLSchema.OperationType.SUBSCRIPTION -> "subscription"
+        }
+
+        val query = buildString {
+            append("$opKeyword PathPoc")
+            if (variableDefinitions.isNotEmpty()) {
+                append("(")
+                append(variableDefinitions.joinToString(", "))
+                append(")")
+            }
+            append(" {\n")
+            append(inner)
+            append("}")
+        }
+
+        return formatToJson(QueryWithVariables(query, variablesMap))
     }
 
     /**
@@ -182,6 +242,80 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             is GraphQLInterfaceType -> u
             is GraphQLUnionType -> null
             else -> null
+        }
+    }
+
+    private fun buildPathSelection(
+        schema: GraphQLSchema,
+        container: GraphQLFieldsContainer,
+        path: List<String>,
+        pathIndex: Int,
+        baseIndent: Int,
+        variablesMap: MutableMap<String, Any?>,
+        variableDefinitions: MutableList<String>,
+        nestedVarCounter: MutableList<Int>,
+        maxDepth: Int,
+        expandObjectLeaf: Boolean,
+    ): String {
+        if (pathIndex >= path.size) return ""
+
+        val fieldName = path[pathIndex]
+        val field = container.getFieldDefinition(fieldName)
+            ?: throw IllegalArgumentException("Field '$fieldName' not found on type '${container.name}'")
+
+        val args = processFieldArguments(
+            schema = schema,
+            field = field,
+            currentDepth = pathIndex + 1,
+            maxDepth = maxDepth,
+            variablesMap = variablesMap,
+            variableDefinitions = variableDefinitions,
+            nestedVarCounter = nestedVarCounter,
+        )
+
+        val indent = "  ".repeat(baseIndent)
+        val isLast = pathIndex == path.lastIndex
+        val leafContainer = cycleFieldsContainer(field.type)
+
+        return buildString {
+            append(indent).append(fieldName).append(args)
+            if (isLast) {
+                if (expandObjectLeaf && leafContainer != null) {
+                    append(" {\n")
+                    append(
+                        scalarFieldsSelection(
+                            schema,
+                            leafContainer,
+                            baseIndent + 1,
+                            maxDepth,
+                            variablesMap,
+                            variableDefinitions,
+                            nestedVarCounter,
+                        ),
+                    )
+                    append("\n").append(indent).append("}")
+                }
+            } else {
+                val next = leafContainer
+                    ?: throw IllegalArgumentException("Cannot traverse field '$fieldName' for path PoC (non-composite type)")
+                append(" {\n")
+                append(
+                    buildPathSelection(
+                        schema = schema,
+                        container = next,
+                        path = path,
+                        pathIndex = pathIndex + 1,
+                        baseIndent = baseIndent + 1,
+                        variablesMap = variablesMap,
+                        variableDefinitions = variableDefinitions,
+                        nestedVarCounter = nestedVarCounter,
+                        maxDepth = maxDepth,
+                        expandObjectLeaf = expandObjectLeaf,
+                    ),
+                )
+                append("\n").append(indent).append("}")
+            }
+            if (isLast) append("\n")
         }
     }
 
