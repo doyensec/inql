@@ -22,6 +22,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         const val RAW_EDITOR_CARD = "RAW_EDITOR_CARD"
         const val GQL_EDITOR_CARD = "GQL_EDITOR_CARD"
         const val CYCLE_CARD = "CYCLE_CARD"
+        const val PATH_ENUMERATION_CARD = "PATH_ENUMERATION_CARD"
         const val SCHEMA_CORRECTIONS_CARD = "SCHEMA_CORRECTIONS_CARD"
         const val REQUEST_TEMPLATE_CARD = "REQUEST_TEMPLATE_CARD"
     }
@@ -30,6 +31,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
     val rawEditor = Burp.Montoya.userInterface().createRawEditor(EditorOptions.READ_ONLY)
     val gqlEditor = GraphQLEditor(readOnly = true, isIntrospection = true)
     private val cyclePanel = CycleDetectionPanel(view)
+    private val pathEnumerationPanel = PathEnumerationPanel(view)
     private var schemaCorrectionsPanel: SchemaCorrectionsPanel? = null
     var selectedCard: String = RAW_EDITOR_CARD
         private set
@@ -50,6 +52,9 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         // Cycle Detection card
         this.add(cyclePanel, CYCLE_CARD)
 
+        // Path Enumeration card
+        this.add(pathEnumerationPanel, PATH_ENUMERATION_CARD)
+
         val requestTemplateCard = BorderPanel(0)
         requestTemplateCard.add(requestTemplateEditor.uiComponent(), BorderLayout.CENTER)
         this.add(requestTemplateCard, REQUEST_TEMPLATE_CARD)
@@ -63,6 +68,9 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
     }
 
     private fun show(card: String) {
+        if (selectedCard == PATH_ENUMERATION_CARD && card != PATH_ENUMERATION_CARD) {
+            pathEnumerationPanel.persistState()
+        }
         this.selectedCard = card
         (this.layout as CardLayout).show(this, card)
     }
@@ -112,11 +120,17 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
         this.show(CYCLE_CARD)
     }
 
+    fun loadPathEnumeration(entry: PathEnumerationEntry) {
+        this.pathEnumerationPanel.load(entry)
+        this.show(PATH_ENUMERATION_CARD)
+    }
+
     fun release() {
         view.commitRequestTemplateEdits()
         gqlEditor.clear()
         rawEditor.contents = ByteArray.byteArray("")
         cyclePanel.release()
+        pathEnumerationPanel.release()
         schemaCorrectionsPanel = null
     }
 
@@ -125,6 +139,7 @@ class ScanResultsContentView(val view: ScanResultsView) : JPanel(CardLayout()) {
             RAW_EDITOR_CARD -> this.rawEditor.contents.toString()
             GQL_EDITOR_CARD -> this.gqlEditor.getQuery()
             CYCLE_CARD -> this.cyclePanel.getExportText()
+            PATH_ENUMERATION_CARD -> ""
             SCHEMA_CORRECTIONS_CARD -> schemaCorrectionsPanel?.let { "" } ?: ""
             REQUEST_TEMPLATE_CARD -> this.requestTemplateEditor.request.toString()
             else -> ""

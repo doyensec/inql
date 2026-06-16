@@ -166,6 +166,7 @@ class ScanResultTreeNode(scanResult: ScanResult) :
             "Types",
             "Points of Interest",
             "Cycle Detection",
+            "Path Enumeration",
             "JSON schema",
             "SDL schema",
         )
@@ -287,6 +288,10 @@ class ScanResultTreeNode(scanResult: ScanResult) :
 
         if (config.getBoolean("report.cycles") == true) {
             nodes.add(TreeNodeWithCustomLabel("Cycle Detection", CycleDetectionEntry(result, gqlSchema), forceDirectory = false))
+        }
+
+        if (config.getBoolean("report.pathEnumeration") == true) {
+            nodes.add(TreeNodeWithCustomLabel("Path Enumeration", PathEnumerationEntry(result, gqlSchema), forceDirectory = false))
         }
 
         if (config.getBoolean("report.json") == true) {

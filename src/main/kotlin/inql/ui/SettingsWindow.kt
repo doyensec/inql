@@ -168,6 +168,10 @@ class SettingsWindow private constructor() : Window("InQL Settings") {
                     100,
                 ),
             ),
+            SettingsElement(
+                "report.pathEnumeration",
+                CheckBox("Enable GraphQL path enumeration (nested queries search)"),
+            ),
         )
 
         val featuresSection = SettingsSection(
