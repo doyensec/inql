@@ -7,6 +7,10 @@ import burp.api.montoya.ui.contextmenu.AuditIssueContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider
 import burp.api.montoya.ui.contextmenu.InvocationType
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse
+import inql.graphql.GraphQLRequestTransformException
+import inql.graphql.GraphQLRequestTransformer
+import inql.graphql.GraphQLTransportFormat
 import inql.history.HistoryHostKey
 import inql.history.HistoryTracker
 import inql.Config
@@ -232,8 +236,56 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         }
     }
 
+    private fun transformRequestSubmenu(
+        editor: MessageEditorHttpRequestResponse,
+    ): JMenu? {
+        val request = editor.requestResponse().request()
+        if (GraphQLRequestTransformer.parsePayload(request) == null) return null
+
+        return JMenu("Transform Request to:").also { submenu ->
+            for (format in GraphQLTransportFormat.entries.filter { it.showInTransformMenu() }) {
+                submenu.add(
+                    BurpMenuItem(
+                        MenuAction(format.menuLabel!!, null) {
+                            transformRequestInEditor(editor, format)
+                        },
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun transformRequestInEditor(
+        editor: MessageEditorHttpRequestResponse,
+        target: GraphQLTransportFormat,
+    ) {
+        val request = editor.requestResponse().request()
+        try {
+            val transformed = GraphQLRequestTransformer.transform(request, target)
+            editor.setRequest(transformed)
+        } catch (e: GraphQLRequestTransformException) {
+            showTransformError(e.message ?: "Request transformation failed.")
+        } catch (_: UnsupportedOperationException) {
+            showTransformError("This request cannot be edited in the current view.")
+        } catch (e: Exception) {
+            showTransformError("Request transformation failed: ${e.message}")
+        }
+    }
+
+    private fun showTransformError(message: String) {
+        SwingUtilities.invokeLater {
+            JOptionPane.showMessageDialog(
+                Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                message,
+                "InQL",
+                JOptionPane.WARNING_MESSAGE,
+            )
+        }
+    }
+
     private fun sendToInqlComponents(
         typeRenameActions: List<MenuAction> = emptyList(),
+        messageEditor: MessageEditorHttpRequestResponse? = null,
     ): MutableList<Component> {
         return mutableListOf<Component>(
             BurpMenuItem(super.sendToInqlScannerAction),
@@ -247,6 +299,12 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
                 this.add(BurpMenuItem(extractHistorySchemaAction))
             }
             typeRenameSubmenu(typeRenameActions)?.let { add(it) }
+            messageEditor?.let { editor ->
+                transformRequestSubmenu(editor)?.let { submenu ->
+                    add(JSeparator())
+                    add(submenu)
+                }
+            }
         }
     }
 
@@ -355,7 +413,10 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         val typeRenameActions = responseFromContext(event)?.let { response ->
             typeRenameActionsFromResponse(request, response)
         } ?: emptyList()
-        return this.sendToInqlComponents(typeRenameActions)
+        val messageEditor = event.messageEditorRequestResponse()
+            .filter { it.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.REQUEST }
+            .orElse(null)
+        return this.sendToInqlComponents(typeRenameActions, messageEditor)
     }
 
     override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<Component> {
