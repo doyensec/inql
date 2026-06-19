@@ -32,6 +32,17 @@ fun HttpRequest.withUpsertedHeaders(newHeaders: Map<String, String>): HttpReques
     return out
 }
 
+fun HttpRequest.withoutContentHeaders(): HttpRequest {
+    var result = this
+    for (header in this.headers()) {
+        val name = header.name().lowercase()
+        if (name == "content-type" || name == "content-length") {
+            result = result.withRemovedHeader(header.name())
+        }
+    }
+    return result
+}
+
 fun HttpResponse.withUpsertedHeader(name: String, value: String): HttpResponse {
     var updateOnly = false
     for (header in this.headers()) {

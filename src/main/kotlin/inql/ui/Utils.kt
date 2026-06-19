@@ -135,6 +135,16 @@ class Spinner(description: String, min: Int, val max: Int, val step: Int = 1) :
     Input<JSpinner>(JSpinner(SpinnerNumberModel(min, min, max, step)), description) {
 
     fun getValue(): Int = this.component.value as Int
+
+    fun getCommittedValue(): Int {
+        try {
+            component.commitEdit()
+        } catch (_: java.text.ParseException) {
+            // Keep last valid value when input is invalid.
+        }
+        return getValue()
+    }
+
     fun setValue(value: Int) {
         this.component.value = value
     }
@@ -356,6 +366,22 @@ class SettingsTabButton() : JPanel() {
         })
         add(clickablePart)
     }
+}
+
+fun JSplitPane.applyEqualSplit(initialRatio: Double = 0.5) {
+    resizeWeight = initialRatio
+    getLeftComponent()?.minimumSize = Dimension(0, 0)
+    getRightComponent()?.minimumSize = Dimension(0, 0)
+    var initialized = false
+    addComponentListener(object : java.awt.event.ComponentAdapter() {
+        override fun componentResized(e: java.awt.event.ComponentEvent?) {
+            if (initialized) return
+            val size = if (orientation == JSplitPane.HORIZONTAL_SPLIT) width else height
+            if (size <= 0) return
+            dividerLocation = (size * initialRatio).toInt()
+            initialized = true
+        }
+    })
 }
 
 class ErrorDialog(val msg: String, logToError: Boolean = true) {

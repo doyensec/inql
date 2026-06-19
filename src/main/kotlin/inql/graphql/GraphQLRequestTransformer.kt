@@ -7,6 +7,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import inql.utils.get
 import inql.utils.withUpsertedHeader
+import inql.utils.withoutContentHeaders
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -91,10 +92,14 @@ object GraphQLRequestTransformer {
     }
 
     fun detectRequestContext(request: HttpRequest): GraphQLRequestContext {
-        return when (request.method().uppercase()) {
-            "GET" -> GraphQLRequestContext(GraphQLTransportFormat.GET)
-            "POST" -> detectPostRequestContext(request)
-            else -> GraphQLRequestContext(GraphQLTransportFormat.JSON)
+        return try {
+            when (request.method().uppercase()) {
+                "GET" -> GraphQLRequestContext(GraphQLTransportFormat.GET)
+                "POST" -> detectPostRequestContext(request)
+                else -> GraphQLRequestContext(GraphQLTransportFormat.JSON)
+            }
+        } catch (_: Exception) {
+            GraphQLRequestContext(GraphQLTransportFormat.JSON)
         }
     }
 
@@ -175,13 +180,17 @@ object GraphQLRequestTransformer {
     }
 
     fun parsePayload(request: HttpRequest): GraphQLRequestPayload? {
-        return when (request.method().uppercase()) {
-            "GET" -> {
-                val uri = URI.create(request.url())
-                parseFromQueryString(uri.rawQuery ?: "")
+        return try {
+            when (request.method().uppercase()) {
+                "GET" -> {
+                    val uri = URI.create(request.url())
+                    parseFromQueryString(uri.rawQuery ?: "")
+                }
+                "POST" -> parseFromPostBody(request)
+                else -> null
             }
-            "POST" -> parseFromPostBody(request)
-            else -> null
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -460,16 +469,5 @@ object GraphQLRequestTransformer {
 
     private fun stripBom(value: String): String {
         return if (value.startsWith("\uFEFF")) value.substring(1) else value
-    }
-
-    private fun HttpRequest.withoutContentHeaders(): HttpRequest {
-        var result = this
-        for (header in this.headers()) {
-            val name = header.name().lowercase()
-            if (name == "content-type" || name == "content-length") {
-                result = result.withRemovedHeader(header.name())
-            }
-        }
-        return result
     }
 }

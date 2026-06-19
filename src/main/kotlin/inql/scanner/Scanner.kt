@@ -189,7 +189,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         findTabForHostAndSource(host, source)?.let { return it }
 
         val normalizedHost = HistoryHostKey.normalize(host).ifBlank {
-            HistoryHostKey.fromRequest(requestTemplate).let { HistoryHostKey.normalize(it) }
+            HistoryHostKey.fromRequest(requestTemplate)?.let { HistoryHostKey.normalize(it) } ?: ""
         }
         findTabForHostAndSource(normalizedHost, source)?.let { return it }
 
@@ -399,7 +399,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
         }
         try {
             val templateHostKey = HistoryHostKey.fromRequest(tab.requestTemplate)
-            if (HistoryHostKey.matches(templateHostKey, normalizedHost)) return true
+            if (templateHostKey != null && HistoryHostKey.matches(templateHostKey, normalizedHost)) return true
         } catch (_: Exception) {
         }
         return tab.scanResults.any { result ->

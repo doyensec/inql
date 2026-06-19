@@ -332,7 +332,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         )
 
         withContext(Dispatchers.Main) {
-            val hostKey = HistoryHostKey.normalize(HistoryHostKey.fromRequest(this@ScannerTab.requestTemplate))
+            val hostKey = HistoryHostKey.fromRequest(this@ScannerTab.requestTemplate)?.let { HistoryHostKey.normalize(it) }
+                ?: HistoryHostKey.normalize(this@ScannerTab.host ?: return@withContext)
             scanner.applyScanResult(hostKey, SchemaDiscoverySource.BRUTEFORCE, requestTemplate, sr, focus = true)
             scanConfigView.setBusy(false)
             scanConfigView.setBruteforcerRunning(false)
@@ -416,7 +417,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         withContext(Dispatchers.Main) {
             scanResults.add(sr)
-            val hostKey = HistoryHostKey.normalize(HistoryHostKey.fromRequest(requestTemplate))
+            val hostKey = HistoryHostKey.fromRequest(requestTemplate)?.let { HistoryHostKey.normalize(it) }
+                ?: HistoryHostKey.normalize(this@ScannerTab.host ?: return@withContext)
             setTabTitle(Scanner.sourceTabTitle(schemaDiscoverySource, hostKey))
             scanner.updateChildObjectAsync(this@ScannerTab)
             scanCompleted()
@@ -462,8 +464,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         if (url.isNotBlank()) {
             HistoryHostKey.fromUrl(url)?.let { hosts.add(HistoryHostKey.normalize(it)) }
         }
-        runCatching {
-            hosts.add(HistoryHostKey.normalize(HistoryHostKey.fromRequest(requestTemplate)))
+        HistoryHostKey.fromRequest(requestTemplate)?.let {
+            hosts.add(HistoryHostKey.normalize(it))
         }
         for (result in scanResults) {
             hosts.add(HistoryHostKey.normalize(result.host))

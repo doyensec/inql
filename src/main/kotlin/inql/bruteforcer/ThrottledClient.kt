@@ -1,7 +1,9 @@
 // inql/bruteforcer/ThrottledGraphQLClient.kt
 package inql.bruteforcer
 
+import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
+import burp.api.montoya.http.message.responses.HttpResponse
 import inql.Logger
 import inql.exceptions.BlankResponseException
 import inql.exceptions.TooManyRequestsException
@@ -20,40 +22,67 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
      */
     suspend fun send(query: String): JSONObject {
         while (true) {
-            val currentDelay = backoffDelay.get()
-            if (currentDelay > 0) {
-                delay(currentDelay)
-            }
-
+            awaitBackoff()
             try {
                 val response = Utils.sendGraphQLRequest(query, baseRequest)
-
-                if (backoffDelay.get() > 0) {
-                    backoffDelay.set(0L)
-                }
+                resetBackoff()
                 return response
-
             } catch (e: TooManyRequestsException) {
-                val current = backoffDelay.get()
-                val newDelay = if (current == 0L) {
-                    INITIAL_BACKOFF_MS
-                } else {
-                    (current * 2).coerceAtMost(MAX_BACKOFF_MS)
-                }
-                backoffDelay.set(newDelay)
-
+                increaseBackoff()
             } catch (e: BlankResponseException) {
-                val current = backoffDelay.get()
-                val newDelay = if (current == 0L) {
-                    INITIAL_BACKOFF_MS
-                } else {
-                    (current * 2).coerceAtMost(MAX_BACKOFF_MS)
-                }
-                backoffDelay.set(newDelay)
+                increaseBackoff()
             } catch (e: Exception) {
                 Logger.error("An unexpected error occurred during the request: ${e.message}")
                 return JSONObject()
             }
         }
+    }
+
+    /**
+     * Sends an arbitrary HTTP request with the same backoff/retry behavior as [send].
+     */
+    suspend fun sendRequest(request: HttpRequest): HttpResponse? {
+        while (true) {
+            awaitBackoff()
+            try {
+                val response = Burp.Montoya.http().sendRequest(request)?.response()
+                    ?: throw BlankResponseException()
+                if (response.statusCode().toInt() == 429) {
+                    throw TooManyRequestsException("Server responded with 429 Too Many Requests")
+                }
+                resetBackoff()
+                return response
+            } catch (e: TooManyRequestsException) {
+                increaseBackoff()
+            } catch (e: BlankResponseException) {
+                increaseBackoff()
+            } catch (e: Exception) {
+                Logger.error("An unexpected error occurred during the request: ${e.message}")
+                return null
+            }
+        }
+    }
+
+    private suspend fun awaitBackoff() {
+        val currentDelay = backoffDelay.get()
+        if (currentDelay > 0) {
+            delay(currentDelay)
+        }
+    }
+
+    private fun resetBackoff() {
+        if (backoffDelay.get() > 0) {
+            backoffDelay.set(0L)
+        }
+    }
+
+    private fun increaseBackoff() {
+        val current = backoffDelay.get()
+        val newDelay = if (current == 0L) {
+            INITIAL_BACKOFF_MS
+        } else {
+            (current * 2).coerceAtMost(MAX_BACKOFF_MS)
+        }
+        backoffDelay.set(newDelay)
     }
 }

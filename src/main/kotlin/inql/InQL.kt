@@ -3,6 +3,7 @@ package inql
 import burp.Burp
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
+import inql.attackvector.AttackVectorScanner
 import inql.fingerprinter.Fingerprinter
 import inql.externaltools.ExternalToolsService
 import inql.history.HistoryTracker
@@ -31,6 +32,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     val scanner = Scanner(this)
     val attacker = Attacker(this)
     val fingerprinter = Fingerprinter(this)
+    val attackVectorScanner = AttackVectorScanner(this)
 
     init {
         InQLHolder.instance = this
@@ -48,6 +50,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         this.addTab("Scanner", this.scanner)
         this.addTab("Batch Queries", this.attacker)
         this.addTab("Engine Fingerprinting", this.fingerprinter)
+        this.addTab("Attack Vector Scanner", this.attackVectorScanner)
 
         // Register the extension main tab
         Burp.Montoya.userInterface().registerSuiteTab("InQL", this)

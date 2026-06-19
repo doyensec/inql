@@ -13,7 +13,18 @@ object HistoryHostKey {
         return if (isDefaultPort) host else "$host:$port"
     }
 
-    fun fromRequest(request: HttpRequest): String = fromHttpService(request.httpService())
+    fun fromRequest(request: HttpRequest): String? {
+        try {
+            request.httpService()?.let { return fromHttpService(it) }
+        } catch (_: Exception) {
+            // Malformed or incomplete requests may not expose a service.
+        }
+        return try {
+            fromUrl(request.url())
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     fun fromUrl(url: String): String? {
         return try {
