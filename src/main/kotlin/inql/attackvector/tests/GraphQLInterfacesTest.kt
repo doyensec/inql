@@ -1,15 +1,18 @@
 package inql.attackvector.tests
 
 import inql.BurpScannerCheck
+import inql.attackvector.DetailsFormat
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestEvidence
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
+import inql.fingerprinter.EngineFingerprintReport
 
 object GraphQLInterfacesTest : ScannerTest {
     override val id = "graphql_interfaces"
-    override val name = "GraphQL Interfaces (Discovery of /graphiql, /graphql, etc.)"
+    override val name = "GraphQL Graphical Interfaces"
+    override val description = "Discovers common GraphQL IDE and console paths such as GraphiQL and Playground."
 
     private val INTERFACE_PATHS = BurpScannerCheck.URLS.toList() + listOf(
         "/v1/graphql",
@@ -40,13 +43,15 @@ object GraphQLInterfacesTest : ScannerTest {
             context.ensureActive()
             for (exchange in listOf(context.http.probePath(path), context.http.probePathGet(path))) {
                 val method = exchange.request.method()
-                probed.add("$path [$method] (HTTP ${exchange.statusCode})")
+                probed.add(formatEndpointLine(path, method, exchange.statusCode))
                 if (exchange.statusCode !in 200..399) continue
 
                 val bodyLower = exchange.body.lowercase()
                 val marker = INTERFACE_MARKERS.firstOrNull { bodyLower.contains(it.lowercase()) }
                 if (marker != null || looksLikeGraphqlEndpoint(bodyLower)) {
-                    discovered.add("$path [$method] (HTTP ${exchange.statusCode}, marker: ${marker ?: "graphql-like"})")
+                    discovered.add(
+                        formatEndpointLine(path, method, exchange.statusCode, "marker: ${marker ?: "graphql-like"}"),
+                    )
                     lastEvidence = exchange.toEvidence()
                 }
             }
@@ -55,20 +60,50 @@ object GraphQLInterfacesTest : ScannerTest {
         return when {
             discovered.isNotEmpty() -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
-                "Discovered ${discovered.size} interface(s):\n${discovered.joinToString("\n")}",
+                TestStatus.VULNERABLE,
+                EngineFingerprintReport.wrapHtmlBody(
+                    buildString {
+                        append("Discovered ${discovered.size} interface(s):<br>")
+                        append(discovered.joinToString("<br>"))
+                        append("<br><br>Endpoints tried:<br>")
+                        append(probed.joinToString("<br>"))
+                    },
+                ),
                 lastEvidence,
+                detailsFormat = DetailsFormat.HTML,
             )
             else -> TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
-                buildString {
-                    append("No common GraphQL interfaces discovered on the probed paths (GET and POST).")
-                    append("\n\nEndpoints tried:\n")
-                    append(probed.joinToString("\n"))
-                },
+                EngineFingerprintReport.wrapHtmlBody(
+                    buildString {
+                        append("No common GraphQL interfaces discovered on the probed paths (GET and POST).")
+                        append("<br><br>Endpoints tried:<br>")
+                        append(probed.joinToString("<br>"))
+                    },
+                ),
+                detailsFormat = DetailsFormat.HTML,
             )
         }
+    }
+
+    private fun formatEndpointLine(
+        path: String,
+        method: String,
+        statusCode: Int,
+        extra: String? = null,
+    ): String {
+        val suffix = if (extra != null) ", $extra" else ""
+        val line = "${escape(path)} [$method] (HTTP $statusCode$suffix)"
+        val color = if (statusCode == 200) "green" else "red"
+        return """<font color="$color">$line</font>"""
+    }
+
+    private fun escape(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
     }
 
     private fun looksLikeGraphqlEndpoint(body: String): Boolean {

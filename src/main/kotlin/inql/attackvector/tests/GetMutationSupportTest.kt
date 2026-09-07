@@ -8,6 +8,7 @@ import inql.attackvector.TestStatus
 object GetMutationSupportTest : ScannerTest {
     override val id = "get_mutation"
     override val name = "Support for GET Mutations"
+    override val description = "Checks whether GraphQL mutations can be executed over HTTP GET."
 
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendGetOperation("mutation { __typename }")
@@ -23,7 +24,7 @@ object GetMutationSupportTest : ScannerTest {
             )
             json?.optJSONObject("data")?.optString("__typename")?.isNotBlank() == true -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "GET mutation appears to execute (data returned). This is a security misconfiguration.",
                 evidence,
             )
@@ -46,6 +47,12 @@ object GetMutationSupportTest : ScannerTest {
                     )
                 }
             }
+            exchange.statusCode in 400..499 -> TestResult(
+                name,
+                TestStatus.INACCESSIBLE,
+                "GET mutation probe inaccessible (HTTP ${exchange.statusCode}).",
+                evidence,
+            )
             else -> TestResult(
                 name,
                 TestStatus.UNCERTAIN,

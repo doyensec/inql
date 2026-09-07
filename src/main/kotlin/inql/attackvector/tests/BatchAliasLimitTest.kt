@@ -10,6 +10,7 @@ import inql.attackvector.TestStatus
 object BatchAliasLimitTest : ScannerTest {
     override val id = "batch_alias"
     override val name = "Batch Query Limits (Alias)"
+    override val description = "Tests whether aliased field batching is accepted without a size limit."
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxBatch = context.config.maxBatchSize
@@ -30,10 +31,19 @@ object BatchAliasLimitTest : ScannerTest {
                     break
                 }
                 ProbeUtils.BatchProbeStatus.AMBIGUOUS -> {
+                    val statusCode = evidence?.statusCode ?: 0
+                    if (statusCode in 400..499) {
+                        return TestResult(
+                            name,
+                            TestStatus.INACCESSIBLE,
+                            "Alias batch probe inaccessible (HTTP $statusCode).",
+                            evidence,
+                        )
+                    }
                     return TestResult(
                         name,
                         TestStatus.UNCERTAIN,
-                        "Ambiguous alias batch response at $count aliases (HTTP ${evidence?.statusCode ?: 0}).",
+                        "Ambiguous alias batch response at $count aliases (HTTP $statusCode).",
                         evidence,
                     )
                 }
@@ -55,7 +65,7 @@ object BatchAliasLimitTest : ScannerTest {
             )
             lastAccepted >= maxBatch -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "No alias batch limit detected up to $lastAccepted aliases (configured max: $maxBatch).",
                 lastEvidence,
             )

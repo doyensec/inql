@@ -10,6 +10,7 @@ import inql.attackvector.TestStatus
 object QueryComplexityLimitTest : ScannerTest {
     override val id = "query_complexity"
     override val name = "Query Complexity Limits"
+    override val description = "Sends increasingly expensive queries to detect complexity or cost limits."
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxComplexity = context.config.maxComplexity
@@ -33,10 +34,19 @@ object QueryComplexityLimitTest : ScannerTest {
                     break
                 }
                 ComplexityProbeStatus.AMBIGUOUS -> {
+                    val statusCode = evidence?.statusCode ?: 0
+                    if (statusCode in 400..499) {
+                        return TestResult(
+                            name,
+                            TestStatus.INACCESSIBLE,
+                            "Complexity probe inaccessible at weight $weight (HTTP $statusCode).",
+                            evidence,
+                        )
+                    }
                     return TestResult(
                         name,
                         TestStatus.UNCERTAIN,
-                        "Ambiguous response when probing complexity weight $weight (HTTP ${evidence?.statusCode ?: 0}).",
+                        "Ambiguous response when probing complexity weight $weight (HTTP $statusCode).",
                         evidence,
                     )
                 }
@@ -59,7 +69,7 @@ object QueryComplexityLimitTest : ScannerTest {
             )
             lastSuccessful >= maxComplexity -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "No complexity limit detected up to weight $lastSuccessful (configured max: $maxComplexity).",
                 lastEvidence,
             )

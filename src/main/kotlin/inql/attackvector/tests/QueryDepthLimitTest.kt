@@ -10,6 +10,7 @@ import inql.attackvector.TestStatus
 object QueryDepthLimitTest : ScannerTest {
     override val id = "query_depth"
     override val name = "Query Depth Limits"
+    override val description = "Probes nested queries to detect whether the server enforces a maximum depth limit."
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxDepth = context.config.maxDepth
@@ -33,10 +34,19 @@ object QueryDepthLimitTest : ScannerTest {
                     break
                 }
                 DepthProbeStatus.AMBIGUOUS -> {
+                    val statusCode = evidence?.statusCode ?: 0
+                    if (statusCode in 400..499) {
+                        return TestResult(
+                            name,
+                            TestStatus.INACCESSIBLE,
+                            "Depth probe inaccessible at depth $depth (HTTP $statusCode).",
+                            evidence,
+                        )
+                    }
                     return TestResult(
                         name,
                         TestStatus.UNCERTAIN,
-                        "Ambiguous response at depth $depth (HTTP ${evidence?.statusCode ?: 0}; no clear depth-limit message).",
+                        "Ambiguous response at depth $depth (HTTP $statusCode; no clear depth-limit message).",
                         evidence,
                     )
                 }
@@ -59,7 +69,7 @@ object QueryDepthLimitTest : ScannerTest {
             )
             lastSuccessfulDepth >= maxDepth -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "No depth limit detected up to the configured maximum of $maxDepth.",
                 lastEvidence,
             )

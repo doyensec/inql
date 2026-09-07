@@ -7,10 +7,12 @@ import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
 import inql.fingerprinter.EngineFingerprintReport
 import inql.fingerprinter.EngineProbes
+import inql.fingerprinter.Helpers
 
 object BackendFingerprintingTest : ScannerTest {
     override val id = "backend_fingerprint"
-    override val name = "Backend Fingerprinting"
+    override val name = "Backend Engine Fingerprinting"
+    override val description = "Identifies the GraphQL server engine from characteristic probe responses."
 
     override suspend fun run(context: ScanContext): TestResult {
         val probes = EngineProbes(context.client)
@@ -24,19 +26,22 @@ object BackendFingerprintingTest : ScannerTest {
 
         val engineKey = probes.detectEngine()
         return if (engineKey != null) {
+            val engineName = Helpers.engines[engineKey]?.name ?: engineKey
             val html = EngineFingerprintReport.htmlForEngine(engineKey)
             if (html != null) {
                 TestResult(
                     name,
-                    TestStatus.CONFIRMED,
+                    TestStatus.IDENTIFIED,
                     html,
                     detailsFormat = DetailsFormat.HTML,
+                    statusLabel = engineName,
                 )
             } else {
                 TestResult(
                     name,
-                    TestStatus.CONFIRMED,
-                    "Identified GraphQL engine key: $engineKey",
+                    TestStatus.IDENTIFIED,
+                    "Identified GraphQL engine: $engineName",
+                    statusLabel = engineName,
                 )
             }
         } else {

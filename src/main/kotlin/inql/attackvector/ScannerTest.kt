@@ -15,9 +15,11 @@ data class TestEvidence(
 enum class TestStatus(val label: String) {
     PENDING("Pending"),
     RUNNING("Running"),
-    CONFIRMED("Confirmed"),
+    VULNERABLE("Vulnerable"),
     NOT_VULNERABLE("Not Vulnerable"),
     UNCERTAIN("Uncertain"),
+    INACCESSIBLE("Inaccessible"),
+    IDENTIFIED("Identified"),
     CANCELLED("Cancelled"),
 }
 
@@ -33,7 +35,10 @@ data class TestResult(
     val details: String,
     val evidence: TestEvidence? = null,
     val detailsFormat: DetailsFormat = DetailsFormat.PLAIN,
-)
+    val statusLabel: String? = null,
+) {
+    fun displayStatus(): String = statusLabel ?: status.label
+}
 
 data class ScanConfig(
     val maxDepth: Int,
@@ -56,6 +61,7 @@ data class ScanContext(
 interface ScannerTest {
     val id: String
     val name: String
+    val description: String
 
     fun isEnabled(config: ScanConfig): Boolean = id in config.enabledTests
 

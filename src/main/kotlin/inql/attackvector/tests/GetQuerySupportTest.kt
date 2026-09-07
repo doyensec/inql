@@ -9,6 +9,7 @@ import org.json.JSONObject
 object GetQuerySupportTest : ScannerTest {
     override val id = "get_query"
     override val name = "Support for GET Queries"
+    override val description = "Checks whether GraphQL queries can be executed over HTTP GET."
 
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendGetOperation("query { __typename }")
@@ -24,7 +25,7 @@ object GetQuerySupportTest : ScannerTest {
             )
             json?.optJSONObject("data")?.optString("__typename")?.isNotBlank() == true -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "GET query executed successfully (data.__typename present).",
                 evidence,
             )
@@ -32,6 +33,12 @@ object GetQuerySupportTest : ScannerTest {
                 name,
                 TestStatus.NOT_VULNERABLE,
                 "GET query rejected (method or transport not allowed).",
+                evidence,
+            )
+            exchange.statusCode in 400..499 -> TestResult(
+                name,
+                TestStatus.INACCESSIBLE,
+                "GET query probe inaccessible (HTTP ${exchange.statusCode}).",
                 evidence,
             )
             else -> TestResult(

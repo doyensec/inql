@@ -10,6 +10,7 @@ import inql.attackvector.TestStatus
 object BatchArrayLimitTest : ScannerTest {
     override val id = "batch_array"
     override val name = "Batch Query Limits (Array)"
+    override val description = "Tests whether array-based batched operations are accepted without a size limit."
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxBatch = context.config.maxBatchSize
@@ -28,6 +29,14 @@ object BatchArrayLimitTest : ScannerTest {
                     break
                 }
                 ProbeUtils.BatchProbeStatus.AMBIGUOUS -> {
+                    if (exchange.statusCode in 400..499) {
+                        return TestResult(
+                            name,
+                            TestStatus.INACCESSIBLE,
+                            "Array batch probe inaccessible (HTTP ${exchange.statusCode}).",
+                            lastEvidence,
+                        )
+                    }
                     return TestResult(
                         name,
                         TestStatus.UNCERTAIN,
@@ -53,7 +62,7 @@ object BatchArrayLimitTest : ScannerTest {
             )
             lastAccepted >= maxBatch -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "No array batch limit detected up to $lastAccepted operations (configured max: $maxBatch).",
                 lastEvidence,
             )

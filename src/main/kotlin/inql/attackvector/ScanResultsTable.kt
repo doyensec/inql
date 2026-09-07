@@ -215,24 +215,22 @@ class ScanResultsTable(
         ): Component {
             val status = value as? TestStatus ?: TestStatus.UNCERTAIN
             val modelRow = table?.let { modelRow(it, row) } ?: row
+            val label = if (modelRow in results.indices) results[modelRow].displayStatus() else status.label
             val badge = badgeColors(status)
-            val component = super.getTableCellRendererComponent(table, status.label, isSelected, hasFocus, row, column)
+            val component = super.getTableCellRendererComponent(table, label, isSelected, hasFocus, row, column)
 
             border = BorderFactory.createEmptyBorder(6, 6, 6, 6)
-            font = font.deriveFont(Font.BOLD, 11f)
 
-            if (isSelected) {
-                text = status.label
-                return component
+            if (!isSelected) {
+                background = if (modelRow in results.indices) rowBackground(modelRow) else table?.background
             }
 
-            background = if (modelRow in results.indices) rowBackground(modelRow) else table?.background
             putClientProperty("html.disable", null)
             text = """
                 <html><body style='margin:0;padding:0;text-align:center'>
                 <span style='background-color:rgb(${badge.background.red},${badge.background.green},${badge.background.blue});
                 color:rgb(${badge.foreground.red},${badge.foreground.green},${badge.foreground.blue});
-                padding:4px 12px;font-weight:bold;font-size:11px'>${status.label}</span>
+                padding:4px 12px;font-weight:bold;font-size:11px'>$label</span>
                 </body></html>
             """.trimIndent()
             return component
@@ -260,20 +258,30 @@ class ScanResultsTable(
                 } else {
                     BadgeColors(Color(227, 242, 253), Color(13, 71, 161))
                 }
-                TestStatus.CONFIRMED -> if (dark) {
-                    BadgeColors(Color(27, 94, 32), Color(200, 230, 201))
-                } else {
-                    BadgeColors(Color(232, 245, 233), Color(27, 94, 32))
-                }
-                TestStatus.NOT_VULNERABLE -> if (dark) {
+                TestStatus.VULNERABLE -> if (dark) {
                     BadgeColors(Color(183, 28, 28), Color(255, 205, 210))
                 } else {
                     BadgeColors(Color(255, 235, 238), Color(183, 28, 28))
+                }
+                TestStatus.NOT_VULNERABLE -> if (dark) {
+                    BadgeColors(Color(27, 94, 32), Color(200, 230, 201))
+                } else {
+                    BadgeColors(Color(232, 245, 233), Color(27, 94, 32))
                 }
                 TestStatus.UNCERTAIN -> if (dark) {
                     BadgeColors(Color(245, 127, 23), Color(255, 243, 224))
                 } else {
                     BadgeColors(Color(255, 243, 224), Color(230, 81, 0))
+                }
+                TestStatus.INACCESSIBLE -> if (dark) {
+                    BadgeColors(Color(40, 53, 147), Color(197, 202, 233))
+                } else {
+                    BadgeColors(Color(232, 234, 246), Color(26, 35, 126))
+                }
+                TestStatus.IDENTIFIED -> if (dark) {
+                    BadgeColors(Color(21, 101, 192), Color(187, 222, 251))
+                } else {
+                    BadgeColors(Color(227, 242, 253), Color(13, 71, 161))
                 }
                 TestStatus.CANCELLED -> if (dark) {
                     BadgeColors(Color(69, 90, 100), Color(207, 216, 220))

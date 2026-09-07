@@ -7,7 +7,8 @@ import inql.attackvector.TestStatus
 
 object FieldSuggestionTest : ScannerTest {
     override val id = "field_suggestions"
-    override val name = "Field Suggestions (e.g., \"Did you mean...?\")"
+    override val name = "Field Suggestions"
+    override val description = "Checks whether validation errors leak schema details via field suggestions."
 
     override suspend fun run(context: ScanContext): TestResult {
         val query = "query { __schema { directive } }"
@@ -24,7 +25,7 @@ object FieldSuggestionTest : ScannerTest {
         return when {
             suggestionPatterns.any { errorsText.contains(it, ignoreCase = true) } -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "Server exposes field suggestions in validation errors (possible information disclosure).",
                 evidence,
             )
@@ -34,10 +35,14 @@ object FieldSuggestionTest : ScannerTest {
                 "Validation error returned without field suggestions.",
                 evidence,
             )
-            response.length() == 0 -> TestResult(
+            response.length() == 0 || (evidence?.statusCode ?: 0) in 400..499 -> TestResult(
                 name,
-                TestStatus.UNCERTAIN,
-                "No parseable response for the suggestion probe.",
+                TestStatus.INACCESSIBLE,
+                if ((evidence?.statusCode ?: 0) in 400..499) {
+                    "Field suggestion probe inaccessible (HTTP ${evidence?.statusCode})."
+                } else {
+                    "No parseable response for the suggestion probe."
+                },
                 evidence,
             )
             else -> TestResult(

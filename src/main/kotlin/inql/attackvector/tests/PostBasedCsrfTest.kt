@@ -8,6 +8,7 @@ import inql.attackvector.TestStatus
 object PostBasedCsrfTest : ScannerTest {
     override val id = "post_csrf"
     override val name = "POST-based CSRF (URL-encoded body)"
+    override val description = "Checks whether URL-encoded POST requests are accepted, which can enable CSRF."
 
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendFormUrlEncodedOperation("query { __typename }")
@@ -23,7 +24,7 @@ object PostBasedCsrfTest : ScannerTest {
             )
             json?.optJSONObject("data")?.optString("__typename")?.isNotBlank() == true -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "Server accepts POST requests with application/x-www-form-urlencoded GraphQL queries. " +
                     "This may enable CSRF via simple HTML forms.",
                 evidence,
@@ -32,6 +33,12 @@ object PostBasedCsrfTest : ScannerTest {
                 name,
                 TestStatus.NOT_VULNERABLE,
                 "URL-encoded POST GraphQL query rejected or not supported.",
+                evidence,
+            )
+            exchange.statusCode in 400..499 -> TestResult(
+                name,
+                TestStatus.INACCESSIBLE,
+                "URL-encoded POST probe inaccessible (HTTP ${exchange.statusCode}).",
                 evidence,
             )
             else -> TestResult(

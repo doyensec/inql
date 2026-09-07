@@ -8,6 +8,7 @@ import inql.attackvector.TestStatus
 object FederationSdlTest : ScannerTest {
     override val id = "federation_sdl"
     override val name = "Apollo Federation SDL"
+    override val description = "Attempts to fetch the Apollo Federation _service { sdl } schema document."
 
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendFederationSdlExchange()
@@ -17,7 +18,7 @@ object FederationSdlTest : ScannerTest {
         return when {
             sdl != null && sdl.contains("type") -> TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "Federation _service { sdl } returned a non-empty SDL document.",
                 evidence,
             )

@@ -8,7 +8,8 @@ import org.json.JSONObject
 
 object IntrospectionTest : ScannerTest {
     override val id = "introspection"
-    override val name = "Schema Introspection (Publicly accessible?)"
+    override val name = "Public Schema Introspection"
+    override val description = "Checks whether the full GraphQL schema can be retrieved via introspection."
 
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendIntrospectionExchange()
@@ -37,7 +38,7 @@ object IntrospectionTest : ScannerTest {
         return if (isValidIntrospectionSchema(raw)) {
             TestResult(
                 name,
-                TestStatus.CONFIRMED,
+                TestStatus.VULNERABLE,
                 "Public introspection is enabled. Response contains a valid __schema with types.",
                 evidence,
             )

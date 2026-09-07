@@ -97,7 +97,11 @@ open class Input<out T : JComponent>(val component: T, val description: String =
 
     override fun isEnabled(): Boolean = this.component.isEnabled
     override fun setEnabled(enabled: Boolean) {
+        super.setEnabled(enabled)
         this.component.isEnabled = enabled
+        for (child in components) {
+            child.isEnabled = enabled
+        }
     }
 }
 

@@ -8,7 +8,6 @@ import inql.bruteforcer.ThrottledClient
 import inql.graphql.formatting.Style
 import inql.ui.BorderPanel
 import inql.ui.CheckBox
-import inql.ui.FlowPanel
 import inql.ui.HtmlScrollPane
 import inql.ui.MessageEditor
 import inql.ui.Spinner
@@ -25,12 +24,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import javax.swing.SwingUtilities
-import java.awt.FlowLayout
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
+import java.awt.FlowLayout
 import java.awt.Font
+import java.awt.GridLayout
 import java.awt.Toolkit
 import java.awt.Desktop
 import java.awt.event.ActionEvent
@@ -75,7 +75,7 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
     }
 
     private val maxDepthSpinner = Spinner("Max Depth", 1, 999, 1).also { it.setValue(10) }
-    private val maxBatchSpinner = Spinner("Max Batch Size", 1, 999, 1).also { it.setValue(20) }
+    private val maxBatchSpinner = Spinner("Max Batch Size (Array & Alias)", 1, 999, 1).also { it.setValue(20) }
     private val maxComplexitySpinner = Spinner("Max Complexity", 1, 999, 1).also { it.setValue(100) }
 
     private val testCheckboxes = AttackVectorTestRegistry.allTests.associate { test ->
@@ -246,29 +246,94 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
     }
 
     private fun buildConfigPanel(): JPanel {
-        val checksPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            alignmentX = Component.LEFT_ALIGNMENT
+        val tests = AttackVectorTestRegistry.allTests
+        val midpoint = (tests.size + 1) / 2
+        val checksPanel = JPanel(GridLayout(1, 2, 16, 0)).apply {
             border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
-            testCheckboxes.values.forEach { checkbox ->
-                checkbox.component.alignmentX = Component.LEFT_ALIGNMENT
-                add(checkbox.component)
-            }
+            add(buildTestColumn(tests.take(midpoint)))
+            add(buildTestColumn(tests.drop(midpoint)))
         }
 
-        val limitsPanel = FlowPanel(FlowLayout.LEFT, 12).apply {
+        val selectionToolbar = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
             border = BorderFactory.createEmptyBorder(4, 8, 8, 8)
-            add(maxDepthSpinner)
-            add(maxBatchSpinner)
-            add(maxComplexitySpinner)
+            add(
+                JButton("Select All").also { button ->
+                    button.addActionListener { setAllTestsSelected(true) }
+                },
+            )
+            add(
+                JButton("Deselect All").also { button ->
+                    button.addActionListener { setAllTestsSelected(false) }
+                },
+            )
         }
+
+        wireLimitSpinnerEnablement()
 
         return JPanel().apply {
             layout = BorderLayout()
             border = BorderFactory.createTitledBorder("Scan Configuration")
+            add(selectionToolbar, BorderLayout.NORTH)
             add(checksPanel, BorderLayout.CENTER)
-            add(limitsPanel, BorderLayout.SOUTH)
         }
+    }
+
+    private fun setAllTestsSelected(selected: Boolean) {
+        testCheckboxes.values.forEach { it.setSelected(selected) }
+    }
+
+    private fun buildTestColumn(tests: List<ScannerTest>): JPanel {
+        return JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            alignmentX = Component.LEFT_ALIGNMENT
+            alignmentY = Component.TOP_ALIGNMENT
+            tests.forEach { test ->
+                val checkbox = testCheckboxes.getValue(test.id)
+                checkbox.component.alignmentX = Component.LEFT_ALIGNMENT
+                add(checkbox.component)
+                add(
+                    JLabel(test.description).apply {
+                        alignmentX = Component.LEFT_ALIGNMENT
+                        foreground = ScanResultsTable.mutedTextColor()
+                        font = font.deriveFont(font.size2D - 1f)
+                        border = BorderFactory.createEmptyBorder(0, 24, 4, 4)
+                    },
+                )
+                spinnerForTest(test.id)?.let { spinner ->
+                    spinner.alignmentX = Component.LEFT_ALIGNMENT
+                    spinner.border = BorderFactory.createEmptyBorder(0, 20, 0, 4)
+                    spinner.maximumSize = Dimension(Int.MAX_VALUE, spinner.preferredSize.height)
+                    add(spinner)
+                    add(Box.createVerticalStrut(4))
+                } ?: run {
+                    add(Box.createVerticalStrut(4))
+                }
+            }
+            add(Box.createVerticalGlue())
+        }
+    }
+
+    private fun spinnerForTest(testId: String): Spinner? = when (testId) {
+        "query_depth" -> maxDepthSpinner
+        "query_complexity" -> maxComplexitySpinner
+        // Shared by array and alias batch tests; shown once under the array entry.
+        "batch_array" -> maxBatchSpinner
+        else -> null
+    }
+
+    private fun wireLimitSpinnerEnablement() {
+        fun refresh() {
+            maxDepthSpinner.isEnabled = testCheckboxes.getValue("query_depth").isSelected()
+            maxComplexitySpinner.isEnabled = testCheckboxes.getValue("query_complexity").isSelected()
+            maxBatchSpinner.isEnabled =
+                testCheckboxes.getValue("batch_array").isSelected() ||
+                    testCheckboxes.getValue("batch_alias").isSelected()
+        }
+
+        listOf("query_depth", "query_complexity", "batch_array", "batch_alias").forEach { id ->
+            testCheckboxes.getValue(id).addItemListener { refresh() }
+        }
+        refresh()
     }
 
     override fun actionPerformed(e: ActionEvent?) {
@@ -489,7 +554,7 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
             appendLine("=".repeat(60))
             for (result in resultsTable.getResults()) {
                 appendLine(result.name)
-                appendLine("  Status: ${result.status.label}")
+                appendLine("  Status: ${result.displayStatus()}")
                 appendLine("  Details: ${result.details}")
                 appendLine()
             }

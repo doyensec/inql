@@ -19,8 +19,11 @@ object ScanResultDetailsRenderer {
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\n", "<br>")
         return """
-            <p style="color: rgb(${color.red},${color.green},${color.blue}); white-space: pre-wrap; margin: 0;">
+            <p style="color: rgb(${color.red},${color.green},${color.blue}); margin: 0;">
             $escaped
             </p>
         """.trimIndent()
