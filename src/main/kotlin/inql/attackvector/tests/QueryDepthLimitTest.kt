@@ -1,135 +1,131 @@
 package inql.attackvector.tests
 
+import inql.attackvector.GraphqlProbe
 import inql.attackvector.ProbeUtils
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
-import inql.attackvector.TestEvidence
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
+import org.json.JSONObject
 
 object QueryDepthLimitTest : ScannerTest {
     override val id = "query_depth"
     override val name = "Query Depth Limits"
     override val description = "Probes nested queries to detect whether the server enforces a maximum depth limit."
 
+    internal val depthLimitPhrases = listOf(
+        "query is too deep",
+        "maximum depth",
+        "max depth",
+        "too deep",
+        "depth limit",
+        "depth exceeded",
+        "exceeded maximum depth",
+        "exceeds maximum depth",
+        "max query depth",
+        "maximum query depth",
+        "query depth exceeded",
+        "query depth limit",
+        // Broader token kept from the original scanner.
+        "depth",
+    )
+
     override suspend fun run(context: ScanContext): TestResult {
         val maxDepth = context.config.maxDepth
-        var lastSuccessfulDepth = 0
-        var limitDetectedAt: Int? = null
-        var limitMessage: String? = null
-        var lastEvidence: TestEvidence? = null
 
-        for (depth in ProbeUtils.generateProbeCounts(maxDepth)) {
-            context.ensureActive()
-            val query = generateDepthQuery(depth)
-            val (response, evidence) = context.http.sendQueryExchange(query)
-            lastEvidence = evidence
-            val status = classifyDepthResponse(response, depth)
-
-            when (status) {
-                DepthProbeStatus.SUCCESS -> lastSuccessfulDepth = depth
-                DepthProbeStatus.LIMITED -> {
-                    limitDetectedAt = depth
-                    limitMessage = extractErrorSummary(response)
-                    break
-                }
-                DepthProbeStatus.AMBIGUOUS -> {
-                    val statusCode = evidence?.statusCode ?: 0
-                    if (statusCode in 400..499) {
-                        return TestResult(
-                            name,
-                            TestStatus.INACCESSIBLE,
-                            "Depth probe inaccessible at depth $depth (HTTP $statusCode).",
-                            evidence,
-                        )
-                    }
-                    return TestResult(
-                        name,
-                        TestStatus.UNCERTAIN,
-                        "Ambiguous response at depth $depth (HTTP $statusCode; no clear depth-limit message).",
-                        evidence,
-                    )
-                }
-            }
-        }
-
-        return when {
-            limitDetectedAt != null -> TestResult(
-                name,
-                TestStatus.NOT_VULNERABLE,
-                ProbeUtils.formatLimitEnforcedDetails(
-                    limitLabel = "query depth",
-                    unit = "levels",
-                    configuredMax = maxDepth,
-                    limitAt = limitDetectedAt,
-                    lastSuccessful = lastSuccessfulDepth,
-                    errorMessage = limitMessage,
-                ),
-                lastEvidence,
-            )
-            lastSuccessfulDepth >= maxDepth -> TestResult(
-                name,
-                TestStatus.VULNERABLE,
-                "No depth limit detected up to the configured maximum of $maxDepth.",
-                lastEvidence,
-            )
-            else -> TestResult(
+        // Depth probing uses nested introspection. Dummy fields like `d0` only yield "field doesn't
+        // exist" and prove nothing about depth limits — do not use them as a fallback.
+        val baselineExchange = context.http.sendRequest(
+            context.http.buildQueryRequest(generateDepthQuery(1)),
+        )
+        val baselineJson = baselineExchange.asJsonOrNull()
+        val baselineText = GraphqlProbe.responseText(baselineJson, baselineExchange.body)
+        if (GraphqlProbe.indicatesIntrospectionUnavailable(baselineText)) {
+            return TestResult(
                 name,
                 TestStatus.UNCERTAIN,
-                "Could not determine depth limit behavior (last successful depth: $lastSuccessfulDepth).",
-                lastEvidence,
+                "Depth limit probing requires introspection; __schema is not available on this schema " +
+                    "(that does not indicate a depth limit).",
+                baselineExchange.toEvidence(),
+            )
+        }
+
+        return ProbeUtils.runLimitScan(
+            context = context,
+            name = name,
+            configuredMax = maxDepth,
+            labels = ProbeUtils.LimitLabels(
+                limitLabel = "query depth",
+                unit = "levels",
+                inaccessible = { depth, statusCode ->
+                    "Depth probe inaccessible at depth $depth (HTTP $statusCode)."
+                },
+                ambiguous = { depth, statusCode ->
+                    "Ambiguous response at depth $depth (HTTP $statusCode; no clear depth-limit message)."
+                },
+                noLimit = { _, configuredMax ->
+                    "No depth limit detected up to the configured maximum of $configuredMax."
+                },
+                partial = { lastSuccessful, configuredMax ->
+                    "Could not determine depth limit behavior (last successful depth: $lastSuccessful of $configuredMax)."
+                },
+                zeroDetail = "Could not determine depth limit behavior.",
+            ),
+        ) { depth ->
+            val (response, evidence) = if (depth == 1) {
+                Pair(baselineJson, baselineExchange.toEvidence())
+            } else {
+                context.http.sendQueryExchange(generateDepthQuery(depth))
+            }
+            ProbeUtils.LimitProbeSample(
+                status = classifyDepthResponse(response),
+                evidence = evidence,
+                errorMessage = ProbeUtils.extractErrorSummary(response),
             )
         }
     }
 
-    private enum class DepthProbeStatus { SUCCESS, LIMITED, AMBIGUOUS }
-
     /**
-     * Builds an introspection depth probe where [depth] is the number of nested
-     * selections in the chain (alternating fields/type on __Type / __Field).
+     * Introspection depth probe: alternating `fields` / `type` nesting under `__schema`.
      */
     internal fun generateDepthQuery(depth: Int): String {
+        val levels = depth.coerceAtLeast(1)
         val inner = buildString {
-            repeat(depth) { level ->
+            repeat(levels) { level ->
                 append(if (level % 2 == 0) "fields { " else "type { ")
             }
             append("__typename")
-            repeat(depth) {
+            repeat(levels) {
                 append(" }")
             }
         }
         return "query { __schema { types { $inner } } }"
     }
 
-    private fun classifyDepthResponse(response: org.json.JSONObject, depth: Int): DepthProbeStatus {
-        if (response.optJSONObject("data")?.has("__schema") == true) {
-            return DepthProbeStatus.SUCCESS
+    private fun classifyDepthResponse(response: JSONObject?): ProbeUtils.LimitProbeStatus {
+        if (response == null) return ProbeUtils.LimitProbeStatus.AMBIGUOUS
+
+        val data = response.optJSONObject("data")
+        if (data?.has("__schema") == true) {
+            return ProbeUtils.LimitProbeStatus.SUCCESS
         }
 
-        val errorsText = response.optJSONArray("errors")?.toString()?.lowercase() ?: ""
+        val errorsText = response.optJSONArray("errors")?.toString() ?: ""
         if (errorsText.isBlank() && response.length() == 0) {
-            return DepthProbeStatus.AMBIGUOUS
+            return ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
 
-        val limitKeywords = listOf(
-            "depth",
-            "too deep",
-            "max depth",
-            "maximum depth",
-            "query is too complex",
-            "complexity",
-            "exceeded",
-        )
-        if (limitKeywords.any { errorsText.contains(it) }) {
-            return DepthProbeStatus.LIMITED
+        // Unknown/missing fields (including __schema) are not depth-limit evidence.
+        if (GraphqlProbe.indicatesIntrospectionUnavailable(errorsText) ||
+            GraphqlProbe.indicatesUnknownField(errorsText)
+        ) {
+            return ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
 
-        return if (depth > 1) DepthProbeStatus.LIMITED else DepthProbeStatus.AMBIGUOUS
-    }
+        if (GraphqlProbe.containsAny(errorsText, depthLimitPhrases)) {
+            return ProbeUtils.LimitProbeStatus.LIMITED
+        }
 
-    private fun extractErrorSummary(response: org.json.JSONObject): String? {
-        val errors = response.optJSONArray("errors") ?: return null
-        if (errors.length() == 0) return null
-        return errors.getJSONObject(0).optString("message").takeIf { it.isNotBlank() }
+        return ProbeUtils.LimitProbeStatus.AMBIGUOUS
     }
 }

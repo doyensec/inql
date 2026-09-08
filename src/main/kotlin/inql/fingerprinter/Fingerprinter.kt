@@ -5,20 +5,16 @@ import burp.api.montoya.http.message.requests.HttpRequest
 import inql.InQL
 import inql.bruteforcer.ThrottledClient
 import inql.Logger
-import inql.fingerprinter.EngineFingerprintReport
 import inql.ui.BorderPanel
 import inql.ui.HtmlScrollPane
 import inql.ui.applyEqualSplit
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.Color
-import java.awt.Desktop
 import java.awt.Font
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
-import java.net.URI
 import javax.swing.*
-import javax.swing.event.HyperlinkEvent
 
 class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
 
@@ -92,15 +88,7 @@ When a match is found, it displays the server’s security features based on dat
 The results will appear here
 """)
         markdownEditorPane.setEditable(false)
-        markdownEditorPane.addHyperlinkListener { e ->
-            if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-                try {
-                    Desktop.getDesktop().browse(URI(e.url.toString()))
-                } catch (ex: Exception) {
-                    println("Failed to open link: ${ex.message}")
-                }
-            }
-        }
+        HtmlScrollPane.attachHyperlinkHandler(markdownEditorPane)
 
         // Right section
         val rightSection = JScrollPane(markdownEditorPane).also {

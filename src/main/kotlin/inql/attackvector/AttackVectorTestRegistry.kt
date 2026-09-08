@@ -28,6 +28,4 @@ object AttackVectorTestRegistry {
         GetMutationSupportTest,
         PostBasedCsrfTest,
     )
-
-    val allTestIds: Set<String> = allTests.map { it.id }.toSet()
 }

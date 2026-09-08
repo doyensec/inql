@@ -2,6 +2,7 @@ package inql.attackvector.tests
 
 import inql.BurpScannerCheck
 import inql.attackvector.DetailsFormat
+import inql.attackvector.ProbeUtils
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestEvidence
@@ -30,8 +31,10 @@ object GraphQLInterfacesTest : ScannerTest {
         "graphql playground",
         "graphql console",
         "graphql-playground",
-        "__schema",
-        "introspection",
+        "altair",
+        "altairgraphql",
+        "altair-graphql",
+        "altairgraphql.init",
     )
 
     override suspend fun run(context: ScanContext): TestResult {
@@ -48,7 +51,7 @@ object GraphQLInterfacesTest : ScannerTest {
 
                 val bodyLower = exchange.body.lowercase()
                 val marker = INTERFACE_MARKERS.firstOrNull { bodyLower.contains(it.lowercase()) }
-                if (marker != null || looksLikeGraphqlEndpoint(bodyLower)) {
+                if (marker != null || looksLikeGraphqlInterface(path, bodyLower)) {
                     discovered.add(
                         formatEndpointLine(path, method, exchange.statusCode, "marker: ${marker ?: "graphql-like"}"),
                     )
@@ -94,23 +97,31 @@ object GraphQLInterfacesTest : ScannerTest {
         extra: String? = null,
     ): String {
         val suffix = if (extra != null) ", $extra" else ""
-        val line = "${escape(path)} [$method] (HTTP $statusCode$suffix)"
-        val color = if (statusCode == 200) "green" else "red"
+        val line = "${ProbeUtils.htmlEscape(path)} [$method] (HTTP $statusCode$suffix)"
+        val color = if (statusCode in 200..299) "green" else "red"
         return """<font color="$color">$line</font>"""
     }
 
-    private fun escape(text: String): String {
-        return text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-    }
+    private fun looksLikeGraphqlInterface(path: String, body: String): Boolean {
+        val isHtml = body.contains("<html") || body.contains("<!doctype") || body.contains("<app-root")
+        if (!isHtml) return false
 
-    private fun looksLikeGraphqlEndpoint(body: String): Boolean {
+        // Known IDE path returning an HTML app shell is enough (e.g. Altair title-only pages).
+        val knownIdePath = path.lowercase().let {
+            it.contains("graphiql") ||
+                it.contains("playground") ||
+                it.contains("altair") ||
+                it.contains("___graphql") ||
+                it.endsWith("/console") ||
+                it.endsWith("/console/")
+        }
+        if (knownIdePath) return true
+
         return body.contains("graphql") && (
-            body.contains("<html") ||
-                body.contains("<!doctype") ||
-                body.contains("react")
+            body.contains("react") ||
+                body.contains("graphiql") ||
+                body.contains("playground") ||
+                body.contains("altair")
             )
     }
 }

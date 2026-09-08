@@ -1,5 +1,6 @@
 package inql.attackvector.tests
 
+import inql.attackvector.GraphqlProbe
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -11,54 +12,27 @@ object GetMutationSupportTest : ScannerTest {
     override val description = "Checks whether GraphQL mutations can be executed over HTTP GET."
 
     override suspend fun run(context: ScanContext): TestResult {
-        val exchange = context.http.sendGetOperation("mutation { __typename }")
-        val evidence = exchange.toEvidence()
-        val json = exchange.asJsonOrNull()
-
-        return when {
-            exchange.statusCode in 500..599 -> TestResult(
-                name,
-                TestStatus.UNCERTAIN,
-                "Server returned HTTP ${exchange.statusCode} for GET mutation (ambiguous).",
-                evidence,
-            )
-            json?.optJSONObject("data")?.optString("__typename")?.isNotBlank() == true -> TestResult(
-                name,
-                TestStatus.VULNERABLE,
-                "GET mutation appears to execute (data returned). This is a security misconfiguration.",
-                evidence,
-            )
-            GetQuerySupportTest.indicatesMethodRejection(json, exchange.body) -> TestResult(
+        val queryExchange = context.http.sendGetOperation("query { __typename }")
+        val queryText = GraphqlProbe.responseText(queryExchange.asJsonOrNull(), queryExchange.body)
+        if (queryExchange.statusCode == 405 || GraphqlProbe.indicatesGetTransportRejection(queryText)) {
+            return TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
-                "GET mutation rejected.",
-                evidence,
-            )
-            json?.optJSONArray("errors") != null -> {
-                val errors = json.optJSONArray("errors").toString().lowercase()
-                if (errors.contains("mutation") && errors.contains("get")) {
-                    TestResult(name, TestStatus.NOT_VULNERABLE, "Server rejects GET mutations explicitly.", evidence)
-                } else {
-                    TestResult(
-                        name,
-                        TestStatus.NOT_VULNERABLE,
-                        "GET mutation rejected with validation errors.",
-                        evidence,
-                    )
-                }
-            }
-            exchange.statusCode in 400..499 -> TestResult(
-                name,
-                TestStatus.INACCESSIBLE,
-                "GET mutation probe inaccessible (HTTP ${exchange.statusCode}).",
-                evidence,
-            )
-            else -> TestResult(
-                name,
-                TestStatus.UNCERTAIN,
-                "GET mutation response could not be classified (HTTP ${exchange.statusCode}).",
-                evidence,
+                "GET GraphQL queries are not accepted, so GET mutations are not exposed.",
+                queryExchange.toEvidence(),
             )
         }
+
+        val exchange = context.http.sendGetOperation("mutation { __typename }")
+        return GraphqlProbe.classifyTransportProbe(
+            name = name,
+            exchange = exchange,
+            executedDetail = "GET mutation executed (data returned). This is a security misconfiguration.",
+            graphqlAcceptedDetail = "GET accepted a mutation document. Mutations over GET are enabled at the transport layer.",
+            rejectedDetail = "Server rejects GET mutations.",
+            isTransportRejection = { text ->
+                GraphqlProbe.indicatesGetMutationRefusal(text) || GraphqlProbe.indicatesGetTransportRejection(text)
+            },
+        )
     }
 }

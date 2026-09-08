@@ -14,15 +14,13 @@ import javax.swing.ListSelectionModel
 import javax.swing.SwingConstants
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
-import javax.swing.table.JTableHeader
 
 class ScanResultsTable(
-    private val results: MutableList<TestResult>,
     private val onResultSelected: (TestResult?) -> Unit,
 ) : AbstractTableModel() {
 
+    private val results = mutableListOf<TestResult>()
     private val columns = listOf("Test", "Status")
-
     private var suppressSelectionEvents = false
 
     val table = JTable(this).apply {
@@ -230,7 +228,7 @@ class ScanResultsTable(
                 <html><body style='margin:0;padding:0;text-align:center'>
                 <span style='background-color:rgb(${badge.background.red},${badge.background.green},${badge.background.blue});
                 color:rgb(${badge.foreground.red},${badge.foreground.green},${badge.foreground.blue});
-                padding:4px 12px;font-weight:bold;font-size:11px'>$label</span>
+                padding:4px 12px;font-weight:bold;font-size:11px'>${ProbeUtils.htmlEscape(label)}</span>
                 </body></html>
             """.trimIndent()
             return component
@@ -291,10 +289,8 @@ class ScanResultsTable(
             }
         }
 
-        private fun darkMode(): Boolean = Burp.isDarkMode()
-
         fun rowBackground(rowIndex: Int): Color {
-            val dark = darkMode()
+            val dark = Burp.isDarkMode()
             return if (rowIndex % 2 == 0) {
                 if (dark) Color(43, 43, 43) else Color(255, 255, 255)
             } else {
@@ -303,27 +299,15 @@ class ScanResultsTable(
         }
 
         fun primaryTextColor(): Color {
-            return if (darkMode()) Color(230, 230, 230) else Color(33, 33, 33)
+            return if (Burp.isDarkMode()) Color(230, 230, 230) else Color(33, 33, 33)
         }
 
         fun mutedTextColor(): Color {
-            return if (darkMode()) Color(158, 158, 158) else Color(117, 117, 117)
+            return if (Burp.isDarkMode()) Color(158, 158, 158) else Color(117, 117, 117)
         }
 
         fun borderColor(): Color {
-            return if (darkMode()) Color(70, 70, 70) else Color(224, 224, 224)
+            return if (Burp.isDarkMode()) Color(70, 70, 70) else Color(224, 224, 224)
         }
-
-        fun borderColorStatic(): Color = borderColor()
     }
-
-    private fun rowBackground(rowIndex: Int): Color = Companion.rowBackground(rowIndex)
-
-    private fun primaryTextColor(): Color = Companion.primaryTextColor()
-
-    private fun mutedTextColor(): Color = Companion.mutedTextColor()
-
-    private fun borderColor(): Color = Companion.borderColor()
-
-    private fun badgeColors(status: TestStatus): BadgeColors = Companion.badgeColors(status)
 }

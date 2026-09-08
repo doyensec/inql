@@ -25,7 +25,6 @@ enum class TestStatus(val label: String) {
 
 enum class DetailsFormat {
     PLAIN,
-    MARKDOWN,
     HTML,
 }
 
@@ -49,7 +48,6 @@ data class ScanConfig(
 
 data class ScanContext(
     val client: ThrottledClient,
-    val request: HttpRequest,
     val config: ScanConfig,
     val http: ScanHttpClient,
 ) {

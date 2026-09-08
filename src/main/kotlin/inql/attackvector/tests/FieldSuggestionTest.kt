@@ -1,5 +1,6 @@
 package inql.attackvector.tests
 
+import inql.attackvector.GraphqlProbe
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -10,39 +11,53 @@ object FieldSuggestionTest : ScannerTest {
     override val name = "Field Suggestions"
     override val description = "Checks whether validation errors leak schema details via field suggestions."
 
+    private val suggestionPhrases = listOf(
+        "did you mean",
+        "perhaps you meant",
+        "were you looking for",
+        "suggestion",
+        "suggestions",
+        "hint",
+    )
+
     override suspend fun run(context: ScanContext): TestResult {
         val query = "query { __schema { directive } }"
         val (response, evidence) = context.http.sendQueryExchange(query)
-        val errorsText = response.optJSONArray("errors")?.toString() ?: response.toString()
+        val statusCode = evidence?.statusCode ?: 0
 
-        val suggestionPatterns = listOf(
-            "did you mean",
-            "suggestion",
-            "suggestions",
-            "hint",
-        )
+        if (response == null) {
+            return TestResult(
+                name,
+                if (statusCode in 400..499) TestStatus.INACCESSIBLE else TestStatus.UNCERTAIN,
+                when {
+                    statusCode in 400..499 -> "Field suggestion probe inaccessible (HTTP $statusCode)."
+                    statusCode in 500..599 -> "Server returned HTTP $statusCode for the suggestion probe."
+                    else -> "No parseable JSON response for the suggestion probe."
+                },
+                evidence,
+            )
+        }
+
+        val errors = response.optJSONArray("errors")
+        val errorsText = errors?.toString() ?: ""
 
         return when {
-            suggestionPatterns.any { errorsText.contains(it, ignoreCase = true) } -> TestResult(
+            GraphqlProbe.containsAny(errorsText, suggestionPhrases) -> TestResult(
                 name,
                 TestStatus.VULNERABLE,
                 "Server exposes field suggestions in validation errors (possible information disclosure).",
                 evidence,
             )
-            response.optJSONArray("errors") != null -> TestResult(
+            errors != null && errors.length() > 0 -> TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
                 "Validation error returned without field suggestions.",
                 evidence,
             )
-            response.length() == 0 || (evidence?.statusCode ?: 0) in 400..499 -> TestResult(
+            statusCode in 500..599 -> TestResult(
                 name,
-                TestStatus.INACCESSIBLE,
-                if ((evidence?.statusCode ?: 0) in 400..499) {
-                    "Field suggestion probe inaccessible (HTTP ${evidence?.statusCode})."
-                } else {
-                    "No parseable response for the suggestion probe."
-                },
+                TestStatus.UNCERTAIN,
+                "Server returned HTTP $statusCode for the suggestion probe.",
                 evidence,
             )
             else -> TestResult(

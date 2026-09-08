@@ -17,26 +17,22 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class ScanHttpClient(
-    private val baseRequest: HttpRequest,
+    val baseRequest: HttpRequest,
     val throttled: ThrottledClient,
 ) {
     private val gson = Gson()
 
-    suspend fun sendQuery(query: String): JSONObject = throttled.send(query)
-
-    suspend fun sendQueryExchange(query: String): Pair<JSONObject, TestEvidence?> {
-        val req = buildQueryRequest(query)
-        val exchange = sendRequest(req)
-        val json = exchange.asJsonOrNull() ?: JSONObject()
-        return Pair(json, exchange.toEvidence())
+    suspend fun sendQueryExchange(query: String): Pair<JSONObject?, TestEvidence?> {
+        val exchange = sendRequest(buildQueryRequest(query))
+        return Pair(exchange.asJsonOrNull(), exchange.toEvidence())
     }
 
     fun buildQueryRequest(query: String): HttpRequest {
-        val body = gson.toJson(mapOf("query" to query))
-        return baseRequest
-            .withMethod("POST")
-            .withUpsertedHeader("Content-Type", "application/json")
-            .withBody(body)
+        return GraphQLRequestTransformer.applyPayload(
+            baseRequest,
+            GraphQLRequestPayload.single(query),
+            GraphQLRequestContext(GraphQLTransportFormat.JSON),
+        )
     }
 
     suspend fun sendRequest(request: HttpRequest): HttpExchange {
@@ -45,11 +41,7 @@ class ScanHttpClient(
     }
 
     suspend fun sendJsonBody(body: String): HttpExchange {
-        val req = baseRequest
-            .withMethod("POST")
-            .withUpsertedHeader("Content-Type", "application/json")
-            .withBody(body)
-        return sendRequest(req)
+        return sendRequest(GraphQLRequestTransformer.applyRawJsonBody(baseRequest, body))
     }
 
     suspend fun sendBatchArray(count: Int, query: String = "query { __typename }"): HttpExchange {
@@ -83,14 +75,13 @@ class ScanHttpClient(
     }
 
     suspend fun sendFederationSdlExchange(): HttpExchange {
-        return sendJsonBody("""{"query":"query{_service{sdl}}","operationName":null}""")
+        return sendRequest(buildQueryRequest("query { _service { sdl } }"))
     }
 
     suspend fun sendIntrospectionExchange(): HttpExchange {
         var lastExchange: HttpExchange? = null
         for (version in IntrospectionQuery.Version.entries.asReversed()) {
-            val body = gson.toJson(mapOf("query" to IntrospectionQuery.get(version)))
-            val exchange = sendJsonBody(body)
+            val exchange = sendRequest(buildQueryRequest(IntrospectionQuery.get(version)))
             lastExchange = exchange
             val json = exchange.asJsonOrNull()
             if (json?.optJSONObject("data")?.optJSONObject("__schema") != null) {
@@ -104,7 +95,14 @@ class ScanHttpClient(
     }
 
     suspend fun probePath(path: String): HttpExchange {
-        return sendRequest(baseRequest.withPath(path))
+        // Clean POST probe for IDE/HTML discovery — do not replay the GraphQL body.
+        val req = baseRequest
+            .withMethod("POST")
+            .withPath(path)
+            .withBody("")
+            .withoutContentHeaders()
+            .withUpsertedHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        return sendRequest(req)
     }
 
     suspend fun probePathGet(path: String): HttpExchange {
@@ -113,6 +111,7 @@ class ScanHttpClient(
             .withPath(path)
             .withBody("")
             .withoutContentHeaders()
+            .withUpsertedHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
         return sendRequest(req)
     }
 

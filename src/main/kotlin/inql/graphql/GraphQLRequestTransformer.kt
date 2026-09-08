@@ -339,6 +339,10 @@ object GraphQLRequestTransformer {
         return toPostRequest(request, "application/graphql", payload.query)
     }
 
+    fun applyRawJsonBody(request: HttpRequest, body: String): HttpRequest {
+        return toPostRequest(request, "application/json", body)
+    }
+
     private fun toJsonRequest(request: HttpRequest, payload: GraphQLRequestPayload): HttpRequest {
         return toPostRequest(request, "application/json", buildJsonBody(payload))
     }

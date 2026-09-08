@@ -1,5 +1,6 @@
 package inql.attackvector.tests
 
+import inql.attackvector.GraphqlProbe
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -14,45 +15,52 @@ object IntrospectionTest : ScannerTest {
     override suspend fun run(context: ScanContext): TestResult {
         val exchange = context.http.sendIntrospectionExchange()
         val evidence = exchange.toEvidence()
-        val raw = exchange.body.takeIf { it.isNotBlank() }
-
-        if (raw == null || exchange.statusCode >= 400) {
-            return TestResult(
-                name,
-                TestStatus.NOT_VULNERABLE,
-                "Introspection query rejected or returned errors (HTTP ${exchange.statusCode}).",
-                evidence,
-            )
-        }
-
         val json = exchange.asJsonOrNull()
-        if (json?.has("errors") == true) {
-            return TestResult(
-                name,
-                TestStatus.NOT_VULNERABLE,
-                "Introspection query rejected or returned errors.",
-                evidence,
-            )
-        }
+        val text = GraphqlProbe.responseText(json, exchange.body)
 
-        return if (isValidIntrospectionSchema(raw)) {
-            TestResult(
+        if (isValidIntrospectionSchema(exchange.body)) {
+            return TestResult(
                 name,
                 TestStatus.VULNERABLE,
                 "Public introspection is enabled. Response contains a valid __schema with types.",
                 evidence,
             )
-        } else {
-            TestResult(
+        }
+
+        if (GraphqlProbe.indicatesIntrospectionUnavailable(text)) {
+            return TestResult(
                 name,
-                TestStatus.UNCERTAIN,
-                "Introspection query returned 200 but response could not be verified as a valid schema.",
+                TestStatus.NOT_VULNERABLE,
+                if (GraphqlProbe.indicatesIntrospectionDisabled(text) && !GraphqlProbe.indicatesUnknownField(text, "__schema")) {
+                    "Server disabled introspection."
+                } else {
+                    "Introspection is not available (__schema is missing or not exposed on this schema)."
+                },
                 evidence,
             )
         }
+
+        GraphqlProbe.classifyHttpFailure(name, exchange)?.let { return it }
+
+        if (exchange.statusCode in 400..499 && !GraphqlProbe.isGraphqlJson(json)) {
+            return TestResult(
+                name,
+                TestStatus.INACCESSIBLE,
+                "Introspection probe inaccessible (HTTP ${exchange.statusCode}).",
+                evidence,
+            )
+        }
+
+        return TestResult(
+            name,
+            TestStatus.UNCERTAIN,
+            "Introspection response could not be classified (HTTP ${exchange.statusCode}).",
+            evidence,
+        )
     }
 
     private fun isValidIntrospectionSchema(raw: String): Boolean {
+        if (raw.isBlank()) return false
         return try {
             val json = JSONObject(raw)
             val schema = json.optJSONObject("data")?.optJSONObject("__schema") ?: return false

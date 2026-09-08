@@ -4,7 +4,12 @@ import burp.Burp
 import burp.api.montoya.http.message.requests.HttpRequest
 import inql.InQL
 import inql.Logger
+import inql.attackvector.tests.BatchAliasLimitTest
+import inql.attackvector.tests.BatchArrayLimitTest
+import inql.attackvector.tests.QueryComplexityLimitTest
+import inql.attackvector.tests.QueryDepthLimitTest
 import inql.bruteforcer.ThrottledClient
+import inql.fingerprinter.EngineFingerprintReport
 import inql.graphql.formatting.Style
 import inql.ui.BorderPanel
 import inql.ui.CheckBox
@@ -12,18 +17,15 @@ import inql.ui.HtmlScrollPane
 import inql.ui.MessageEditor
 import inql.ui.Spinner
 import inql.ui.applyEqualSplit
-import inql.fingerprinter.EngineFingerprintReport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.swing.Swing
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
-import javax.swing.SwingUtilities
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
@@ -32,11 +34,8 @@ import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.GridLayout
 import java.awt.Toolkit
-import java.awt.Desktop
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
-import java.net.URI
-import javax.swing.event.HyperlinkEvent
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
@@ -47,11 +46,14 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 import javax.swing.JTextField
+import javax.swing.SwingUtilities
+import kotlin.coroutines.coroutineContext
 
 class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListener {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var scanJob: Job? = null
+    @Volatile private var scanGeneration = 0
 
     private val urlField = JTextField()
     private val startButton = JButton("Start Scan").also {
@@ -82,25 +84,16 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
         test.id to CheckBox(test.name, selected = true)
     }
 
-    private val results = mutableListOf<TestResult>()
     private val detailsPane = JEditorPane().apply {
         contentType = "text/html"
         isEditable = false
         border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
-        addHyperlinkListener { e ->
-            if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-                try {
-                    Desktop.getDesktop().browse(URI(e.url.toString()))
-                } catch (ex: Exception) {
-                    Logger.error("Failed to open link: ${ex.message}")
-                }
-            }
-        }
+        HtmlScrollPane.attachHyperlinkHandler(this)
     }
     private val evidenceViewer = MessageEditor(readOnly = true)
     private lateinit var bottomSplit: JSplitPane
     private lateinit var rightSplit: JSplitPane
-    private val resultsTable = ScanResultsTable(results) { result ->
+    private val resultsTable = ScanResultsTable { result ->
         showResultDetails(result)
     }
 
@@ -188,7 +181,7 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
         val resultsScroll = resultsTable.scrollPane.apply {
             border = BorderFactory.createCompoundBorder(
                 BorderFactory.createTitledBorder(
-                    BorderFactory.createLineBorder(ScanResultsTable.borderColorStatic()),
+                    BorderFactory.createLineBorder(ScanResultsTable.borderColor()),
                     "Results",
                 ),
                 BorderFactory.createEmptyBorder(0, 0, 0, 0),
@@ -234,15 +227,8 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
         }
 
         Burp.Montoya.userInterface().applyThemeToComponent(horizontalSplit)
-        configureDetailsPane()
         evidenceViewer.isVisible = false
         add(horizontalSplit)
-    }
-
-    private fun configureDetailsPane() {
-        detailsPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, false)
-        detailsPane.contentType = "text/html"
-        detailsPane.isEditable = false
     }
 
     private fun buildConfigPanel(): JPanel {
@@ -314,23 +300,27 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
     }
 
     private fun spinnerForTest(testId: String): Spinner? = when (testId) {
-        "query_depth" -> maxDepthSpinner
-        "query_complexity" -> maxComplexitySpinner
-        // Shared by array and alias batch tests; shown once under the array entry.
-        "batch_array" -> maxBatchSpinner
+        QueryDepthLimitTest.id -> maxDepthSpinner
+        QueryComplexityLimitTest.id -> maxComplexitySpinner
+        BatchArrayLimitTest.id -> maxBatchSpinner
         else -> null
     }
 
     private fun wireLimitSpinnerEnablement() {
         fun refresh() {
-            maxDepthSpinner.isEnabled = testCheckboxes.getValue("query_depth").isSelected()
-            maxComplexitySpinner.isEnabled = testCheckboxes.getValue("query_complexity").isSelected()
+            maxDepthSpinner.isEnabled = testCheckboxes.getValue(QueryDepthLimitTest.id).isSelected()
+            maxComplexitySpinner.isEnabled = testCheckboxes.getValue(QueryComplexityLimitTest.id).isSelected()
             maxBatchSpinner.isEnabled =
-                testCheckboxes.getValue("batch_array").isSelected() ||
-                    testCheckboxes.getValue("batch_alias").isSelected()
+                testCheckboxes.getValue(BatchArrayLimitTest.id).isSelected() ||
+                    testCheckboxes.getValue(BatchAliasLimitTest.id).isSelected()
         }
 
-        listOf("query_depth", "query_complexity", "batch_array", "batch_alias").forEach { id ->
+        listOf(
+            QueryDepthLimitTest.id,
+            QueryComplexityLimitTest.id,
+            BatchArrayLimitTest.id,
+            BatchAliasLimitTest.id,
+        ).forEach { id ->
             testCheckboxes.getValue(id).addItemListener { refresh() }
         }
         refresh()
@@ -339,15 +329,20 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
     override fun actionPerformed(e: ActionEvent?) {
         Logger.debug("Attack Vector Scanner: start scan")
         scanJob?.cancel()
+        val generation = ++scanGeneration
         scanJob = coroutineScope.launch {
-            runScan()
+            runScan(generation)
         }
     }
 
     fun cancel() {
         scanJob?.cancel()
+        // Bump generation so an in-flight probe cannot overwrite CANCELLED rows.
+        val generation = ++scanGeneration
         SwingUtilities.invokeLater {
+            if (generation != scanGeneration) return@invokeLater
             applyCancelledScanState()
+            setScanning(false)
         }
     }
 
@@ -363,101 +358,96 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
             }
         }
         resultsTable.setResults(updated)
-        setScanning(false)
     }
 
-    private suspend fun runScan() {
-        val enabledTests = testCheckboxes.filter { it.value.isSelected() }.keys
-        if (enabledTests.isEmpty()) {
-            withContext(Dispatchers.Swing) {
-                resultsTable.setResults(
-                    listOf(
-                        TestResult(
-                            "Scan",
-                            TestStatus.UNCERTAIN,
-                            "No tests selected.",
-                        ),
-                    ),
-                )
-                showResultDetails(null)
-            }
+    private data class ScanStart(
+        val enabledTests: Set<String>,
+        val targetUrl: String?,
+        val request: HttpRequest,
+        val config: ScanConfig,
+    )
+
+    private suspend fun runScan(generation: Int) {
+        val start = withContext(Dispatchers.Swing) {
+            val enabledTests = testCheckboxes.filter { it.value.isSelected() }.keys
+            ScanStart(
+                enabledTests = enabledTests,
+                targetUrl = resolveTargetUrl(),
+                request = request,
+                config = ScanConfig(
+                    maxDepth = maxDepthSpinner.getCommittedValue(),
+                    maxBatchSize = maxBatchSpinner.getCommittedValue(),
+                    maxComplexity = maxComplexitySpinner.getCommittedValue(),
+                    enabledTests = enabledTests,
+                ),
+            )
+        }
+
+        if (start.enabledTests.isEmpty()) {
+            showScanMessage("No tests selected.")
             return
         }
 
         withContext(Dispatchers.Swing) {
+            if (!isCurrentScan(generation)) return@withContext
             setScanning(true)
         }
 
         try {
             coroutineContext.ensureActive()
+            if (!isCurrentScan(generation)) return
 
-            val targetUrl = resolveTargetUrl()
+            val targetUrl = start.targetUrl
             if (targetUrl == null) {
-                withContext(Dispatchers.Swing) {
-                    resultsTable.setResults(
-                        listOf(
-                            TestResult(
-                                "Scan",
-                                TestStatus.UNCERTAIN,
-                                "Target URL is empty or invalid. Enter a URL or load a GraphQL request first.",
-                            ),
-                        ),
-                    )
-                    showResultDetails(null)
-                }
+                showScanMessage("Target URL is empty or invalid. Enter a URL or load a GraphQL request first.")
                 return
             }
 
             val req = try {
-                request.withService(
+                val uri = java.net.URI.create(targetUrl)
+                var path = uri.path.orEmpty().ifBlank { "/" }
+                if (uri.query?.isNotBlank() == true) {
+                    path = "$path?${uri.query}"
+                }
+                var updated = start.request.withService(
                     burp.api.montoya.http.HttpService.httpService(targetUrl),
-                )
+                ).withPath(path)
+                uri.host?.takeIf { it.isNotBlank() }?.let { host ->
+                    updated = updated.withUpdatedHeader("Host", host)
+                }
+                updated
             } catch (e: Exception) {
                 Logger.error("Attack Vector Scanner: invalid target URL '$targetUrl': ${e.message}")
-                withContext(Dispatchers.Swing) {
-                    resultsTable.setResults(
-                        listOf(
-                            TestResult(
-                                "Scan",
-                                TestStatus.UNCERTAIN,
-                                "Invalid target URL: $targetUrl",
-                            ),
-                        ),
-                    )
-                    showResultDetails(null)
-                }
+                showScanMessage("Invalid target URL: $targetUrl")
                 return
             }
             val client = ThrottledClient(req)
             val http = ScanHttpClient(req, client)
-            val config = ScanConfig(
-                maxDepth = maxDepthSpinner.getCommittedValue(),
-                maxBatchSize = maxBatchSpinner.getCommittedValue(),
-                maxComplexity = maxComplexitySpinner.getCommittedValue(),
-                enabledTests = enabledTests,
-            )
-            val context = ScanContext(client, req, config, http)
+            val context = ScanContext(client, start.config, http)
 
-            val enabledTestList = AttackVectorTestRegistry.allTests.filter { it.isEnabled(config) }
+            val enabledTestList = AttackVectorTestRegistry.allTests.filter { it.isEnabled(start.config) }
             val scanResults = enabledTestList.map { test ->
                 TestResult(test.name, TestStatus.PENDING, "Waiting to run...")
             }.toMutableList()
 
             withContext(Dispatchers.Swing) {
+                if (!isCurrentScan(generation)) return@withContext
                 resultsTable.setResults(scanResults.toList())
                 showResultDetails(null)
             }
 
             for (index in enabledTestList.indices) {
                 coroutineContext.ensureActive()
+                if (!isCurrentScan(generation)) return
                 val test = enabledTestList[index]
 
                 scanResults[index] = TestResult(test.name, TestStatus.RUNNING, "Running...")
                 withContext(Dispatchers.Swing) {
+                    if (!isCurrentScan(generation)) return@withContext
                     resultsTable.setResults(scanResults.toList())
                 }
 
-                scanResults[index] = try {
+                val result = try {
                     test.run(context)
                 } catch (e: CancellationException) {
                     throw e
@@ -470,24 +460,42 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
                     )
                 }
 
+                if (!isCurrentScan(generation)) return
+                scanResults[index] = result
+
                 withContext(Dispatchers.Swing) {
+                    if (!isCurrentScan(generation)) return@withContext
                     resultsTable.setResults(scanResults.toList())
                 }
             }
 
             withContext(Dispatchers.Swing) {
+                if (!isCurrentScan(generation)) return@withContext
                 if (scanResults.isNotEmpty() && resultsTable.table.selectionModel.isSelectionEmpty) {
                     resultsTable.table.selectionModel.setSelectionInterval(0, 0)
                 }
             }
         } catch (_: CancellationException) {
             withContext(NonCancellable + Dispatchers.Swing) {
+                if (!isCurrentScan(generation)) return@withContext
                 applyCancelledScanState()
             }
         } finally {
             withContext(NonCancellable + Dispatchers.Swing) {
+                if (!isCurrentScan(generation)) return@withContext
                 setScanning(false)
             }
+        }
+    }
+
+    private fun isCurrentScan(generation: Int): Boolean = generation == scanGeneration
+
+    private suspend fun showScanMessage(details: String) {
+        withContext(Dispatchers.Swing) {
+            resultsTable.setResults(
+                listOf(TestResult("Scan", TestStatus.UNCERTAIN, details)),
+            )
+            showResultDetails(null)
         }
     }
 
@@ -521,7 +529,6 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
             return
         }
 
-        configureDetailsPane()
         EngineFingerprintReport.applyHtml(detailsPane, ScanResultDetailsRenderer.render(result))
 
         val evidence = result.evidence

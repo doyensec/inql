@@ -7,7 +7,6 @@ object ScanResultDetailsRenderer {
     fun render(result: TestResult): String {
         return when (result.detailsFormat) {
             DetailsFormat.HTML -> result.details
-            DetailsFormat.MARKDOWN -> EngineFingerprintReport.htmlForMarkdown(result.details)
             DetailsFormat.PLAIN -> EngineFingerprintReport.wrapHtmlBody(
                 renderPlainBody(result.details, ScanResultsTable.statusColor(result.status)),
             )
@@ -15,10 +14,7 @@ object ScanResultDetailsRenderer {
     }
 
     private fun renderPlainBody(text: String, color: Color): String {
-        val escaped = text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
+        val escaped = ProbeUtils.htmlEscape(text)
             .replace("\r\n", "\n")
             .replace("\r", "\n")
             .replace("\n", "<br>")

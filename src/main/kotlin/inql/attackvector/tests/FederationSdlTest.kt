@@ -1,5 +1,6 @@
 package inql.attackvector.tests
 
+import inql.attackvector.GraphqlProbe
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -14,6 +15,8 @@ object FederationSdlTest : ScannerTest {
         val exchange = context.http.sendFederationSdlExchange()
         val evidence = exchange.toEvidence()
         val sdl = parseFederationSdl(exchange.body)
+        val json = exchange.asJsonOrNull()
+        val text = GraphqlProbe.responseText(json, exchange.body)
 
         return when {
             sdl != null && sdl.contains("type") -> TestResult(
@@ -28,16 +31,16 @@ object FederationSdlTest : ScannerTest {
                 "Federation SDL endpoint responded but the SDL content could not be verified.",
                 evidence,
             )
-            exchange.asJsonOrNull()?.has("errors") == true -> TestResult(
+            GraphqlProbe.indicatesFederationUnavailable(text) -> TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
-                "Federation SDL query rejected or unavailable.",
+                "Federation _service { sdl } is not available on this schema.",
                 evidence,
             )
-            else -> TestResult(
+            else -> GraphqlProbe.classifyHttpFailure(name, exchange) ?: TestResult(
                 name,
-                TestStatus.NOT_VULNERABLE,
-                "Federation SDL query rejected or unavailable (HTTP ${exchange.statusCode}).",
+                TestStatus.UNCERTAIN,
+                "Federation SDL response could not be classified (HTTP ${exchange.statusCode}).",
                 evidence,
             )
         }
