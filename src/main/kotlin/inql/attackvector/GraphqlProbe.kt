@@ -2,6 +2,10 @@ package inql.attackvector
 
 import org.json.JSONObject
 
+enum class RejectionSignal { NONE, WEAK, STRONG }
+
+fun maxSignal(a: RejectionSignal, b: RejectionSignal): RejectionSignal = if (a.ordinal >= b.ordinal) a else b
+
 object GraphqlProbe {
     fun isGraphqlJson(json: JSONObject?): Boolean {
         return json != null && (json.has("data") || json.has("errors"))
@@ -20,101 +24,102 @@ object GraphqlProbe {
         return phrases.any { haystack.contains(it) }
     }
 
-    fun indicatesGetTransportRejection(text: String): Boolean {
+    fun signalFor(text: String, strong: List<String>, weak: List<String>): RejectionSignal {
         val t = text.lowercase()
-        if (containsAny(
-                t,
-                listOf(
-                    "method not allowed",
-                    "must be post",
-                    "only post",
-                    "http method is not allowed",
-                    "get query is not allowed",
-                    "get queries are not allowed",
-                    "get request is not allowed",
-                    "get requests are not allowed",
-                    "queries cannot be performed via get",
-                    "graphql queries must be posted",
-                    "only supports post",
-                    "only support post",
-                    "get is not supported",
-                    "get not supported",
-                    // Broader tokens from the original scanner.
-                    "get query",
-                    "get request",
-                    "get queries",
-                    "get requests",
-                ),
-            )
-        ) {
-            return true
-        }
-        // Old scanner matched bare "not allowed"; keep it only when GET is mentioned.
-        return t.contains("get") && t.contains("not allowed")
+        if (containsAny(t, strong)) return RejectionSignal.STRONG
+        if (containsAny(t, weak)) return RejectionSignal.WEAK
+        return RejectionSignal.NONE
     }
 
-    fun indicatesGetMutationRefusal(text: String): Boolean {
+    private val getTransportRejectionStrongPhrases = listOf(
+        "method not allowed",
+        "must be post",
+        "only post",
+        "http method is not allowed",
+        "get query is not allowed",
+        "get queries are not allowed",
+        "get request is not allowed",
+        "get requests are not allowed",
+        "queries cannot be performed via get",
+        "graphql queries must be posted",
+        "only supports post",
+        "only support post",
+        "get is not supported",
+        "get not supported",
+    )
+
+    private val getTransportRejectionWeakPhrases = listOf(
+        "get query",
+        "get request",
+        "get queries",
+        "get requests",
+    )
+
+    fun getTransportRejectionSignal(text: String): RejectionSignal {
         val t = text.lowercase()
-        if (containsAny(
-                t,
-                listOf(
-                    "mutations can only be sent using post",
-                    "mutation can only be sent using post",
-                    "mutations must be sent using post",
-                    "mutation must be sent using post",
-                    "mutations are not allowed via get",
-                    "mutation is not allowed via get",
-                    "http get is not allowed for mutation",
-                    "get is not allowed for mutation",
-                    "schema is not configured for mutations",
-                    "schema is not configured for mutation",
-                    "mutation type is not configured",
-                    "schema does not define a mutation",
-                    "no mutation type",
-                ),
-            )
-        ) {
-            return true
-        }
-        if (!t.contains("mutation")) return false
+        val strongOrWeak = signalFor(t, getTransportRejectionStrongPhrases, getTransportRejectionWeakPhrases)
+        if (strongOrWeak != RejectionSignal.NONE) return strongOrWeak
+        return if (t.contains("get") && t.contains("not allowed")) RejectionSignal.WEAK else RejectionSignal.NONE
+    }
+
+    private val getMutationRefusalStrongPhrases = listOf(
+        "mutations can only be sent using post",
+        "mutation can only be sent using post",
+        "mutations must be sent using post",
+        "mutation must be sent using post",
+        "mutations are not allowed via get",
+        "mutation is not allowed via get",
+        "http get is not allowed for mutation",
+        "get is not allowed for mutation",
+        "schema is not configured for mutations",
+        "schema is not configured for mutation",
+        "mutation type is not configured",
+        "schema does not define a mutation",
+        "no mutation type",
+    )
+
+    private val getMutationRefusalWeakPhrases = listOf(
+        "not allowed",
+        "cannot",
+        "can't",
+        "only support",
+        "only supports",
+        "queries only",
+        "must be post",
+        "use post",
+        "not supported",
+    )
+
+    fun getMutationRefusalSignal(text: String): RejectionSignal {
+        val t = text.lowercase()
+        if (containsAny(t, getMutationRefusalStrongPhrases)) return RejectionSignal.STRONG
+        if (!t.contains("mutation")) return RejectionSignal.NONE
         if (t.contains("get") || t.contains("post")) {
-            return containsAny(
-                t,
-                listOf(
-                    "not allowed",
-                    "cannot",
-                    "can't",
-                    "only support",
-                    "only supports",
-                    "queries only",
-                    "must be post",
-                    "use post",
-                    "not supported",
-                ),
-            )
+            if (containsAny(t, getMutationRefusalWeakPhrases)) return RejectionSignal.WEAK
         }
-        return false
+        return RejectionSignal.NONE
     }
 
-    fun indicatesContentTypeRejection(text: String): Boolean {
-        return containsAny(
-            text,
-            listOf(
-                "content-type",
-                "content type",
-                "unsupported media",
-                "must be json",
-                "application/json required",
-                "expected application/json",
-                "unsupported content type",
-                "invalid content type",
-                // Broader tokens from the original CSRF classifier.
-                "application/json",
-                "invalid request",
-                "bad request",
-                "parse",
-            ),
-        )
+    private val contentTypeRejectionStrongPhrases = listOf(
+        "content-type",
+        "content type",
+        "unsupported media",
+        "must be json",
+        "application/json required",
+        "expected application/json",
+        "unsupported content type",
+        "invalid content type",
+    )
+
+    private val contentTypeRejectionWeakPhrases = listOf(
+        "application/json",
+        "invalid request",
+        "bad request",
+        "parse",
+    )
+
+    fun contentTypeRejectionSignal(text: String): RejectionSignal {
+        return signalFor(text, contentTypeRejectionStrongPhrases, contentTypeRejectionWeakPhrases)
     }
 
     /**
@@ -294,7 +299,7 @@ object GraphqlProbe {
         executedDetail: String,
         graphqlAcceptedDetail: String,
         rejectedDetail: String,
-        isTransportRejection: (String) -> Boolean,
+        isTransportRejection: (String) -> RejectionSignal,
     ): TestResult {
         val evidence = exchange.toEvidence()
         val json = exchange.asJsonOrNull()
@@ -314,11 +319,6 @@ object GraphqlProbe {
             return TestResult(name, TestStatus.VULNERABLE, executedDetail, evidence)
         }
 
-        if (isTransportRejection(text) || indicatesInvalidGraphqlRequest(text) || status == 405) {
-            return TestResult(name, TestStatus.NOT_VULNERABLE, rejectedDetail, evidence)
-        }
-
-        // Auth / missing endpoint before treating GraphQL JSON as transport acceptance.
         classifyHttpFailure(name, exchange)?.let { return it }
 
         if (indicatesAuthFailure(text)) {
@@ -330,10 +330,24 @@ object GraphqlProbe {
             )
         }
 
+        val rejection = isTransportRejection(text)
+        if (rejection == RejectionSignal.STRONG || indicatesInvalidGraphqlRequest(text) || status == 405) {
+            return TestResult(name, TestStatus.NOT_VULNERABLE, rejectedDetail, evidence)
+        }
+
         // GraphQL JSON on success or validation-style 400 means the transport parsed the operation.
         // Format/gateway rejections above must not reach here (Stellate-style INVALID_QUERY, etc.).
         if (isGraphqlJson(json) && (status in 200..299 || status == 400)) {
             return TestResult(name, TestStatus.VULNERABLE, graphqlAcceptedDetail, evidence)
+        }
+
+        if (rejection == RejectionSignal.WEAK) {
+            return TestResult(
+                name,
+                TestStatus.UNCERTAIN,
+                "$rejectedDetail (evidence was generic wording; verify manually).",
+                evidence,
+            )
         }
 
         if (status in 400..499) {

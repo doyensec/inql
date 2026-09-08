@@ -19,7 +19,7 @@ object GetQuerySupportTest : ScannerTest {
             executedDetail = "GET query executed successfully (data.__typename present).",
             graphqlAcceptedDetail = "GET accepted a GraphQL query document.",
             rejectedDetail = "GET query rejected (method or transport not allowed).",
-            isTransportRejection = GraphqlProbe::indicatesGetTransportRejection,
+            isTransportRejection = GraphqlProbe::getTransportRejectionSignal,
         )
     }
 }

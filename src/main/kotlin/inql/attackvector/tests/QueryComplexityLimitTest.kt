@@ -2,6 +2,7 @@ package inql.attackvector.tests
 
 import inql.attackvector.GraphqlProbe
 import inql.attackvector.ProbeUtils
+import inql.attackvector.RejectionSignal
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -13,7 +14,7 @@ object QueryComplexityLimitTest : ScannerTest {
     override val name = "Query Complexity Limits"
     override val description = "Sends increasingly expensive queries to detect complexity or cost limits."
 
-    private val complexityLimitPhrases = listOf(
+    private val strongComplexityLimitPhrases = listOf(
         "too complex",
         "query complexity",
         "complexity limit",
@@ -30,16 +31,13 @@ object QueryComplexityLimitTest : ScannerTest {
         "query is too complex",
         "exceeded cost",
         "exceeds cost",
-        // Broader tokens from the original scanner.
-        "complexity",
-        "cost",
     )
+
+    private val weakComplexityLimitPhrases = listOf("complexity", "cost")
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxComplexity = context.config.maxComplexity
 
-        // Complexity probing needs a working __schema query. Unknown/missing __schema proves nothing
-        // about cost limits — stop instead of looping ambiguous probes.
         val baselineExchange = context.http.sendRequest(context.http.buildQueryRequest(generateComplexityQuery(1)))
         val baselineJson = baselineExchange.asJsonOrNull()
         val baselineText = GraphqlProbe.responseText(baselineJson, baselineExchange.body)
@@ -145,18 +143,15 @@ object QueryComplexityLimitTest : ScannerTest {
         }
 
         // Depth limiters can still trip on large documents — don't mis-label as complexity.
-        val clearDepth = QueryDepthLimitTest.depthLimitPhrases
-            .filter { it != "depth" }
-            .any { errorsText.lowercase().contains(it) }
-        val hasComplexity = GraphqlProbe.containsAny(errorsText, complexityLimitPhrases)
-        if (clearDepth && !hasComplexity) {
+        val clearDepth = GraphqlProbe.containsAny(errorsText, QueryDepthLimitTest.strongDepthLimitPhrases)
+        val complexitySignal = GraphqlProbe.signalFor(errorsText, strongComplexityLimitPhrases, weakComplexityLimitPhrases)
+        if (clearDepth && complexitySignal != RejectionSignal.STRONG) {
             return ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
 
-        if (hasComplexity) {
-            return ProbeUtils.LimitProbeStatus.LIMITED
+        return when (complexitySignal) {
+            RejectionSignal.STRONG -> ProbeUtils.LimitProbeStatus.LIMITED
+            else -> ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
-
-        return ProbeUtils.LimitProbeStatus.AMBIGUOUS
     }
 }

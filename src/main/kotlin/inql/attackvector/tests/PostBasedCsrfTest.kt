@@ -19,7 +19,7 @@ object PostBasedCsrfTest : ScannerTest {
                 "This may enable CSRF via simple HTML forms.",
             graphqlAcceptedDetail = "Server parsed a URL-encoded POST as GraphQL. This may enable CSRF via simple HTML forms.",
             rejectedDetail = "URL-encoded POST GraphQL query rejected or not supported.",
-            isTransportRejection = GraphqlProbe::indicatesContentTypeRejection,
+            isTransportRejection = GraphqlProbe::contentTypeRejectionSignal,
         )
     }
 }

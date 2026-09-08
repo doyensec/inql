@@ -28,9 +28,10 @@ class ScanHttpClient(
     }
 
     fun buildQueryRequest(query: String): HttpRequest {
+        val (namedQuery, operationName) = ensureNamedOperation(query)
         return GraphQLRequestTransformer.applyPayload(
             baseRequest,
-            GraphQLRequestPayload.single(query),
+            GraphQLRequestPayload.single(namedQuery, operationName = operationName),
             GraphQLRequestContext(GraphQLTransportFormat.JSON),
         )
     }
@@ -45,17 +46,20 @@ class ScanHttpClient(
     }
 
     suspend fun sendBatchArray(count: Int, query: String = "query { __typename }"): HttpExchange {
+        val (namedQuery, operationName) = ensureNamedOperation(query)
         val array = JsonArray()
         repeat(count) {
             val entry = JsonObject()
-            entry.addProperty("query", query)
+            entry.addProperty("query", namedQuery)
+            if (operationName != null) entry.addProperty("operationName", operationName)
             array.add(entry)
         }
         return sendJsonBody(gson.toJson(array))
     }
 
     suspend fun sendGetOperation(query: String): HttpExchange {
-        val payload = GraphQLRequestPayload.single(query)
+        val (namedQuery, operationName) = ensureNamedOperation(query)
+        val payload = GraphQLRequestPayload.single(namedQuery, operationName = operationName)
         val req = GraphQLRequestTransformer.applyPayload(
             baseRequest.withMethod("GET"),
             payload,
@@ -65,13 +69,23 @@ class ScanHttpClient(
     }
 
     suspend fun sendFormUrlEncodedOperation(query: String): HttpExchange {
-        val payload = GraphQLRequestPayload.single(query)
+        val (namedQuery, operationName) = ensureNamedOperation(query)
+        val payload = GraphQLRequestPayload.single(namedQuery, operationName = operationName)
         val req = GraphQLRequestTransformer.applyPayload(
             baseRequest.withMethod("POST"),
             payload,
             GraphQLRequestContext(GraphQLTransportFormat.FORM_URLENCODED),
         )
         return sendRequest(req)
+    }
+
+    private fun ensureNamedOperation(query: String): Pair<String, String?> {
+        val match = OPERATION_HEADER.find(query) ?: return query to null
+        val keyword = match.groupValues[1]
+        val existingName = match.groupValues[2].takeIf { it.isNotBlank() }
+        if (existingName != null) return query to existingName
+        val remainder = query.substring(match.range.last + 1)
+        return "$keyword $PROBE_OPERATION_NAME $remainder" to PROBE_OPERATION_NAME
     }
 
     suspend fun sendFederationSdlExchange(): HttpExchange {
@@ -138,5 +152,10 @@ class ScanHttpClient(
         } catch (_: Exception) {
             null
         }
+    }
+
+    companion object {
+        private const val PROBE_OPERATION_NAME = "InQLProbe"
+        private val OPERATION_HEADER = Regex("""^\s*(query|mutation|subscription)\b\s*([A-Za-z_]\w*)?""")
     }
 }

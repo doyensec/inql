@@ -1,10 +1,12 @@
 package inql.attackvector.tests
 
 import inql.attackvector.GraphqlProbe
+import inql.attackvector.RejectionSignal
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
+import inql.attackvector.maxSignal
 
 object GetMutationSupportTest : ScannerTest {
     override val id = "get_mutation"
@@ -14,7 +16,7 @@ object GetMutationSupportTest : ScannerTest {
     override suspend fun run(context: ScanContext): TestResult {
         val queryExchange = context.http.sendGetOperation("query { __typename }")
         val queryText = GraphqlProbe.responseText(queryExchange.asJsonOrNull(), queryExchange.body)
-        if (queryExchange.statusCode == 405 || GraphqlProbe.indicatesGetTransportRejection(queryText)) {
+        if (queryExchange.statusCode == 405 || GraphqlProbe.getTransportRejectionSignal(queryText) == RejectionSignal.STRONG) {
             return TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
@@ -31,7 +33,7 @@ object GetMutationSupportTest : ScannerTest {
             graphqlAcceptedDetail = "GET accepted a mutation document. Mutations over GET are enabled at the transport layer.",
             rejectedDetail = "Server rejects GET mutations.",
             isTransportRejection = { text ->
-                GraphqlProbe.indicatesGetMutationRefusal(text) || GraphqlProbe.indicatesGetTransportRejection(text)
+                maxSignal(GraphqlProbe.getMutationRefusalSignal(text), GraphqlProbe.getTransportRejectionSignal(text))
             },
         )
     }

@@ -4,11 +4,13 @@ import inql.BurpScannerCheck
 import inql.attackvector.DetailsFormat
 import inql.attackvector.ProbeUtils
 import inql.attackvector.ScanContext
+import inql.attackvector.ScanHttpClient
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestEvidence
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
 import inql.fingerprinter.EngineFingerprintReport
+import java.util.UUID
 
 object GraphQLInterfacesTest : ScannerTest {
     override val id = "graphql_interfaces"
@@ -42,12 +44,19 @@ object GraphQLInterfacesTest : ScannerTest {
         val probed = mutableListOf<String>()
         var lastEvidence: TestEvidence? = null
 
+        val baselinePath = "/inql-fp-check-${UUID.randomUUID().toString().replace("-", "").take(16)}"
+        val baselines = listOf(context.http.probePath(baselinePath), context.http.probePathGet(baselinePath))
+
         for (path in INTERFACE_PATHS.distinct()) {
             context.ensureActive()
-            for (exchange in listOf(context.http.probePath(path), context.http.probePathGet(path))) {
+            val exchanges = listOf(context.http.probePath(path), context.http.probePathGet(path))
+            for ((exchange, baseline) in exchanges.zip(baselines)) {
                 val method = exchange.request.method()
-                probed.add(formatEndpointLine(path, method, exchange.statusCode))
-                if (exchange.statusCode !in 200..399) continue
+                val isBaselineMatch = exchange.statusCode in 200..399 && matchesBaseline(exchange, baseline)
+                probed.add(
+                    formatEndpointLine(path, method, exchange.statusCode, if (isBaselineMatch) "same as baseline 404" else null),
+                )
+                if (exchange.statusCode !in 200..399 || isBaselineMatch) continue
 
                 val bodyLower = exchange.body.lowercase()
                 val marker = INTERFACE_MARKERS.firstOrNull { bodyLower.contains(it.lowercase()) }
@@ -88,6 +97,10 @@ object GraphQLInterfacesTest : ScannerTest {
                 detailsFormat = DetailsFormat.HTML,
             )
         }
+    }
+
+    private fun matchesBaseline(exchange: ScanHttpClient.HttpExchange, baseline: ScanHttpClient.HttpExchange): Boolean {
+        return exchange.statusCode == baseline.statusCode && exchange.body == baseline.body
     }
 
     private fun formatEndpointLine(

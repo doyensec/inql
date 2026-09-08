@@ -175,52 +175,45 @@ object ProbeUtils {
 
     fun classifyBatchJson(json: JSONObject?): BatchProbeStatus {
         if (json == null) return BatchProbeStatus.AMBIGUOUS
-        if (json.optJSONObject("data") != null && !hasBatchLimitError(json.optJSONArray("errors"))) {
-            return BatchProbeStatus.ACCEPTED
+        val signal = batchLimitSignal(json.optJSONArray("errors"))
+        if (json.optJSONObject("data") != null) {
+            return if (signal == RejectionSignal.STRONG) BatchProbeStatus.REJECTED else BatchProbeStatus.ACCEPTED
         }
-        return classifyBatchErrors(json.optJSONArray("errors"))
+        return when (signal) {
+            RejectionSignal.STRONG -> BatchProbeStatus.REJECTED
+            else -> BatchProbeStatus.AMBIGUOUS
+        }
     }
 
     private fun classifyBatchArray(array: JSONArray): BatchProbeStatus {
         if (array.length() == 0) return BatchProbeStatus.AMBIGUOUS
 
         var hasData = false
-        var hasLimitError = false
+        var hasStrongLimitError = false
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
             if (item.optJSONObject("data") != null) {
                 hasData = true
             }
-            if (hasBatchLimitError(item.optJSONArray("errors"))) {
-                hasLimitError = true
+            if (batchLimitSignal(item.optJSONArray("errors")) == RejectionSignal.STRONG) {
+                hasStrongLimitError = true
             }
         }
 
         // Prefer limit signal over partial success (servers may execute some ops then reject).
         return when {
-            hasLimitError -> BatchProbeStatus.REJECTED
+            hasStrongLimitError -> BatchProbeStatus.REJECTED
             hasData -> BatchProbeStatus.ACCEPTED
             else -> BatchProbeStatus.AMBIGUOUS
         }
     }
 
-    private fun classifyBatchErrors(errors: JSONArray?): BatchProbeStatus {
-        if (errors == null) return BatchProbeStatus.AMBIGUOUS
-        return if (hasBatchLimitError(errors)) {
-            BatchProbeStatus.REJECTED
-        } else {
-            BatchProbeStatus.AMBIGUOUS
-        }
+    private fun batchLimitSignal(errors: JSONArray?): RejectionSignal {
+        if (errors == null) return RejectionSignal.NONE
+        return GraphqlProbe.signalFor(errors.toString(), batchLimitStrongPhrases, batchLimitWeakPhrases)
     }
 
-    private fun hasBatchLimitError(errors: JSONArray?): Boolean {
-        if (errors == null) return false
-        val errorsText = errors.toString().lowercase()
-        return batchLimitPhrases.any { errorsText.contains(it) }
-    }
-
-    private val batchLimitPhrases = listOf(
-        // Specific phrases (preferred).
+    private val batchLimitStrongPhrases = listOf(
         "batch size",
         "batch limit",
         "batching not",
@@ -238,7 +231,9 @@ object ProbeUtils {
         "batch of operations",
         "exceeded the maximum number of",
         "requests in a batch",
-        // Broader tokens from the original scanner.
+    )
+
+    private val batchLimitWeakPhrases = listOf(
         "batch",
         "limit",
         "too many",

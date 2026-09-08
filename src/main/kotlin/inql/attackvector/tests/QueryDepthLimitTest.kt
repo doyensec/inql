@@ -2,6 +2,7 @@ package inql.attackvector.tests
 
 import inql.attackvector.GraphqlProbe
 import inql.attackvector.ProbeUtils
+import inql.attackvector.RejectionSignal
 import inql.attackvector.ScanContext
 import inql.attackvector.ScannerTest
 import inql.attackvector.TestResult
@@ -13,7 +14,7 @@ object QueryDepthLimitTest : ScannerTest {
     override val name = "Query Depth Limits"
     override val description = "Probes nested queries to detect whether the server enforces a maximum depth limit."
 
-    internal val depthLimitPhrases = listOf(
+    internal val strongDepthLimitPhrases = listOf(
         "query is too deep",
         "maximum depth",
         "max depth",
@@ -26,15 +27,13 @@ object QueryDepthLimitTest : ScannerTest {
         "maximum query depth",
         "query depth exceeded",
         "query depth limit",
-        // Broader token kept from the original scanner.
-        "depth",
     )
+
+    internal val weakDepthLimitPhrases = listOf("depth")
 
     override suspend fun run(context: ScanContext): TestResult {
         val maxDepth = context.config.maxDepth
 
-        // Depth probing uses nested introspection. Dummy fields like `d0` only yield "field doesn't
-        // exist" and prove nothing about depth limits — do not use them as a fallback.
         val baselineExchange = context.http.sendRequest(
             context.http.buildQueryRequest(generateDepthQuery(1)),
         )
@@ -122,10 +121,9 @@ object QueryDepthLimitTest : ScannerTest {
             return ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
 
-        if (GraphqlProbe.containsAny(errorsText, depthLimitPhrases)) {
-            return ProbeUtils.LimitProbeStatus.LIMITED
+        return when (GraphqlProbe.signalFor(errorsText, strongDepthLimitPhrases, weakDepthLimitPhrases)) {
+            RejectionSignal.STRONG -> ProbeUtils.LimitProbeStatus.LIMITED
+            else -> ProbeUtils.LimitProbeStatus.AMBIGUOUS
         }
-
-        return ProbeUtils.LimitProbeStatus.AMBIGUOUS
     }
 }
