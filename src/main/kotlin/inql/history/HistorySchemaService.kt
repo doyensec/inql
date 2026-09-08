@@ -53,7 +53,7 @@ class HistorySchemaService(private val inql: InQL) {
         if (!isTrackingEnabled()) return
         if (!shouldProcessUrl(request.url())) return
 
-        val host = HistoryHostKey.fromRequest(request)
+        val host = HistoryHostKey.fromRequest(request) ?: return
         val fingerprint = requestFingerprint(request)
         if (isDuplicate(host, fingerprint)) return
 
@@ -144,7 +144,10 @@ class HistorySchemaService(private val inql: InQL) {
             return
         }
 
-        val storageHostKey = HistoryHostKey.fromRequest(historyItems.first().request)
+        val storageHostKey = HistoryHostKey.fromRequest(historyItems.first().request) ?: run {
+            Logger.info("Could not determine host key for history extraction on: $filterHostKey")
+            return
+        }
         Logger.info(
             "Extracting GraphQL schema from ${historyItems.size} history item(s) for $storageHostKey",
         )
@@ -205,7 +208,8 @@ class HistorySchemaService(private val inql: InQL) {
         val results = LinkedHashMap<String, HistoryEntry>()
 
         fun addEntry(request: HttpRequest, response: HttpResponse?) {
-            if (!HistoryHostKey.matches(HistoryHostKey.fromRequest(request), filterHostKey)) return
+            val requestKey = HistoryHostKey.fromRequest(request) ?: return
+            if (!HistoryHostKey.matches(requestKey, filterHostKey)) return
             val key = requestFingerprint(request)
             results.putIfAbsent(key, HistoryEntry(request, response))
         }

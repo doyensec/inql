@@ -62,16 +62,19 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
     protected val sendToInqlScannerAction = MenuAction("Analyse in Introspection Scanner", null) {
         this.sendRequestToInqlScanner()
     }
-    protected val sendToInqlAttackerAction = MenuAction("Open in Batch Queries", null) {
+    protected val sendToInqlAttackerAction = MenuAction("Send to Batch Queries", null) {
         this.sendRequestToInqlAttacker()
     }
-    protected val sendToInqlFingerprinterAction = MenuAction("Open in Engine Fingerprinter", null) {
+    protected val sendToInqlFingerprinterAction = MenuAction("Send to Engine Fingerprinter", null) {
         this.sendRequestToInqlFingerprinter()
     }
-    protected val sendToGraphiqlAction = MenuAction("Open in GraphiQL", null) {
+    protected val sendToInqlAttackVectorScannerAction = MenuAction("Send to Attack Vector Scanner", null) {
+        this.sendRequestToInqlAttackVectorScanner()
+    }
+    protected val sendToGraphiqlAction = MenuAction("Send to GraphiQL", null) {
         this.sendRequestToGraphiQL()
     }
-    protected val sendToVoyagerAction = MenuAction("Open in GraphQL Voyager", null) {
+    protected val sendToVoyagerAction = MenuAction("Send to GraphQL Voyager", null) {
         this.sendRequestToVoyager()
     }
 
@@ -107,6 +110,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         sendToRepeaterAction,
         sendToInqlAttackerAction,
         sendToInqlFingerprinterAction,
+        sendToInqlAttackVectorScannerAction,
         sendToInqlScannerAction,
         sendToGraphiqlAction,
         sendToVoyagerAction
@@ -142,6 +146,7 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
         }
         this.popup.add(this.sendToInqlAttackerAction)
         this.popup.add(this.sendToInqlFingerprinterAction)
+        this.popup.add(this.sendToInqlAttackVectorScannerAction)
 
         val embeddedActions = this.sendToEmbeddedToolActions
         if (embeddedActions.isNotEmpty()) {
@@ -179,6 +184,10 @@ abstract class SendFromInqlHandler(val inql: InQL, val includeInqlScanner: Boole
 
     private fun sendRequestToInqlFingerprinter() {
         inql.fingerprinter.loadFromRequest(this.getRequest() ?: return)
+    }
+
+    private fun sendRequestToInqlAttackVectorScanner() {
+        inql.attackVectorScanner.loadFromRequest(this.getRequest() ?: return)
     }
 
     private fun sendRequestToGraphiQL() {
@@ -291,6 +300,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
             BurpMenuItem(super.sendToInqlScannerAction),
             BurpMenuItem(super.sendToInqlAttackerAction),
             BurpMenuItem(super.sendToInqlFingerprinterAction),
+            BurpMenuItem(super.sendToInqlAttackVectorScannerAction),
         ).apply {
             for (action in super.sendToEmbeddedToolActions) {
                 this.add(BurpMenuItem(action))
@@ -377,7 +387,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
     }
 
     private fun applyTypeRenameCorrection(request: HttpRequest, wrongType: String, suggestedType: String) {
-        val host = HistoryHostKey.fromRequest(request)
+        val host = HistoryHostKey.fromRequest(request) ?: return
         val applied = inql.scanner.applyTypeRenameCorrection(request, host, wrongType, suggestedType)
         if (applied) return
         SwingUtilities.invokeLater {

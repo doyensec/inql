@@ -16,6 +16,7 @@ import inql.savestate.getSaveStateKeys
 import inql.ui.BorderPanel
 import inql.ui.ErrorDialog
 import inql.ui.MessageEditor
+import inql.ui.applyEqualSplit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -133,7 +134,7 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
             leftSection,
             rightSection,
         )
-        horizontalSplit.resizeWeight = 0.4
+        horizontalSplit.applyEqualSplit(0.5)
         this.add(horizontalSplit)
     }
 

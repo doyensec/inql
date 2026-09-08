@@ -148,7 +148,11 @@ class StyledPayloadEditor private constructor(val inql: InQL, readOnly: Boolean)
     }
 
     override fun isEnabledFor(requestResponse: HttpRequestResponse): Boolean {
-        return GraphQLRequestTransformer.parsePayload(requestResponse.request()) != null
+        return try {
+            GraphQLRequestTransformer.parsePayload(requestResponse.request()) != null
+        } catch (_: Exception) {
+            false
+        }
     }
 
     override fun caption(): String {
