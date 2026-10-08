@@ -35,12 +35,22 @@ class Label(text: String, bold: Boolean = false, big: Boolean = false) : JLabel(
     }
 }
 
+/** Word-wrapping, read-only text that looks and behaves like a [JLabel]. */
 class MultilineLabel(text: String) : JTextArea(text) {
     init {
         isEditable = false
         isOpaque = false
         lineWrap = true
         wrapStyleWord = true
+        isFocusable = false
+        cursor = Cursor.getDefaultCursor()
+    }
+
+    // Theme changes reinstall the text area's highlighter and font, so reapply the label look every time.
+    override fun updateUI() {
+        super.updateUI()
+        highlighter = null
+        font = UIManager.getFont("Label.font") ?: font
     }
 }
 

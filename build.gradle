@@ -63,13 +63,10 @@ sourceSets {
     }
 }
 
-build {
-    dependsOn(clean, processResources)
-}
-
 defaultTasks "build"
 
 jar {
+    dependsOn classes
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     destinationDirectory = rootDir
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
