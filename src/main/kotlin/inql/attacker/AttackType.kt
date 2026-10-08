@@ -45,12 +45,13 @@ enum class IntruderAttackType(val label: String, val description: String) {
     }
 }
 
-enum class BatchVariableKind {
-    /** A GraphQL variable, or a value nested in one; [BatchVariable.path] is its path in the variables JSON. */
-    VARIABLE,
-
+/** Kinds of batch positions, in the order they are listed in the UI. */
+enum class BatchVariableKind(val noun: String, val groupTitle: String) {
     /** A literal argument of a root field; [BatchVariable.path] starts with the field's response key. */
-    ARGUMENT,
+    ARGUMENT("argument", "Arguments"),
+
+    /** A GraphQL variable, or a value nested in one; [BatchVariable.path] is its path in the variables JSON. */
+    VARIABLE("variable", "Variables"),
 }
 
 data class BatchVariable(
@@ -59,12 +60,20 @@ data class BatchVariable(
     val type: String? = null,
     val kind: BatchVariableKind = BatchVariableKind.VARIABLE,
 ) {
-    /** Unique key, also shown to the user: `$input.items[0].id` for variables, `user.id` for arguments. */
+    /**
+     * Unique key identifying the position: `$input.items[0].id` for variables, `user.id` for arguments. The prefix
+     * keeps an argument and a variable with the same path apart; show [name] or [displayName] to the user instead.
+     */
     val key: String
-        get() {
-            val joined = BatchVariableCollector.joinPath(path)
-            return if (kind == BatchVariableKind.ARGUMENT) joined else "$$joined"
-        }
+        get() = if (kind == BatchVariableKind.ARGUMENT) name else "$$name"
+
+    /** The position's path, e.g. `input.items[0].id`; shown where the kind is already clear, such as under a group heading. */
+    val name: String
+        get() = BatchVariableCollector.joinPath(path)
+
+    /** The path with its kind, e.g. `input.items[0].id (variable)`; shown where variables and arguments mix. */
+    val displayName: String
+        get() = "$name (${kind.noun})"
 }
 
 /** A payload set: where the payloads come from and which JSON type they are sent as. */

@@ -4,6 +4,7 @@ import burp.api.montoya.http.message.requests.HttpRequest
 import inql.ui.BorderPanel
 import inql.ui.ComboBox
 import inql.ui.ErrorDialog
+import inql.ui.Label
 import inql.ui.MultilineLabel
 import inql.ui.SimpleDocumentListener
 import inql.ui.committedInt
@@ -178,14 +179,19 @@ class PayloadsPanel : BorderPanel(4) {
         emptyLabel.isVisible = false
         // Update the payload sets once at the end, not for every row added.
         rebuildingVariableRows = true
-        for (variable in result.variables) {
-            val row = VariableRow(variable) {
-                if (!rebuildingVariableRows) updatePayloadVisibility()
+        val byKind = result.variables.groupBy { it.kind }
+        for (kind in BatchVariableKind.entries) {
+            val variables = byKind[kind] ?: continue
+            variablesContainer.add(groupHeading(kind).leftAligned())
+            for (variable in variables) {
+                val row = VariableRow(variable) {
+                    if (!rebuildingVariableRows) updatePayloadVisibility()
+                }
+                val autoSelect = result.variables.size == 1 || variable.key in previousSelected
+                row.setSelected(autoSelect)
+                variableRows.add(row)
+                variablesContainer.add(row.leftAligned())
             }
-            val autoSelect = result.variables.size == 1 || variable.key in previousSelected
-            row.setSelected(autoSelect)
-            variableRows.add(row)
-            variablesContainer.add(row.leftAligned())
         }
         rebuildingVariableRows = false
         updatePayloadVisibility()
@@ -225,7 +231,7 @@ class PayloadsPanel : BorderPanel(4) {
             val sources = LinkedHashMap<String, PayloadSetConfig>()
             for (row in selected) {
                 val snapshot = payloadSetSnapshots[row.variable.key] ?: PayloadSourceEditor.Snapshot()
-                val source = snapshot.sourceOrShowError(row.variable.key) ?: return null
+                val source = snapshot.sourceOrShowError(row.variable.displayName) ?: return null
                 sources[row.variable.key] = PayloadSetConfig(source, snapshot.valueType)
             }
             template.copy(perVariableSources = sources)
@@ -254,13 +260,13 @@ class PayloadsPanel : BorderPanel(4) {
         }
         val items = if (usesShared) {
             val label = if (selected.size == 1) {
-                selected.first().variable.key
+                selected.first().variable.displayName
             } else {
                 "One payload set for each variable"
             }
             listOf(PayloadSetItem(SHARED_PAYLOAD_SET, label))
         } else {
-            selected.map { PayloadSetItem(it.variable.key, it.variable.key) }
+            selected.map { PayloadSetItem(it.variable.key, it.variable.displayName) }
         }
         items.forEach { payloadSetCombo.addItem(it) }
         val keyToSelect = currentPayloadSetKey?.takeIf { key -> items.any { it.key == key } } ?: items.first().key
@@ -351,6 +357,12 @@ class PayloadsPanel : BorderPanel(4) {
         variablesContainer.add(emptyLabel)
     }
 
+    private fun groupHeading(kind: BatchVariableKind): JComponent {
+        return Label(kind.groupTitle, bold = true).also {
+            it.border = EmptyBorder(if (variableRows.isEmpty()) 0 else 6, 4, 2, 4)
+        }
+    }
+
     private fun JComponent.leftAligned(lockHeight: Boolean = true): JComponent {
         alignmentX = Component.LEFT_ALIGNMENT
         maximumSize = Dimension(
@@ -392,12 +404,15 @@ private class VariableRow(
     }
 
     companion object {
+        /** The name under its group heading, indented by nesting depth. */
         private fun labelFor(variable: BatchVariable): String {
-            val indent = "    ".repeat((variable.path.size - 1).coerceAtLeast(0))
+            // An argument path starts with its field and argument name, a variable path with the variable name.
+            val topLevelSegments = if (variable.kind == BatchVariableKind.ARGUMENT) 2 else 1
+            val indent = "    ".repeat((variable.path.size - topLevelSegments).coerceAtLeast(0))
             return if (variable.type.isNullOrBlank()) {
-                indent + variable.key
+                indent + variable.name
             } else {
-                "$indent${variable.key}  (${variable.type})"
+                "$indent${variable.name}  (${variable.type})"
             }
         }
     }

@@ -185,7 +185,7 @@ object BatchRequestBuilder {
                 config.mode,
                 totalItems.toInt(),
                 requestCount(totalItems, config.batchSize).toInt(),
-                selectedMeta.map { it.key },
+                selectedMeta.map { it.displayName },
                 chunks,
                 buildChunk,
             ),
@@ -311,7 +311,7 @@ object BatchRequestBuilder {
                 set.valueType.convert(value) ?: value.also { invalid.add(if (it.isJsonPrimitive) it.asString else it.toString()) }
             }
             if (invalid.isNotEmpty()) {
-                val target = if (shared) "the payload set" else selectedMeta[index].key
+                val target = if (shared) "the payload set" else selectedMeta[index].displayName
                 val more = if (invalid.size > 1) " (and ${invalid.size - 1} more)" else ""
                 throw PayloadSourceException(
                     "Payload \"${invalid.first()}\"$more is not a valid ${set.valueType.label} for $target. " +
