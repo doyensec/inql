@@ -6,6 +6,9 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import graphql.language.AstPrinter
+import graphql.language.Document
+import graphql.parser.Parser
 import inql.graphql.GraphQLRequestContext
 import inql.graphql.GraphQLRequestPayload
 import inql.graphql.GraphQLRequestTransformer
@@ -25,7 +28,7 @@ data class BatchChunk(
     val payloads: List<List<String?>>,
 )
 
-internal class PlannedItem(val payloads: List<String?>, val overrides: Map<String, JsonElement>)
+internal class PlannedItem(val payloads: List<String?>, val values: BatchItemValues)
 
 /**
  * A validated batch attack. HTTP requests are built lazily, one chunk at a time, so large attacks
@@ -37,11 +40,11 @@ class BatchPlan internal constructor(
     val requestCount: Int,
     val variableLabels: List<String>,
     private val chunks: Sequence<List<PlannedItem>>,
-    private val buildChunk: (List<Map<String, JsonElement>>) -> HttpRequest,
+    private val buildChunk: (List<BatchItemValues>) -> HttpRequest,
 ) {
     /** Builds each HTTP request on demand. Throws [BatchBuildException] if a request cannot be built. */
     fun requests(): Sequence<BatchChunk> = chunks.mapIndexed { index, items ->
-        BatchChunk(index, buildChunk(items.map { it.overrides }), items.size, items.map { it.payloads })
+        BatchChunk(index, buildChunk(items.map { it.values }), items.size, items.map { it.payloads })
     }
 }
 
@@ -62,30 +65,23 @@ object BatchRequestBuilder {
         }
 
         val collected = BatchVariableCollector.collect(request)
-        if (collected.error != null && collected.payload == null) {
-            return BatchBuildResult.Failure(collected.error)
-        }
         val payload = collected.payload
-            ?: return BatchBuildResult.Failure("Could not parse a GraphQL request.")
-        val selectedMeta = config.selectedVariables.mapNotNull { key ->
-            collected.variables.firstOrNull { it.key == key }
-        }
-        if (selectedMeta.size != config.selectedVariables.size) {
-            val knownNames = collected.variables.map { it.key }.toSet()
-            val missing = config.selectedVariables.filter { it !in knownNames }
+            ?: return BatchBuildResult.Failure(collected.error ?: "Could not parse a GraphQL request.")
+        val variablesByKey = collected.variables.associateBy { it.key }
+        val missing = config.selectedVariables.filter { it !in variablesByKey }
+        if (missing.isNotEmpty()) {
             return BatchBuildResult.Failure(
-                "Selected variable(s) ${missing.joinToString { "$$it" }} are not in the current request. " +
+                "Selected variable(s) ${missing.joinToString()} are not in the current request. " +
                     "Click Refresh and try again.",
             )
         }
+        val selectedMeta = config.selectedVariables.map { variablesByKey.getValue(it) }
 
-        val payloadSets = try {
-            payloadSetsFor(config)
-        } catch (e: PayloadSourceException) {
-            return BatchBuildResult.Failure(e.message ?: "Failed to load payloads.")
-        }
-        val loaded = try {
-            loadPayloads(payloadSets, selectedMeta, config.usesSharedPayload())
+        val payloadSets: List<PayloadSetConfig>
+        val loaded: List<List<JsonElement>>
+        try {
+            payloadSets = payloadSetsFor(config)
+            loaded = loadPayloads(payloadSets, selectedMeta, config.usesSharedPayload())
         } catch (e: PayloadSourceException) {
             return BatchBuildResult.Failure(e.message ?: "Failed to load payloads.")
         }
@@ -95,7 +91,7 @@ object BatchRequestBuilder {
             )
         }
 
-        val attackType = effectiveAttackType(config)
+        val attackType = config.effectiveAttackType
         val totalItems = estimateItemCount(
             attackType,
             config.selectedVariables.size,
@@ -106,32 +102,30 @@ object BatchRequestBuilder {
         }
         if (totalItems > MAX_TOTAL_ITEMS) {
             return BatchBuildResult.Failure(
-                "The attack would generate ${formatItems(totalItems)} items, which is more than the limit of " +
-                    "${formatItems(MAX_TOTAL_ITEMS.toLong())}. Use fewer payloads or a different attack type.",
+                "The attack would generate ${formatCount(totalItems)} items, which is more than the limit of " +
+                    "${formatCount(MAX_TOTAL_ITEMS.toLong())}. Use fewer payloads or a different attack type.",
             )
         }
         val chunkSize = if (config.batchSize > 0) config.batchSize else totalItems.toInt()
         if (chunkSize > MAX_ITEMS_PER_REQUEST) {
             return BatchBuildResult.Failure(
-                "A single request would contain ${formatItems(chunkSize.toLong())} items, which is more than the " +
-                    "limit of ${formatItems(MAX_ITEMS_PER_REQUEST.toLong())}. Set a smaller \"Items per request\" value.",
+                "A single request would contain ${formatCount(chunkSize.toLong())} items, which is more than the " +
+                    "limit of ${formatCount(MAX_ITEMS_PER_REQUEST.toLong())}. Set a smaller \"Items per request\" value.",
             )
         }
 
         val template = payload.operations.first()
         val baseVariables = BatchVariableCollector.parseVariablesObject(template.variables)
-        val (promotedQuery, seededVariables) = try {
-            QueryArgumentPromoter.promote(
-                query = template.query,
-                operationName = template.operationName,
-                selected = selectedMeta,
-                baseVariables = baseVariables,
-            )
-        } catch (e: Exception) {
-            return BatchBuildResult.Failure("Failed to convert query arguments into variables: ${e.message}")
+        // Array batching repeats the whole query per item, so argument payloads are inlined into a parsed copy.
+        val templateDocument: Document? = if (selectedMeta.any { it.kind == BatchVariableKind.ARGUMENT }) {
+            try {
+                Parser().parseDocument(template.query)
+            } catch (e: Exception) {
+                return BatchBuildResult.Failure("Failed to parse the GraphQL query: ${e.message}")
+            }
+        } else {
+            null
         }
-        val promotedTemplate = template.copy(query = promotedQuery, variables = gson.toJson(seededVariables))
-        val selectedJsonKeys = selectedMeta.map { it.jsonKey }.toSet()
         val service = try {
             HttpService.httpService(url)
         } catch (e: Exception) {
@@ -139,10 +133,16 @@ object BatchRequestBuilder {
         }
 
         // For "Send as: Auto" sets, values from the original request hint at the JSON type each position expects.
+        // Argument literals have no JSON value; their inferred scalar type is the hint.
         val coercionTargets = selectedMeta.filterIndexed { index, _ ->
             payloadSets[if (config.usesSharedPayload()) 0 else index].valueType == PayloadValueType.AUTO
         }.associate { meta ->
-            meta.key to Pair(meta.type, BatchVariableCollector.valueAtPath(seededVariables, meta.jsonPath))
+            val original = if (meta.kind == BatchVariableKind.VARIABLE) {
+                BatchVariableCollector.valueAtPath(baseVariables, meta.path)
+            } else {
+                null
+            }
+            meta.key to Pair(meta.type, original)
         }
 
         val chunks = generateCombinations(attackType, config.selectedVariables, loaded)
@@ -155,20 +155,20 @@ object BatchRequestBuilder {
             .map { combo ->
                 PlannedItem(
                     payloads = config.selectedVariables.map { key -> combo[key]?.let(::displayPayload) },
-                    overrides = remapOverrides(combo, selectedMeta),
+                    values = itemValues(combo, variablesByKey),
                 )
             }
             .chunked(chunkSize)
 
-        val buildChunk = { combos: List<Map<String, JsonElement>> ->
+        val buildChunk = { items: List<BatchItemValues> ->
             try {
                 when (config.mode) {
                     BatchMode.ARRAY -> {
-                        val body = buildArrayBody(promotedTemplate, seededVariables, combos)
+                        val body = buildArrayBody(template, templateDocument, baseVariables, items)
                         GraphQLRequestTransformer.applyRawJsonBody(request, body)
                     }
                     BatchMode.ALIAS -> {
-                        val batchedPayload = buildAliasPayload(promotedTemplate, seededVariables, selectedJsonKeys, combos)
+                        val batchedPayload = buildAliasPayload(template, baseVariables, items)
                         val context = requestContextFor(request, batchedPayload)
                         GraphQLRequestTransformer.applyPayload(request, batchedPayload, context)
                     }
@@ -180,13 +180,12 @@ object BatchRequestBuilder {
             }
         }
 
-        val requestCount = ((totalItems + chunkSize - 1) / chunkSize).toInt()
         return BatchBuildResult.Success(
             BatchPlan(
                 config.mode,
                 totalItems.toInt(),
-                requestCount,
-                selectedMeta.map { it.displayName },
+                requestCount(totalItems, config.batchSize).toInt(),
+                selectedMeta.map { it.key },
                 chunks,
                 buildChunk,
             ),
@@ -199,7 +198,8 @@ object BatchRequestBuilder {
         return (itemCount + batchSize - 1) / batchSize
     }
 
-    private fun formatItems(count: Long): String = "%,d".format(count)
+    /** Formats a count for display; [Long.MAX_VALUE] stands for an overflowed count. */
+    fun formatCount(count: Long): String = if (count == Long.MAX_VALUE) "too large" else "%,d".format(count)
 
     /** Null payloads keep the original value, so they have nothing to display. */
     private fun displayPayload(value: JsonElement): String? = when {
@@ -311,7 +311,7 @@ object BatchRequestBuilder {
                 set.valueType.convert(value) ?: value.also { invalid.add(if (it.isJsonPrimitive) it.asString else it.toString()) }
             }
             if (invalid.isNotEmpty()) {
-                val target = if (shared) "the payload set" else selectedMeta[index].displayName
+                val target = if (shared) "the payload set" else selectedMeta[index].key
                 val more = if (invalid.size > 1) " (and ${invalid.size - 1} more)" else ""
                 throw PayloadSourceException(
                     "Payload \"${invalid.first()}\"$more is not a valid ${set.valueType.label} for $target. " +
@@ -322,32 +322,39 @@ object BatchRequestBuilder {
         }
     }
 
-    private fun effectiveAttackType(config: BatchAttackConfig): IntruderAttackType {
-        if (config.selectedVariables.size < 2) return IntruderAttackType.SNIPER
-        return config.attackType
-    }
-
-    private fun remapOverrides(
-        overrides: Map<String, JsonElement>,
-        selected: List<BatchVariable>,
-    ): Map<String, JsonElement> {
-        val byKey = selected.associateBy { it.key }
-        return overrides.entries.associate { (key, value) ->
-            (byKey[key]?.jsonKey ?: key) to value
+    /** Splits an item's payloads into variable and argument values. Null payloads keep the original value. */
+    private fun itemValues(
+        combo: Map<String, JsonElement>,
+        variablesByKey: Map<String, BatchVariable>,
+    ): BatchItemValues {
+        val variables = LinkedHashMap<List<String>, JsonElement>()
+        val arguments = LinkedHashMap<List<String>, JsonElement>()
+        for ((key, value) in combo) {
+            if (value.isJsonNull) continue
+            val variable = variablesByKey.getValue(key)
+            val target = if (variable.kind == BatchVariableKind.ARGUMENT) arguments else variables
+            target[variable.path] = value
         }
+        return BatchItemValues(variables, arguments)
     }
 
     private fun buildArrayBody(
         template: GraphQLRequestPayload.Operation,
+        templateDocument: Document?,
         baseVariables: JsonObject,
-        combinations: List<Map<String, JsonElement>>,
+        items: List<BatchItemValues>,
     ): String {
         val array = JsonArray()
-        for (overrides in combinations) {
+        for (item in items) {
+            val query = if (templateDocument == null || item.arguments.isEmpty()) {
+                template.query
+            } else {
+                AstPrinter.printAst(ArgumentInliner.inline(templateDocument, template.operationName, item.arguments))
+            }
             val entry = JsonObject()
-            entry.addProperty("query", template.query)
+            entry.addProperty("query", query)
             template.operationName?.let { entry.addProperty("operationName", it) }
-            entry.add("variables", BatchVariableCollector.applyOverrides(baseVariables, overrides))
+            entry.add("variables", BatchVariableCollector.applyOverrides(baseVariables, item.variables))
             array.add(entry)
         }
         return gson.toJson(array)
@@ -356,19 +363,17 @@ object BatchRequestBuilder {
     private fun buildAliasPayload(
         template: GraphQLRequestPayload.Operation,
         baseVariables: JsonObject,
-        selectedVariables: Set<String>,
-        combinations: List<Map<String, JsonElement>>,
+        items: List<BatchItemValues>,
     ): GraphQLRequestPayload {
         val (query, variables) = AliasBatchRewriter.rewrite(
             query = template.query,
             operationName = template.operationName,
-            selectedVariables = selectedVariables,
-            combinations = combinations,
+            items = items,
             baseVariables = baseVariables,
         )
         return GraphQLRequestPayload.single(
             query = query,
-            variables = gson.toJson(variables),
+            variables = variables.takeIf { it.size() > 0 }?.let { gson.toJson(it) },
             operationName = template.operationName,
         )
     }

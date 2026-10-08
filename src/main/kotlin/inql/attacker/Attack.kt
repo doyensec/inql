@@ -13,11 +13,9 @@ class Attack private constructor(
     val url: String,
     val req: HttpRequest,
     var resp: HttpResponse?,
-    val start: Int,
-    val end: Int,
     val ts: LocalDateTime,
     val uuid: String,
-    val mode: String,
+    val mode: BatchMode,
     val itemCount: Int,
     val part: Int,
     val partCount: Int,
@@ -32,9 +30,7 @@ class Attack private constructor(
         url: String,
         req: HttpRequest,
         resp: HttpResponse?,
-        start: Int,
-        end: Int,
-        mode: String,
+        mode: BatchMode,
         itemCount: Int,
         part: Int = 1,
         partCount: Int = 1,
@@ -42,8 +38,6 @@ class Attack private constructor(
         url,
         req,
         resp,
-        start,
-        end,
         LocalDateTime.now(),
         "Attack.${UUID.randomUUID()}",
         mode,
@@ -67,9 +61,7 @@ class Attack private constructor(
         if (this.resp != null) {
             attackObj.setHttpResponse("response", this.resp)
         }
-        attackObj.setInteger("start", this.start)
-        attackObj.setInteger("end", this.end)
-        attackObj.setString("mode", this.mode)
+        attackObj.setString("mode", this.mode.name)
         attackObj.setInteger("itemCount", this.itemCount)
         attackObj.setInteger("part", this.part)
         attackObj.setInteger("partCount", this.partCount)
@@ -81,24 +73,16 @@ class Attack private constructor(
 
     class Deserializer(key: String) : DeserializerFactory<Attack>(key) {
         override fun burpDeserialize(obj: PersistedObject) {
-            val start = obj.getInteger("start")
-            val end = obj.getInteger("end")
-            val mode = obj.getString("mode")?.takeIf { it.isNotBlank() } ?: BatchMode.ALIAS.label
-            val storedCount = obj.getInteger("itemCount")
-            val itemCount = if (storedCount != null && storedCount > 0) {
-                storedCount
-            } else {
-                (end - start).coerceAtLeast(0)
-            }
+            // Attacks saved before batching was reworked only have the "start" and "end" of their item range.
+            val itemCount = obj.getInteger("itemCount")?.takeIf { it > 0 }
+                ?: ((obj.getInteger("end") ?: 0) - (obj.getInteger("start") ?: 0)).coerceAtLeast(0)
             this.deserialized = Attack(
                 obj.getString("url"),
                 obj.getHttpRequest("request"),
                 obj.getHttpResponse("response"),
-                start,
-                end,
                 LocalDateTime.parse(obj.getString("ts"), DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                 obj.getString("id"),
-                mode,
+                BatchMode.fromStored(obj.getString("mode")),
                 itemCount,
                 obj.getInteger("part")?.takeIf { it > 0 } ?: 1,
                 obj.getInteger("partCount")?.takeIf { it > 0 } ?: 1,

@@ -174,9 +174,7 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
                     targetUrl,
                     chunk.request,
                     null,
-                    0,
-                    chunk.itemCount,
-                    plan.mode.label,
+                    plan.mode,
                     chunk.itemCount,
                     part = chunk.index + 1,
                     partCount = plan.requestCount,
@@ -334,11 +332,7 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
     override fun burpDeserialize(obj: PersistedObject) {
         this.url = obj.getString("url")
         this.request = obj.getHttpRequest("request")
-        try {
-            this.payloadsPanel.refreshFromRequest(this.request)
-        } catch (e: Exception) {
-            Logger.error("Failed refreshing Batch Queries variables on project load: ${e.message}")
-        }
+        this.payloadsPanel.refreshFromRequest(this.request)
         val attackIdLst = obj.getStringList("attacks")
         if (!attackIdLst.isNullOrEmpty()) {
             Logger.debug("Loading ${attackIdLst.size} Attacks from project file")

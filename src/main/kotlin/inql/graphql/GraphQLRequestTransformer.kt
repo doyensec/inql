@@ -194,6 +194,19 @@ object GraphQLRequestTransformer {
         }
     }
 
+    /**
+     * Like [parsePayload], but ignores the HTTP method: reads the body of any request and falls back to the
+     * URL query string. Useful for requests the user is still editing.
+     */
+    fun parsePayloadAnyMethod(request: HttpRequest): GraphQLRequestPayload? {
+        parsePayload(request)?.let { return it }
+        return try {
+            parseFromPostBody(request) ?: parseFromQueryString(URI.create(request.url()).rawQuery ?: "")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun parseFromPostBody(request: HttpRequest): GraphQLRequestPayload? {
         val body = request.bodyToString()
         if (body.isBlank()) return null

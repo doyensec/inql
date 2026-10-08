@@ -1,6 +1,7 @@
 package inql.attacker
 
 import inql.graphql.formatting.Style
+import inql.ui.SimpleDocumentListener
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Color
@@ -158,51 +159,49 @@ class BatchResultsPanel : JPanel(CardLayout()) {
         )
     }
 
+    /** Columns after the "#" column and the payload columns. */
+    private enum class ItemColumn(val title: String, val type: Class<*>, val value: (BatchResultItem) -> Any?) {
+        PART("Part", Integer::class.java, { it.part }),
+        STATUS("Status", String::class.java, { it.status.label }),
+        ERRORS("Errors", String::class.java, { it.errors }),
+        SIZE("Size", Integer::class.java, { it.size }),
+        RESPONSE_TIME("Response time (ms)", java.lang.Long::class.java, { it.responseTimeMs }),
+    }
+
+    /** Column 0 is the item number, followed by one column per batched variable, then [ItemColumn]s. */
     private inner class ResultsTableModel : AbstractTableModel() {
         private val payloadColumns: Int get() = run?.variableLabels?.size ?: 0
 
         fun itemAt(row: Int): BatchResultItem? = run?.items?.getOrNull(row)
 
+        private fun itemColumn(column: Int): ItemColumn = ItemColumn.entries[column - 1 - payloadColumns]
+
         override fun getRowCount(): Int = run?.items?.size ?: 0
 
-        override fun getColumnCount(): Int = payloadColumns + FIXED_COLUMNS.size
+        override fun getColumnCount(): Int = 1 + payloadColumns + ItemColumn.entries.size
 
         override fun getColumnName(column: Int): String {
             if (column == 0) return "#"
             if (column <= payloadColumns) return run?.variableLabels?.get(column - 1) ?: ""
-            return FIXED_COLUMNS[column - payloadColumns]
+            return itemColumn(column).title
         }
 
         override fun getColumnClass(column: Int): Class<*> {
             if (column == 0) return Integer::class.java
             if (column <= payloadColumns) return String::class.java
-            return when (FIXED_COLUMNS[column - payloadColumns]) {
-                "Part", "Size" -> Integer::class.java
-                "Response time (ms)" -> java.lang.Long::class.java
-                else -> String::class.java
-            }
+            return itemColumn(column).type
         }
 
         override fun getValueAt(row: Int, column: Int): Any? {
             val item = itemAt(row) ?: return null
             if (column == 0) return item.index
             if (column <= payloadColumns) return item.payloads.getOrNull(column - 1)
-            return when (FIXED_COLUMNS[column - payloadColumns]) {
-                "Part" -> item.part
-                "Status" -> item.status.label
-                "Errors" -> item.errors
-                "Size" -> item.size
-                "Response time (ms)" -> item.responseTimeMs
-                else -> null
-            }
+            return itemColumn(column).value(item)
         }
     }
 
     private companion object {
         const val CARD_RESULTS = "results"
         const val CARD_EMPTY = "empty"
-
-        /** Index 0 is the "#" column; payload columns are inserted after it. */
-        val FIXED_COLUMNS = listOf("#", "Part", "Status", "Errors", "Size", "Response time (ms)")
     }
 }

@@ -25,14 +25,26 @@ import graphql.util.TreeTransformerUtil
 
 class AliasBatchException(message: String) : Exception(message)
 
+/**
+ * The values one batched item sends. Null payloads, which keep the original value, are left out.
+ */
+data class BatchItemValues(
+    /** Values to store in the variables JSON, by path. */
+    val variables: Map<List<String>, JsonElement>,
+    /** Values to inline into root field arguments, by argument path (see [ArgumentInliner]). */
+    val arguments: Map<List<String>, JsonElement>,
+) {
+    /** Names of the GraphQL variables this item changes. */
+    val variableNames: Set<String> get() = variables.keys.mapTo(linkedSetOf()) { it.first() }
+}
+
 object AliasBatchRewriter {
     private val parser = Parser()
 
     fun rewrite(
         query: String,
         operationName: String?,
-        selectedVariables: Set<String>,
-        combinations: List<Map<String, JsonElement>>,
+        items: List<BatchItemValues>,
         baseVariables: JsonObject,
     ): Pair<String, JsonObject> {
         val document = parser.parseDocument(query)
@@ -40,20 +52,18 @@ object AliasBatchRewriter {
         val operation = BatchVariableCollector.selectOperation(operations, operationName)
             ?: throw AliasBatchException("Could not find the GraphQL operation to rewrite.")
 
-        val selectedTopLevel = selectedVariables.map { BatchVariableCollector.graphqlName(it) }.toSet()
+        val itemVariableNames = items.map { it.variableNames }
+        val changedVariables = itemVariableNames.flatMapTo(linkedSetOf()) { it }
         val fragments = document.definitions.filterIsInstance<FragmentDefinition>().associateBy { it.name }
 
-        val originalStillUsed = selectedTopLevel.filter { top ->
-            combinations.any { combo ->
-                combo.entries.none { !it.value.isJsonNull && BatchVariableCollector.graphqlName(it.key) == top }
-            }
-        }.toSet()
+        // Items that do not change a variable keep using the original one.
+        val originalStillUsed = changedVariables.filter { name -> itemVariableNames.any { name !in it } }.toSet()
 
         val originalSelectionSet = operation.selectionSet
             ?: throw AliasBatchException("The GraphQL operation has no selection set to alias.")
         // Root fragments must be inlined so their fields can be aliased per item, and fragments that use a
-        // selected variable must be inlined so each copy can reference its own renamed variable.
-        val fragmentInliner = FragmentInliner(fragments, fragmentsUsingVariables(fragments, selectedTopLevel))
+        // changed variable must be inlined so each copy can reference its own renamed variable.
+        val fragmentInliner = FragmentInliner(fragments, fragmentsUsingVariables(fragments, changedVariables))
         val selectionSet = fragmentInliner.inlineRoot(originalSelectionSet)
         val referencedNames = BatchVariableCollector.collectVariableReferences(selectionSet)
             .plus(operation.directives.flatMap { BatchVariableCollector.collectVariableReferences(it) })
@@ -61,15 +71,15 @@ object AliasBatchRewriter {
         val originalDefs = operation.variableDefinitions.associateBy { it.name }
         val newDefs = mutableListOf<VariableDefinition>()
         for (def in operation.variableDefinitions) {
-            if (def.name !in selectedTopLevel || def.name in originalStillUsed) {
+            if (def.name !in changedVariables || def.name in originalStillUsed) {
                 newDefs.add(def)
             }
         }
-        for ((index, overrides) in combinations.withIndex()) {
-            for (top in overrideTopLevels(overrides)) {
-                if (top !in referencedNames) continue
-                val clonedName = suffixedName(top, index)
-                val original = originalDefs[top]
+        for ((index, names) in itemVariableNames.withIndex()) {
+            for (name in names) {
+                if (name !in referencedNames) continue
+                val clonedName = suffixedName(name, index)
+                val original = originalDefs[name]
                 newDefs.add(
                     original?.transform { it.name(clonedName) }
                         ?: VariableDefinition.newVariableDefinition()
@@ -81,12 +91,12 @@ object AliasBatchRewriter {
         }
 
         val newSelections = mutableListOf<Selection<*>>()
-        for ((index, overrides) in combinations.withIndex()) {
-            val mapping = overrideTopLevels(overrides)
+        for ((index, item) in items.withIndex()) {
+            val mapping = itemVariableNames[index]
                 .filter { it in referencedNames }
                 .associateWith { suffixedName(it, index) }
             val usedAliases = mutableSetOf<String>()
-            for (selection in selectionSet.selections) {
+            for (selection in ArgumentInliner.inline(selectionSet, item.arguments).selections) {
                 val rewritten = renameVariables(selection, mapping)
                 newSelections.add(aliasRootSelection(rewritten, index, usedAliases))
             }
@@ -111,26 +121,18 @@ object AliasBatchRewriter {
 
         val newVariables = JsonObject()
         for ((key, value) in baseVariables.entrySet()) {
-            if (key !in selectedTopLevel || key in originalStillUsed) {
+            if (key !in changedVariables || key in originalStillUsed) {
                 newVariables.add(key, value)
             }
         }
-        for ((index, overrides) in combinations.withIndex()) {
-            val patched = BatchVariableCollector.applyOverrides(baseVariables, overrides)
-            for (top in overrideTopLevels(overrides)) {
-                patched.get(top)?.let { newVariables.add(suffixedName(top, index), it) }
+        for ((index, item) in items.withIndex()) {
+            val patched = BatchVariableCollector.applyOverrides(baseVariables, item.variables)
+            for (name in itemVariableNames[index]) {
+                patched.get(name)?.let { newVariables.add(suffixedName(name, index), it) }
             }
         }
 
         return Pair(AstPrinter.printAst(newDocument), newVariables)
-    }
-
-    private fun overrideTopLevels(overrides: Map<String, JsonElement>): Set<String> {
-        return overrides
-            .filter { !it.value.isJsonNull }
-            .keys
-            .map { BatchVariableCollector.graphqlName(it) }
-            .toSet()
     }
 
     private fun suffixedName(name: String, index: Int): String = "${name}_$index"

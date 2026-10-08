@@ -11,42 +11,28 @@ import com.google.gson.JsonPrimitive
  * original value in the request is used as a hint. Values that cannot be converted are sent as-is.
  */
 object PayloadTypeCoercion {
-    private enum class Kind { NUMBER, INTEGER, BOOLEAN, STRING, UNKNOWN }
-
     fun coerce(value: JsonElement, declaredType: String?, originalValue: JsonElement?): JsonElement {
-        if (!value.isJsonPrimitive) return value
-        val primitive = value.asJsonPrimitive
-        val text = primitive.asString
-        return when (targetKind(declaredType, originalValue)) {
-            Kind.INTEGER -> text.toBigIntegerOrNull()?.let { JsonPrimitive(it) } ?: value
-            Kind.NUMBER -> text.toBigDecimalOrNull()?.let { JsonPrimitive(it) } ?: value
-            Kind.BOOLEAN -> when (text) {
-                "true" -> JsonPrimitive(true)
-                "false" -> JsonPrimitive(false)
-                else -> value
-            }
-            Kind.STRING -> if (primitive.isString) value else JsonPrimitive(text)
-            Kind.UNKNOWN -> value
-        }
+        val target = targetType(declaredType, originalValue) ?: return value
+        return target.convert(value) ?: value
     }
 
-    private fun targetKind(declaredType: String?, originalValue: JsonElement?): Kind {
+    private fun targetType(declaredType: String?, originalValue: JsonElement?): PayloadValueType? {
         val type = declaredType?.trim()
-        if (type != null && type.startsWith("[")) return Kind.UNKNOWN
+        if (type != null && type.startsWith("[")) return null
         when (type?.trimEnd('!')) {
-            "Int" -> return Kind.INTEGER
-            "Float" -> return Kind.NUMBER
-            "Boolean" -> return Kind.BOOLEAN
-            "String" -> return Kind.STRING
-            "ID" -> return Kind.UNKNOWN // IDs accept both strings and integers.
+            "Int" -> return PayloadValueType.INT
+            "Float" -> return PayloadValueType.FLOAT
+            "Boolean" -> return PayloadValueType.BOOLEAN
+            "String" -> return PayloadValueType.STRING
+            "ID" -> return null // IDs accept both strings and integers.
         }
-        if (originalValue == null || !originalValue.isJsonPrimitive) return Kind.UNKNOWN
+        if (originalValue == null || !originalValue.isJsonPrimitive) return null
         val original = originalValue.asJsonPrimitive
         return when {
-            original.isNumber -> Kind.NUMBER
-            original.isBoolean -> Kind.BOOLEAN
-            original.isString -> Kind.STRING
-            else -> Kind.UNKNOWN
+            original.isNumber -> PayloadValueType.FLOAT
+            original.isBoolean -> PayloadValueType.BOOLEAN
+            original.isString -> PayloadValueType.STRING
+            else -> null
         }
     }
 }
@@ -71,11 +57,7 @@ enum class PayloadValueType(val label: String) {
             INT -> text.toBigIntegerOrNull()?.let { JsonPrimitive(it) }
             FLOAT -> text.toBigDecimalOrNull()?.let { JsonPrimitive(it) }
             BOOLEAN -> text.lowercase().toBooleanStrictOrNull()?.let { JsonPrimitive(it) }
-            AUTO -> value
+            else -> value
         }
-    }
-
-    companion object {
-        fun fromIndex(index: Int): PayloadValueType = entries.getOrElse(index) { AUTO }
     }
 }

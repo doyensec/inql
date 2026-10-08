@@ -5,6 +5,7 @@ import com.google.gson.JsonNull
 import com.google.gson.JsonPrimitive
 import inql.Logger
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 sealed class PayloadSource {
     data class FilePath(val path: String) : PayloadSource()
@@ -17,6 +18,12 @@ sealed class PayloadSource {
         const val MAX_LINE_CHARS = 8192
         const val MAX_GENERATED = 100_000
 
+        /** Line counts of payload files, valid while the file's size and modification time are unchanged. */
+        private val fileLineCounts = ConcurrentHashMap<String, Triple<Long, Long, Long>>()
+
+        /** The payloads of a simple list: lines that are not empty after trailing whitespace is removed. */
+        fun words(lines: List<String>): List<String> = lines.map { it.trimEnd() }.filter { it.isNotEmpty() }
+
         fun count(source: PayloadSource): Long {
             return when (source) {
                 is FilePath -> countFileLines(source.path)
@@ -25,7 +32,7 @@ sealed class PayloadSource {
                     else source.to.toLong() - source.from.toLong() + 1L
                 }
                 is BruteForce -> bruteForceCount(source.charset.length, source.minLen, source.maxLen)
-                is WordList -> source.words.count { it.trimEnd().isNotEmpty() }.toLong()
+                is WordList -> words(source.words).size.toLong()
                 is NullPayloads -> source.count.toLong().coerceAtLeast(0)
             }
         }
@@ -49,9 +56,15 @@ sealed class PayloadSource {
             }
         }
 
+        /** Counted on the UI thread whenever the payload settings change, so the result is cached per file. */
         private fun countFileLines(path: String): Long {
             val file = File(path)
             if (!file.isFile) return 0
+            val modified = file.lastModified()
+            val length = file.length()
+            fileLineCounts[path]?.let { (cachedModified, cachedLength, count) ->
+                if (cachedModified == modified && cachedLength == length) return count
+            }
             var count = 0L
             file.bufferedReader().use { reader ->
                 reader.lineSequence().forEach { line ->
@@ -61,6 +74,7 @@ sealed class PayloadSource {
                     }
                 }
             }
+            fileLineCounts[path] = Triple(modified, length, count)
             return count
         }
 
@@ -178,7 +192,7 @@ sealed class PayloadSource {
         }
 
         private fun loadWordList(words: List<String>): List<JsonElement> {
-            val values = words.map { it.trimEnd() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) }
+            val values = words(words).map { JsonPrimitive(it) }
             if (values.isEmpty()) {
                 throw PayloadSourceException("Custom list is empty. Add at least one word.")
             }

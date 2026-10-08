@@ -5,6 +5,8 @@ import inql.ui.BorderPanel
 import inql.ui.ComboBox
 import inql.ui.ErrorDialog
 import inql.ui.MultilineLabel
+import inql.ui.SimpleDocumentListener
+import inql.ui.committedInt
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Component
@@ -16,6 +18,7 @@ import java.awt.Insets
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.io.File
+import java.io.IOException
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
@@ -36,8 +39,6 @@ import javax.swing.JTextField
 import javax.swing.ListSelectionModel
 import javax.swing.SpinnerNumberModel
 import javax.swing.border.EmptyBorder
-import javax.swing.event.DocumentEvent
-import javax.swing.event.DocumentListener
 
 class PayloadsPanel : BorderPanel(4) {
     private val aliasRadio = JRadioButton(BatchMode.ALIAS.label, true)
@@ -161,15 +162,7 @@ class PayloadsPanel : BorderPanel(4) {
     fun refreshFromRequest(request: HttpRequest) {
         val previousSelected = variableRows.filter { it.isSelected() }.map { it.variable.key }.toSet()
 
-        val result = try {
-            BatchVariableCollector.collect(request)
-        } catch (e: Exception) {
-            VariableCollectResult(
-                variables = emptyList(),
-                payload = null,
-                error = "Failed to read GraphQL variables: ${e.message}",
-            )
-        }
+        val result = BatchVariableCollector.collect(request)
         lastRefreshError = result.error
         variableRows.clear()
         variablesContainer.removeAll()
@@ -214,14 +207,9 @@ class PayloadsPanel : BorderPanel(4) {
         }
 
         val mode = if (arrayRadio.isSelected) BatchMode.ARRAY else BatchMode.ALIAS
-        val attackType = if (selected.size < 2) {
-            IntruderAttackType.SNIPER
-        } else {
-            IntruderAttackType.fromLabel(attackTypeCombo.getSelectedItem())
-        }
         val template = BatchAttackConfig(
             mode = mode,
-            attackType = attackType,
+            attackType = selectedAttackType(),
             selectedVariables = selected.map { it.variable.key },
             sharedSource = null,
             perVariableSources = emptyMap(),
@@ -231,14 +219,14 @@ class PayloadsPanel : BorderPanel(4) {
         saveCurrentPayloadSet()
         return if (template.usesSharedPayload()) {
             val snapshot = sharedPayloadEditor.snapshot()
-            val source = PayloadSourceEditor.sourceFrom(snapshot) ?: return null
-            template.copy(sharedSource = PayloadSetConfig(source, PayloadValueType.fromIndex(snapshot.valueTypeIndex)))
+            val source = snapshot.sourceOrShowError() ?: return null
+            template.copy(sharedSource = PayloadSetConfig(source, snapshot.valueType))
         } else {
             val sources = LinkedHashMap<String, PayloadSetConfig>()
             for (row in selected) {
-                val snapshot = payloadSetSnapshots[row.variable.key] ?: defaultPayloadSnapshot()
-                val source = PayloadSourceEditor.sourceFrom(snapshot, row.variable.displayName) ?: return null
-                sources[row.variable.key] = PayloadSetConfig(source, PayloadValueType.fromIndex(snapshot.valueTypeIndex))
+                val snapshot = payloadSetSnapshots[row.variable.key] ?: PayloadSourceEditor.Snapshot()
+                val source = snapshot.sourceOrShowError(row.variable.key) ?: return null
+                sources[row.variable.key] = PayloadSetConfig(source, snapshot.valueType)
             }
             template.copy(perVariableSources = sources)
         }
@@ -266,13 +254,13 @@ class PayloadsPanel : BorderPanel(4) {
         }
         val items = if (usesShared) {
             val label = if (selected.size == 1) {
-                selected.first().variable.displayName
+                selected.first().variable.key
             } else {
                 "One payload set for each variable"
             }
             listOf(PayloadSetItem(SHARED_PAYLOAD_SET, label))
         } else {
-            selected.map { PayloadSetItem(it.variable.key, it.variable.displayName) }
+            selected.map { PayloadSetItem(it.variable.key, it.variable.key) }
         }
         items.forEach { payloadSetCombo.addItem(it) }
         val keyToSelect = currentPayloadSetKey?.takeIf { key -> items.any { it.key == key } } ?: items.first().key
@@ -290,7 +278,7 @@ class PayloadsPanel : BorderPanel(4) {
         val item = payloadSetCombo.selectedItem as? PayloadSetItem ?: return
         if (item.key == currentPayloadSetKey) return
         saveCurrentPayloadSet()
-        showPayloadSet(item.key, fallback = defaultPayloadSnapshot())
+        showPayloadSet(item.key, fallback = PayloadSourceEditor.Snapshot())
         updateCounts()
         refreshPayloadPanelSize()
     }
@@ -333,50 +321,29 @@ class PayloadsPanel : BorderPanel(4) {
                 } else {
                     payloadSetSnapshots[row.variable.key]
                 }
-                snapshot?.let { PayloadSource.countOrZero(PayloadSourceEditor.peekFrom(it)) } ?: 0L
+                PayloadSource.countOrZero(snapshot?.sourceOrNull())
             }
             BatchRequestBuilder.estimateItemCount(selectedAttackType(), selected.size, counts)
         }
-        payloadCountLabel.text = "Payload count: ${formatCount(payloadCount)}"
-        requestCountLabel.text = "Items: ${formatCount(requestCount)}"
+        payloadCountLabel.text = "Payload count: ${BatchRequestBuilder.formatCount(payloadCount)}"
+        requestCountLabel.text = "Items: ${BatchRequestBuilder.formatCount(requestCount)}"
         val httpRequests = BatchRequestBuilder.requestCount(requestCount, batchSize())
-        httpRequestCountLabel.text = "HTTP requests: ${formatCount(httpRequests)}"
+        httpRequestCountLabel.text = "HTTP requests: ${BatchRequestBuilder.formatCount(httpRequests)}"
     }
 
-    private fun batchSize(): Int {
-        try {
-            batchSizeSpinner.commitEdit()
-        } catch (_: java.text.ParseException) {
-            // Keep last valid value.
-        }
-        return batchSizeSpinner.value as Int
-    }
+    private fun batchSize(): Int = batchSizeSpinner.committedInt()
 
     private fun currentPayloadCount(): Long {
-        return PayloadSource.countOrZero(sharedPayloadEditor.peekSource())
+        return PayloadSource.countOrZero(sharedPayloadEditor.snapshot().sourceOrNull())
     }
 
     private fun selectedAttackType(): IntruderAttackType {
-        val selectedCount = variableRows.count { it.isSelected() }
-        return if (selectedCount < 2) {
-            IntruderAttackType.SNIPER
-        } else {
-            IntruderAttackType.fromLabel(attackTypeCombo.getSelectedItem())
-        }
+        return IntruderAttackType.fromLabel(attackTypeCombo.getSelectedItem()).effectiveFor(selectedRows().size)
     }
 
-    private fun usesSharedPayload(): Boolean {
-        val selectedCount = variableRows.count { it.isSelected() }
-        return selectedCount < 2 ||
-            selectedAttackType() == IntruderAttackType.SNIPER ||
-            selectedAttackType() == IntruderAttackType.BATTERING_RAM
-    }
+    private fun usesSharedPayload(): Boolean = selectedAttackType().usesSharedPayloadSet
 
     private fun selectedRows(): List<VariableRow> = variableRows.filter { it.isSelected() }
-
-    private fun formatCount(value: Long): String {
-        return if (value == Long.MAX_VALUE) "too large" else value.toString()
-    }
 
     private fun showEmpty(message: String) {
         emptyLabel.text = message
@@ -402,20 +369,6 @@ class PayloadsPanel : BorderPanel(4) {
         private const val SHARED_PAYLOAD_SET = ""
 
         private const val EMPTY_MESSAGE = "No GraphQL variables or arguments found in the request."
-
-        private fun defaultPayloadSnapshot(): PayloadSourceEditor.Snapshot {
-            return PayloadSourceEditor.Snapshot(
-                kindIndex = PayloadSourceEditor.DEFAULT_KIND_INDEX,
-                path = "",
-                from = 0,
-                to = 9,
-                charset = "0123456789",
-                minLen = 1,
-                maxLen = 3,
-                words = "",
-                nullCount = 10,
-            )
-        }
     }
 }
 
@@ -442,34 +395,77 @@ private class VariableRow(
         private fun labelFor(variable: BatchVariable): String {
             val indent = "    ".repeat((variable.path.size - 1).coerceAtLeast(0))
             return if (variable.type.isNullOrBlank()) {
-                indent + variable.displayName
+                indent + variable.key
             } else {
-                "$indent${variable.displayName}  (${variable.type})"
+                "$indent${variable.key}  (${variable.type})"
             }
         }
     }
 }
 
+private enum class PayloadKind(val label: String) {
+    FILE("File"),
+    NUMBERS("Numbers"),
+    BRUTE_FORCE("Brute forcer"),
+    SIMPLE_LIST("Simple list"),
+    NULL("Null"),
+    ;
+
+    override fun toString(): String = label
+}
+
 private class PayloadSourceEditor : JPanel() {
+    /** Everything the editor shows; the defaults are what a new payload set starts with. */
     data class Snapshot(
-        val kindIndex: Int,
-        val path: String,
-        val from: Int,
-        val to: Int,
-        val charset: String,
-        val minLen: Int,
-        val maxLen: Int,
-        val words: String,
-        val nullCount: Int,
+        val kind: PayloadKind = PayloadKind.SIMPLE_LIST,
+        val path: String = "",
+        val from: Int = 0,
+        val to: Int = 9,
         val minDigits: Int = 0,
-        val valueTypeIndex: Int = 0,
-    )
+        val charset: String = "0123456789",
+        val minLen: Int = 1,
+        val maxLen: Int = 3,
+        val words: List<String> = emptyList(),
+        val nullCount: Int = 10,
+        val valueType: PayloadValueType = PayloadValueType.AUTO,
+    ) {
+        /** Why these settings do not describe a usable payload source yet, or null if they do. */
+        fun problem(): String? = when (kind) {
+            PayloadKind.FILE -> "Choose a payload file".takeIf { path.isBlank() }
+            PayloadKind.NUMBERS -> "Number range From ($from) is greater than To ($to)".takeIf { from > to }
+            PayloadKind.BRUTE_FORCE -> when {
+                charset.isEmpty() -> "Enter a brute force character set"
+                maxLen < minLen -> "Brute force Max is smaller than Min"
+                else -> null
+            }
+            PayloadKind.SIMPLE_LIST -> "Add at least one item to the list".takeIf { PayloadSource.words(words).isEmpty() }
+            PayloadKind.NULL -> null
+        }
+
+        fun sourceOrNull(): PayloadSource? {
+            if (problem() != null) return null
+            return when (kind) {
+                PayloadKind.FILE -> PayloadSource.FilePath(path.trim())
+                PayloadKind.NUMBERS -> PayloadSource.NumberRange(from, to, minDigits)
+                PayloadKind.BRUTE_FORCE -> PayloadSource.BruteForce(charset, minLen, maxLen)
+                PayloadKind.SIMPLE_LIST -> PayloadSource.WordList(words)
+                PayloadKind.NULL -> PayloadSource.NullPayloads(nullCount)
+            }
+        }
+
+        /** Like [sourceOrNull], but tells the user what is missing. */
+        fun sourceOrShowError(variableLabel: String? = null): PayloadSource? {
+            problem()?.let { problem ->
+                ErrorDialog(problem + (variableLabel?.let { " for $it" } ?: "") + ".")
+                return null
+            }
+            return sourceOrNull()
+        }
+    }
 
     var onChanged: (() -> Unit)? = null
 
-    private val kindCombo = JComboBox(
-        arrayOf("File", "Numbers", "Brute forcer", "Simple list", "Null"),
-    ).also { it.selectedIndex = DEFAULT_KIND_INDEX }
+    private val kindCombo = JComboBox(PayloadKind.entries.toTypedArray())
     private val valueTypeCombo = JComboBox(PayloadValueType.entries.map { it.label }.toTypedArray()).also {
         it.toolTipText = "JSON type the payloads are sent as. Auto follows the variable's type. " +
             "Payloads that are not valid values of the chosen type stop the attack."
@@ -477,13 +473,13 @@ private class PayloadSourceEditor : JPanel() {
     private val pathField = JTextField(18).also { it.isEditable = false }
     private val browseButton = JButton("Browse…")
     private val fromSpinner = JSpinner(SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1))
-    private val toSpinner = JSpinner(SpinnerNumberModel(9, Integer.MIN_VALUE, Integer.MAX_VALUE, 1))
+    private val toSpinner = JSpinner(SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1))
     private val minDigitsSpinner = JSpinner(SpinnerNumberModel(0, 0, 18, 1)).also {
         it.toolTipText = "Pad numbers with leading zeros to at least this many digits (0 = no padding)."
     }
-    private val charsetField = JTextField("0123456789", 16)
-    private val minLenSpinner = JSpinner(SpinnerNumberModel(1, 0, 16, 1))
-    private val maxLenSpinner = JSpinner(SpinnerNumberModel(3, 0, 16, 1))
+    private val charsetField = JTextField(16)
+    private val minLenSpinner = JSpinner(SpinnerNumberModel(0, 0, 16, 1))
+    private val maxLenSpinner = JSpinner(SpinnerNumberModel(0, 0, 16, 1))
     private val listModel = DefaultListModel<String>()
     private val list = JList(listModel).also {
         it.selectionMode = ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
@@ -495,7 +491,7 @@ private class PayloadSourceEditor : JPanel() {
     private val removeButton = JButton("Remove")
     private val clearButton = JButton("Clear")
     private val dedupeButton = JButton("Deduplicate")
-    private val nullCountSpinner = JSpinner(SpinnerNumberModel(10, 1, PayloadSource.MAX_GENERATED, 1))
+    private val nullCountSpinner = JSpinner(SpinnerNumberModel(1, 1, PayloadSource.MAX_GENERATED, 1))
 
     private val fileRow = payloadFormRow("File:", pathField, browseButton)
     private val numbersRow = payloadFormRow(
@@ -538,8 +534,15 @@ private class PayloadSourceEditor : JPanel() {
      * (Simple list), so switching types never resizes the panel; shorter rows stay pinned to the top.
      */
     private val kindCards = JPanel(CardLayout()).also { cards ->
-        listOf(fileRow, numbersRow, bruteRow, listRow, nullRow).forEachIndexed { index, row ->
-            cards.add(JPanel(BorderLayout()).also { it.add(row, BorderLayout.NORTH) }, index.toString())
+        val rows = mapOf(
+            PayloadKind.FILE to fileRow,
+            PayloadKind.NUMBERS to numbersRow,
+            PayloadKind.BRUTE_FORCE to bruteRow,
+            PayloadKind.SIMPLE_LIST to listRow,
+            PayloadKind.NULL to nullRow,
+        )
+        for ((kind, row) in rows) {
+            cards.add(JPanel(BorderLayout()).also { it.add(row, BorderLayout.NORTH) }, kind.name)
         }
         cards.alignmentX = Component.LEFT_ALIGNMENT
         cards.maximumSize = Dimension(Integer.MAX_VALUE, cards.preferredSize.height)
@@ -549,7 +552,7 @@ private class PayloadSourceEditor : JPanel() {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         alignmentX = Component.LEFT_ALIGNMENT
         border = EmptyBorder(0, 4, 0, 4)
-        browseButton.addActionListener { chooseFile() }
+        browseButton.addActionListener { choosePayloadFile() }
         kindCombo.addActionListener { updateKindVisibility() }
         addButton.addActionListener { addListItem() }
         addField.addActionListener { addListItem() }
@@ -569,42 +572,40 @@ private class PayloadSourceEditor : JPanel() {
         }
         charsetField.document.addDocumentListener(SimpleDocumentListener { notifyChanged() })
         add(kindRow)
-        add(valueTypeRow.leftGrow())
+        add(valueTypeRow)
         add(kindCards)
-        updateKindVisibility()
+        restore(Snapshot())
     }
-
-    fun peekSource(): PayloadSource? = peekFrom(snapshot())
 
     fun snapshot(): Snapshot {
         return Snapshot(
-            kindIndex = kindCombo.selectedIndex,
+            kind = kindCombo.selectedItem as PayloadKind,
             path = pathField.text,
-            from = commitSpinner(fromSpinner),
-            to = commitSpinner(toSpinner),
+            from = fromSpinner.committedInt(),
+            to = toSpinner.committedInt(),
+            minDigits = minDigitsSpinner.committedInt(),
             charset = charsetField.text,
-            minLen = commitSpinner(minLenSpinner),
-            maxLen = commitSpinner(maxLenSpinner),
-            words = listWords().joinToString("\n"),
-            nullCount = commitSpinner(nullCountSpinner),
-            minDigits = commitSpinner(minDigitsSpinner),
-            valueTypeIndex = valueTypeCombo.selectedIndex,
+            minLen = minLenSpinner.committedInt(),
+            maxLen = maxLenSpinner.committedInt(),
+            words = listWords(),
+            nullCount = nullCountSpinner.committedInt(),
+            valueType = PayloadValueType.entries[valueTypeCombo.selectedIndex],
         )
     }
 
     fun restore(snapshot: Snapshot) {
-        kindCombo.selectedIndex = snapshot.kindIndex.coerceIn(0, kindCombo.itemCount - 1)
+        kindCombo.selectedItem = snapshot.kind
         pathField.text = snapshot.path
         fromSpinner.value = snapshot.from
         toSpinner.value = snapshot.to
+        minDigitsSpinner.value = snapshot.minDigits
         charsetField.text = snapshot.charset
         minLenSpinner.value = snapshot.minLen
         maxLenSpinner.value = snapshot.maxLen
         listModel.clear()
-        snapshot.words.split('\n').filter { it.isNotEmpty() }.forEach { listModel.addElement(it) }
+        snapshot.words.forEach { listModel.addElement(it) }
         nullCountSpinner.value = snapshot.nullCount
-        minDigitsSpinner.value = snapshot.minDigits
-        valueTypeCombo.selectedIndex = PayloadValueType.fromIndex(snapshot.valueTypeIndex).ordinal
+        valueTypeCombo.selectedIndex = snapshot.valueType.ordinal
         updateKindVisibility()
     }
 
@@ -623,31 +624,25 @@ private class PayloadSourceEditor : JPanel() {
         } catch (_: Exception) {
             null
         }
-        if (text.isNullOrEmpty()) return
-        var added = false
-        text.split('\n').map { it.trimEnd() }.filter { it.isNotEmpty() }.forEach {
-            listModel.addElement(it)
-            added = true
-        }
-        if (added) notifyChanged()
+        if (!text.isNullOrEmpty()) addListLines(text.lines())
     }
 
     private fun loadListItems() {
-        val chooser = JFileChooser().also {
-            it.currentDirectory = File(System.getProperty("user.home"))
+        val file = chooseFile() ?: return
+        val lines = try {
+            file.readLines()
+        } catch (e: IOException) {
+            ErrorDialog("Failed to read ${file.absolutePath}: ${e.message}")
+            return
         }
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return
-        var added = false
-        chooser.selectedFile.bufferedReader().use { reader ->
-            reader.lineSequence().forEach { line ->
-                val value = line.trimEnd()
-                if (value.isNotEmpty()) {
-                    listModel.addElement(value)
-                    added = true
-                }
-            }
-        }
-        if (added) notifyChanged()
+        addListLines(lines)
+    }
+
+    private fun addListLines(lines: List<String>) {
+        val words = PayloadSource.words(lines)
+        if (words.isEmpty()) return
+        words.forEach { listModel.addElement(it) }
+        notifyChanged()
     }
 
     private fun removeListItems() {
@@ -665,30 +660,29 @@ private class PayloadSourceEditor : JPanel() {
         notifyChanged()
     }
 
-    private fun chooseFile() {
+    private fun choosePayloadFile() {
+        val file = chooseFile(pathField.text.trim().takeIf { it.isNotEmpty() }?.let { File(it) }) ?: return
+        pathField.text = file.absolutePath
+        notifyChanged()
+    }
+
+    /** Asks for a file, starting next to [current] if given, otherwise in the home directory. */
+    private fun chooseFile(current: File? = null): File? {
         val chooser = JFileChooser().also {
-            it.currentDirectory = File(System.getProperty("user.home"))
-            val current = pathField.text.trim()
-            if (current.isNotEmpty()) {
-                val file = File(current)
-                if (file.parentFile?.isDirectory == true) {
-                    it.currentDirectory = file.parentFile
-                }
-                if (file.isFile) it.selectedFile = file
-            }
+            it.currentDirectory = current?.parentFile?.takeIf { dir -> dir.isDirectory }
+                ?: File(System.getProperty("user.home"))
+            if (current?.isFile == true) it.selectedFile = current
         }
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            pathField.text = chooser.selectedFile.absolutePath
-            notifyChanged()
-        }
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return null
+        return chooser.selectedFile
     }
 
     private fun updateKindVisibility() {
-        val index = kindCombo.selectedIndex
-        (kindCards.layout as CardLayout).show(kindCards, index.toString())
+        val kind = kindCombo.selectedItem as PayloadKind
+        (kindCards.layout as CardLayout).show(kindCards, kind.name)
         // Null payloads keep the original value, so there is nothing to convert. Disabled rather than hidden
         // so the panel keeps its height.
-        valueTypeCombo.isEnabled = index != 4
+        valueTypeCombo.isEnabled = kind != PayloadKind.NULL
         maximumSize = Dimension(Integer.MAX_VALUE, preferredSize.height.coerceAtLeast(1))
         revalidate()
         repaint()
@@ -700,95 +694,6 @@ private class PayloadSourceEditor : JPanel() {
     private fun notifyChanged() {
         onChanged?.invoke()
     }
-
-    private fun commitSpinner(spinner: JSpinner): Int {
-        try {
-            spinner.commitEdit()
-        } catch (_: java.text.ParseException) {
-            // Keep last valid value.
-        }
-        return spinner.value as Int
-    }
-
-    private fun JComponent.leftGrow(): JComponent {
-        alignmentX = Component.LEFT_ALIGNMENT
-        return this
-    }
-
-    companion object {
-        const val DEFAULT_KIND_INDEX = 3 // Simple list
-
-        fun sourceFrom(snapshot: Snapshot, variableLabel: String? = null): PayloadSource? {
-            val prefix = variableLabel?.let { " for $it" } ?: ""
-            return when (snapshot.kindIndex) {
-                0 -> {
-                    val path = snapshot.path.trim()
-                    if (path.isEmpty()) {
-                        ErrorDialog("Choose a payload file$prefix.")
-                        null
-                    } else {
-                        PayloadSource.FilePath(path)
-                    }
-                }
-                1 -> {
-                    if (snapshot.from > snapshot.to) {
-                        ErrorDialog("Number range From (${snapshot.from}) is greater than To (${snapshot.to})$prefix.")
-                        null
-                    } else {
-                        PayloadSource.NumberRange(snapshot.from, snapshot.to, snapshot.minDigits)
-                    }
-                }
-                2 -> {
-                    if (snapshot.charset.isEmpty()) {
-                        ErrorDialog("Enter a brute force character set$prefix.")
-                        null
-                    } else if (snapshot.maxLen < snapshot.minLen) {
-                        ErrorDialog("Brute force Max is smaller than Min$prefix.")
-                        null
-                    } else {
-                        PayloadSource.BruteForce(snapshot.charset, snapshot.minLen, snapshot.maxLen)
-                    }
-                }
-                3 -> {
-                    val words = snapshot.words.split('\n')
-                    if (words.none { it.isNotBlank() }) {
-                        ErrorDialog("Add at least one item to the list$prefix.")
-                        null
-                    } else {
-                        PayloadSource.WordList(words)
-                    }
-                }
-                else -> PayloadSource.NullPayloads(snapshot.nullCount)
-            }
-        }
-
-        fun peekFrom(snapshot: Snapshot): PayloadSource? {
-            return when (snapshot.kindIndex) {
-                0 -> snapshot.path.trim().takeIf { it.isNotEmpty() }?.let { PayloadSource.FilePath(it) }
-                1 -> if (snapshot.from > snapshot.to) {
-                    null
-                } else {
-                    PayloadSource.NumberRange(snapshot.from, snapshot.to, snapshot.minDigits)
-                }
-                2 -> if (snapshot.charset.isEmpty() || snapshot.maxLen < snapshot.minLen) {
-                    null
-                } else {
-                    PayloadSource.BruteForce(snapshot.charset, snapshot.minLen, snapshot.maxLen)
-                }
-                3 -> {
-                    val words = snapshot.words.split('\n').filter { it.isNotEmpty() }
-                    if (words.isEmpty()) null else PayloadSource.WordList(words)
-                }
-                else -> PayloadSource.NullPayloads(snapshot.nullCount)
-            }
-        }
-    }
-}
-
-internal class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
-    override fun insertUpdate(e: DocumentEvent?) = callback()
-    override fun removeUpdate(e: DocumentEvent?) = callback()
-    override fun changedUpdate(e: DocumentEvent?) = callback()
 }
 
 private const val PAYLOAD_LABEL_WIDTH = 96

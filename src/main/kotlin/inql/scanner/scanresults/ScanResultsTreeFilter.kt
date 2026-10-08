@@ -48,6 +48,16 @@ class ScanResultsTreeFilterModel(
 
     private val listeners = mutableListOf<TreeModelListener>()
 
+    init {
+        // Forward changes made through the source model (e.g. lazily loaded children) to the tree.
+        source.addTreeModelListener(object : TreeModelListener {
+            override fun treeNodesChanged(e: TreeModelEvent) = forward(e) { l, ev -> l.treeNodesChanged(ev) }
+            override fun treeNodesInserted(e: TreeModelEvent) = forward(e) { l, ev -> l.treeNodesInserted(ev) }
+            override fun treeNodesRemoved(e: TreeModelEvent) = forward(e) { l, ev -> l.treeNodesRemoved(ev) }
+            override fun treeStructureChanged(e: TreeModelEvent) = forward(e) { l, ev -> l.treeStructureChanged(ev) }
+        })
+    }
+
     var filter: String = ""
         set(value) {
             if (field == value) return
@@ -91,11 +101,23 @@ class ScanResultsTreeFilterModel(
         fireStructureChanged()
     }
 
-    private fun fireStructureChanged() {
-        val root = source.root
-        val event = TreeModelEvent(this, arrayOf(root), null, null)
+    private fun fireStructureChanged(path: Array<Any> = arrayOf(source.root)) {
+        val event = TreeModelEvent(this, path, null, null)
         for (listener in listeners.toList()) {
             listener.treeStructureChanged(event)
+        }
+    }
+
+    private fun forward(e: TreeModelEvent, notify: (TreeModelListener, TreeModelEvent) -> Unit) {
+        val path: Array<Any> = e.path ?: arrayOf(source.root)
+        // Child indices of the source only match the visible children while no filter is active.
+        if (filter.isNotEmpty()) {
+            fireStructureChanged(path)
+            return
+        }
+        val event = TreeModelEvent(this, path, e.childIndices, e.children)
+        for (listener in listeners.toList()) {
+            notify(listener, event)
         }
     }
 

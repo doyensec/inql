@@ -88,7 +88,7 @@ class HistoryLog(
             3 -> if (entry.error != null) "Error" else entry.resp?.statusCode()
             4 -> entry.resp?.body()?.length()
             5 -> entry.responseTimeMs
-            6 -> entry.mode
+            6 -> entry.mode.label
             7 -> entry.itemCount
             8 -> "${entry.part}/${entry.partCount}"
             else -> null
