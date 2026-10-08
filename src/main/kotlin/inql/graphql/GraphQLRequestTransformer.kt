@@ -1,7 +1,7 @@
 package inql.graphql
 
 import burp.api.montoya.http.message.requests.HttpRequest
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -71,7 +71,7 @@ data class GraphQLRequestContext(
 class GraphQLRequestTransformException(message: String) : Exception(message)
 
 object GraphQLRequestTransformer {
-    private val gson = Gson()
+    private val gson = GsonBuilder().disableHtmlEscaping().create()
     private const val MULTIPART_BOUNDARY = "----WebKitFormBoundaryInQL7MA4YWxkTrZu0gW"
     private val GRAPHQL_QUERY_PARAMS = setOf("query", "variables", "operationName")
 
@@ -189,6 +189,19 @@ object GraphQLRequestTransformer {
                 "POST" -> parseFromPostBody(request)
                 else -> null
             }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Like [parsePayload], but ignores the HTTP method: reads the body of any request and falls back to the
+     * URL query string. Useful for requests the user is still editing.
+     */
+    fun parsePayloadAnyMethod(request: HttpRequest): GraphQLRequestPayload? {
+        parsePayload(request)?.let { return it }
+        return try {
+            parseFromPostBody(request) ?: parseFromQueryString(URI.create(request.url()).rawQuery ?: "")
         } catch (_: Exception) {
             null
         }

@@ -35,12 +35,22 @@ class Label(text: String, bold: Boolean = false, big: Boolean = false) : JLabel(
     }
 }
 
+/** Word-wrapping, read-only text that looks and behaves like a [JLabel]. */
 class MultilineLabel(text: String) : JTextArea(text) {
     init {
         isEditable = false
         isOpaque = false
         lineWrap = true
         wrapStyleWord = true
+        isFocusable = false
+        cursor = Cursor.getDefaultCursor()
+    }
+
+    // Theme changes reinstall the text area's highlighter and font, so reapply the label look every time.
+    override fun updateUI() {
+        super.updateUI()
+        highlighter = null
+        font = UIManager.getFont("Label.font") ?: font
     }
 }
 
@@ -135,19 +145,28 @@ class ComboBox(description: String, vararg items: String) :
     fun addItemListener(il: ItemListener) = this.component.addItemListener(il)
 }
 
+/** Commits text typed into the spinner and returns its value; invalid input keeps the last valid value. */
+fun JSpinner.committedInt(): Int {
+    try {
+        commitEdit()
+    } catch (_: java.text.ParseException) {
+        // Keep last valid value when input is invalid.
+    }
+    return value as Int
+}
+
+class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
+    override fun insertUpdate(e: DocumentEvent?) = this.callback()
+    override fun removeUpdate(e: DocumentEvent?) = this.callback()
+    override fun changedUpdate(e: DocumentEvent?) = this.callback()
+}
+
 class Spinner(description: String, min: Int, val max: Int, val step: Int = 1) :
     Input<JSpinner>(JSpinner(SpinnerNumberModel(min, min, max, step)), description) {
 
     fun getValue(): Int = this.component.value as Int
 
-    fun getCommittedValue(): Int {
-        try {
-            component.commitEdit()
-        } catch (_: java.text.ParseException) {
-            // Keep last valid value when input is invalid.
-        }
-        return getValue()
-    }
+    fun getCommittedValue(): Int = component.committedInt()
 
     fun setValue(value: Int) {
         this.component.value = value
@@ -169,12 +188,6 @@ class TextField(description: String, val columns: Int = 20) :
     fun getText(): String = this.component.text
     fun setText(text: String) {
         this.component.text = text
-    }
-
-    class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
-        override fun insertUpdate(e: DocumentEvent?) = this.callback()
-        override fun removeUpdate(e: DocumentEvent?) = this.callback()
-        override fun changedUpdate(e: DocumentEvent?) = this.callback()
     }
 
     private fun changeHandler() {
@@ -220,12 +233,6 @@ class TextArea(description: String, val rows: Int, val cols: Int) :
     override fun isEnabled(): Boolean = this.component.isEnabled
     override fun setEnabled(enabled: Boolean) {
         this.component.isEnabled = enabled
-    }
-
-    class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
-        override fun insertUpdate(e: DocumentEvent?) = this.callback()
-        override fun removeUpdate(e: DocumentEvent?) = this.callback()
-        override fun changedUpdate(e: DocumentEvent?) = this.callback()
     }
 
     private fun changeHandler() {
