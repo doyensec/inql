@@ -1,5 +1,9 @@
 package inql.scanner.scanresults
 
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import graphql.schema.GraphQLFieldsContainer
 import graphql.schema.GraphQLInterfaceType
 import graphql.schema.GraphQLObjectType
@@ -45,6 +49,8 @@ class SchemaCorrectionsPanel(
         private const val MAX_PATH_DEPTH = 8
         private val ENUM_KIND_STANDALONE = "Standalone enum type"
         private val ENUM_KIND_INPUT_FIELD = "Input object field"
+        private val VALUE_KIND_ARGUMENT = "Field argument"
+        private val VALUE_KIND_INPUT_FIELD = "Input object field"
     }
     private val statusLabel = JLabel(" ")
     private val renameOldCombo = JComboBox<String>()
@@ -74,6 +80,17 @@ class SchemaCorrectionsPanel(
     private val argumentTypeCombo = JComboBox<String>()
     private val argumentTypeListModel = DefaultListModel<String>()
     private val argumentTypeList = JList(argumentTypeListModel)
+    private val valueKindCombo = JComboBox(arrayOf(VALUE_KIND_ARGUMENT, VALUE_KIND_INPUT_FIELD))
+    private val valueParentTypeCombo = JComboBox<String>()
+    private val valueFieldCombo = JComboBox<String>()
+    private val valueArgumentCombo = JComboBox<String>()
+    private val valueInputTypeCombo = JComboBox<String>()
+    private val valueInputFieldCombo = JComboBox<String>()
+    private val valueArgumentTargetPanel = JPanel()
+    private val valueInputFieldTargetPanel = JPanel()
+    private val argumentValueField = JTextField(32)
+    private val argumentValueListModel = DefaultListModel<String>()
+    private val argumentValueList = JList(argumentValueListModel)
     private val enumStandaloneTargetPanel = JPanel()
     private val enumInputTargetPanel = JPanel()
     private val correctionsTabs = JTabbedPane()
@@ -99,6 +116,11 @@ class SchemaCorrectionsPanel(
         applyInputEnumComboWidth(argumentFieldCombo)
         applyInputEnumComboWidth(argumentNameCombo)
         applyInputEnumComboWidth(argumentTypeCombo)
+        applyInputEnumComboWidth(valueParentTypeCombo)
+        applyInputEnumComboWidth(valueFieldCombo)
+        applyInputEnumComboWidth(valueArgumentCombo)
+        applyInputEnumComboWidth(valueInputTypeCombo)
+        applyInputEnumComboWidth(valueInputFieldCombo)
 
         schemaTypesList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         schemaTypesList.cellRenderer = SchemaTypeListCellRenderer()
@@ -113,6 +135,7 @@ class SchemaCorrectionsPanel(
 
         correctionsTabs.addTab("Type Renames", buildRenamesPanel())
         correctionsTabs.addTab("Argument Types", buildArgumentTypesPanel())
+        correctionsTabs.addTab("Argument Values", buildArgumentValuesPanel())
         correctionsTabs.addTab("Enum Values", buildEnumValuesPanel())
         correctionsTabs.addTab("SDL Editor", buildSdlPanel())
 
@@ -149,6 +172,8 @@ class SchemaCorrectionsPanel(
         initArgumentPathBuilder()
         initEnumInputPathBuilder()
         refreshArgumentTypeList()
+        refreshArgumentValuePickers()
+        refreshArgumentValueList()
         updateSdlEditor(effectiveSdl(scanResult))
         statusLabel.text = if (scanResult.hasManualCorrections()) {
             "Manual corrections are active for this schema."
@@ -182,6 +207,8 @@ class SchemaCorrectionsPanel(
         initArgumentPathBuilder()
         initEnumInputPathBuilder()
         refreshArgumentTypeList()
+        refreshArgumentValuePickers()
+        refreshArgumentValueList()
         updateSdlEditor(effectiveSdl(scanResult))
 
         if (preservedTypeListIndex >= 0 && preservedTypeListIndex < schemaTypesListModel.size()) {
@@ -222,6 +249,7 @@ class SchemaCorrectionsPanel(
         when {
             effectivePreferred != null -> selectComboValue(combo, effectivePreferred)
             items.isNotEmpty() && modelChanged -> combo.selectedIndex = 0
+            items.isEmpty() && modelChanged -> combo.selectedItem = null
         }
     }
 
@@ -359,6 +387,257 @@ class SchemaCorrectionsPanel(
         panel.add(top, BorderLayout.NORTH)
         panel.add(overridesPanel, BorderLayout.CENTER)
         return panel
+    }
+
+    private fun buildArgumentValuesPanel(): JPanel {
+        val panel = JPanel(BorderLayout(8, 8))
+        panel.border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
+
+        valueKindCombo.addActionListener { refreshValueFormVisibility() }
+        valueParentTypeCombo.addActionListener { refreshValueFieldPicker() }
+        valueFieldCombo.addActionListener { refreshValueArgumentPicker() }
+        valueInputTypeCombo.addActionListener { refreshValueInputFieldPicker() }
+
+        valueArgumentTargetPanel.layout = BoxLayout(valueArgumentTargetPanel, BoxLayout.Y_AXIS)
+        valueArgumentTargetPanel.alignmentX = JPanel.LEFT_ALIGNMENT
+        valueArgumentTargetPanel.add(formRow("Type:", valueParentTypeCombo))
+        valueArgumentTargetPanel.add(formRow("Field:", valueFieldCombo))
+        valueArgumentTargetPanel.add(formRow("Argument:", valueArgumentCombo))
+
+        valueInputFieldTargetPanel.layout = BoxLayout(valueInputFieldTargetPanel, BoxLayout.Y_AXIS)
+        valueInputFieldTargetPanel.alignmentX = JPanel.LEFT_ALIGNMENT
+        valueInputFieldTargetPanel.add(formRow("Input type:", valueInputTypeCombo))
+        valueInputFieldTargetPanel.add(formRow("Field:", valueInputFieldCombo))
+
+        val top = JPanel()
+        top.layout = BoxLayout(top, BoxLayout.Y_AXIS)
+        top.add(
+            plainHint(
+                "Set a fixed value for a specific field argument, or for an input object field.",
+                "Picking the type first avoids ambiguity when the same name (e.g. id) exists on several types.",
+                "Values are JSON (42, true, \"text\", {\"a\": 1}); plain text without quotes is treated as a string.",
+            ),
+        )
+        top.add(sectionSpacer())
+        top.add(
+            correctionsSection("1. Choose target") { content ->
+                content.add(formRow("Target:", valueKindCombo))
+                content.add(valueArgumentTargetPanel)
+                content.add(valueInputFieldTargetPanel)
+            },
+        )
+        top.add(sectionSpacer())
+        top.add(
+            correctionsSection("2. Set value") { content ->
+                content.add(formRow("Value:", argumentValueField))
+                content.add(formActionsRow(noFocusButton("Add / update override") { addArgumentValueOverride() }))
+            },
+        )
+
+        argumentValueList.selectionMode = ListSelectionModel.SINGLE_SELECTION
+        argumentValueList.visibleRowCount = 8
+        argumentValueList.fixedCellHeight = 18
+        argumentValueList.addListSelectionListener(ListSelectionListener {
+            val selected = argumentValueList.selectedValue ?: return@ListSelectionListener
+            val keyPart = selected.substringBefore(" → ")
+            val value = selected.substringAfter(" → ")
+            argumentValueField.text = value
+            if (keyPart.startsWith("[input] ")) {
+                val path = keyPart.removePrefix("[input] ")
+                val dotIndex = path.indexOf('.')
+                if (dotIndex < 0) return@ListSelectionListener
+                val inputType = path.substring(0, dotIndex)
+                val fieldName = path.substring(dotIndex + 1)
+                selectComboValue(valueKindCombo, VALUE_KIND_INPUT_FIELD)
+                refreshValueFormVisibility()
+                selectComboValue(valueInputTypeCombo, inputType)
+                refreshValueInputFieldPicker(preferredFieldName = fieldName)
+            } else {
+                val parts = keyPart.split('.')
+                if (parts.size != 3) return@ListSelectionListener
+                selectComboValue(valueKindCombo, VALUE_KIND_ARGUMENT)
+                refreshValueFormVisibility()
+                selectComboValue(valueParentTypeCombo, parts[0])
+                refreshValueFieldPicker(preferredFieldName = parts[1])
+                refreshValueArgumentPicker(preferredArgumentName = parts[2])
+            }
+        })
+        val removeOverride = noFocusButton("Remove selected") { removeSelectedArgumentValueOverride() }
+
+        val scroll = JScrollPane(argumentValueList)
+        scroll.preferredSize = Dimension(0, 160)
+
+        val overridesPanel = JPanel(BorderLayout(4, 4))
+        overridesPanel.border = BorderFactory.createTitledBorder("Configured overrides")
+        overridesPanel.add(scroll, BorderLayout.CENTER)
+        val removeRow = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
+        removeRow.add(removeOverride)
+        overridesPanel.add(removeRow, BorderLayout.SOUTH)
+
+        panel.add(top, BorderLayout.NORTH)
+        panel.add(overridesPanel, BorderLayout.CENTER)
+        refreshValueFormVisibility()
+        return panel
+    }
+
+    private fun refreshValueFormVisibility() {
+        val inputField = selectedComboText(valueKindCombo) == VALUE_KIND_INPUT_FIELD
+        valueArgumentTargetPanel.isVisible = !inputField
+        valueInputFieldTargetPanel.isVisible = inputField
+        valueArgumentTargetPanel.parent?.revalidate()
+        valueInputFieldTargetPanel.parent?.revalidate()
+    }
+
+    private fun refreshArgumentValuePickers(
+        preferredParentType: String? = null,
+        preferredFieldName: String? = null,
+        preferredArgumentName: String? = null,
+        preferredInputType: String? = null,
+        preferredInputFieldName: String? = null,
+    ) {
+        val parentTypes = buildList {
+            addAll(typeCatalog.argumentParentTypes)
+            addAll(workingCorrections.argumentValueOverrides.keys)
+        }.distinct().sorted()
+        updateComboModel(valueParentTypeCombo, parentTypes, preferredParentType, dropMissingPreferred = true)
+        refreshValueFieldPicker(preferredFieldName)
+        refreshValueArgumentPicker(preferredArgumentName)
+
+        val inputTypes = buildList {
+            addAll(typeCatalog.inputTypes)
+            addAll(workingCorrections.inputFieldValueOverrides.keys)
+        }.distinct().sorted()
+        updateComboModel(valueInputTypeCombo, inputTypes, preferredInputType, dropMissingPreferred = true)
+        refreshValueInputFieldPicker(preferredInputFieldName)
+    }
+
+    private fun refreshValueFieldPicker(preferredFieldName: String? = null) {
+        val parentType = selectedComboText(valueParentTypeCombo)
+        val fields = buildList {
+            if (!parentType.isNullOrEmpty()) {
+                addAll(typeCatalog.fieldArguments[parentType]?.keys.orEmpty())
+                addAll(workingCorrections.argumentValueOverrides[parentType]?.keys.orEmpty())
+            }
+        }.distinct().sorted()
+        updateComboModel(valueFieldCombo, fields, preferredFieldName, dropMissingPreferred = true)
+    }
+
+    private fun refreshValueArgumentPicker(preferredArgumentName: String? = null) {
+        val parentType = selectedComboText(valueParentTypeCombo)
+        val fieldName = selectedComboText(valueFieldCombo)
+        val arguments = buildList {
+            if (!parentType.isNullOrEmpty() && !fieldName.isNullOrEmpty()) {
+                addAll(typeCatalog.argumentsFor(parentType, fieldName))
+                addAll(workingCorrections.argumentValueOverrides[parentType]?.get(fieldName)?.keys.orEmpty())
+            }
+        }.distinct().sorted()
+        updateComboModel(valueArgumentCombo, arguments, preferredArgumentName, dropMissingPreferred = true)
+    }
+
+    private fun refreshValueInputFieldPicker(preferredFieldName: String? = null) {
+        val inputType = selectedComboText(valueInputTypeCombo)
+        val fields = buildList {
+            if (!inputType.isNullOrEmpty()) {
+                addAll(typeCatalog.inputTypeFields[inputType].orEmpty())
+                addAll(workingCorrections.inputFieldValueOverrides[inputType]?.keys.orEmpty())
+            }
+        }.distinct().sorted()
+        updateComboModel(valueInputFieldCombo, fields, preferredFieldName, dropMissingPreferred = true)
+    }
+
+    private fun refreshArgumentValueList() {
+        argumentValueListModel.clear()
+        workingCorrections.argumentValueOverrides.entries
+            .sortedBy { it.key }
+            .forEach { (parentType, fields) ->
+                fields.entries.sortedBy { it.key }.forEach { (fieldName, arguments) ->
+                    arguments.entries.sortedBy { it.key }.forEach { (argumentName, value) ->
+                        argumentValueListModel.addElement("$parentType.$fieldName.$argumentName → $value")
+                    }
+                }
+            }
+        workingCorrections.inputFieldValueOverrides.entries
+            .sortedBy { it.key }
+            .forEach { (inputType, fields) ->
+                fields.entries.sortedBy { it.key }.forEach { (fieldName, value) ->
+                    argumentValueListModel.addElement("[input] $inputType.$fieldName → $value")
+                }
+            }
+    }
+
+    private fun normalizeJsonValueInput(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val parsed = runCatching {
+            val reader = JsonReader(java.io.StringReader(trimmed)).apply { isLenient = true }
+            val element = JsonParser.parseReader(reader)
+            check(reader.peek() == JsonToken.END_DOCUMENT) { "trailing content after JSON value" }
+            element
+        }.getOrNull()
+        return parsed?.toString() ?: Gson().toJson(trimmed)
+    }
+
+    private fun addArgumentValueOverride() {
+        val value = normalizeJsonValueInput(argumentValueField.text)
+        if (value == null) {
+            showError("A value is required.")
+            return
+        }
+        if (selectedComboText(valueKindCombo) == VALUE_KIND_INPUT_FIELD) {
+            val inputType = selectedComboText(valueInputTypeCombo)
+            val fieldName = selectedComboText(valueInputFieldCombo)
+            if (inputType.isNullOrEmpty() || fieldName.isNullOrEmpty()) {
+                showError("Input type and field are required.")
+                return
+            }
+            workingCorrections = workingCorrections.withInputFieldValueOverride(inputType, fieldName, value)
+            argumentValueField.text = value
+            refreshArgumentValuePickers(preferredInputType = inputType, preferredInputFieldName = fieldName)
+            refreshArgumentValueList()
+            statusLabel.text = "Value override added for $inputType.$fieldName. Save corrections to apply."
+        } else {
+            val parentType = selectedComboText(valueParentTypeCombo)
+            val fieldName = selectedComboText(valueFieldCombo)
+            val argumentName = selectedComboText(valueArgumentCombo)
+            if (parentType.isNullOrEmpty() || fieldName.isNullOrEmpty() || argumentName.isNullOrEmpty()) {
+                showError("Type, field, and argument are required.")
+                return
+            }
+            workingCorrections = workingCorrections.withArgumentValueOverride(parentType, fieldName, argumentName, value)
+            argumentValueField.text = value
+            refreshArgumentValuePickers(
+                preferredParentType = parentType,
+                preferredFieldName = fieldName,
+                preferredArgumentName = argumentName,
+            )
+            refreshArgumentValueList()
+            statusLabel.text = "Value override added for $parentType.$fieldName.$argumentName. Save corrections to apply."
+        }
+    }
+
+    private fun removeSelectedArgumentValueOverride() {
+        val selected = selectedListEntry(argumentValueList, argumentValueListModel)
+        if (selected == null) {
+            statusLabel.text = "Select an override to remove."
+            return
+        }
+        val keyPart = selected.substringBefore(" → ")
+        if (keyPart.startsWith("[input] ")) {
+            val path = keyPart.removePrefix("[input] ")
+            val dotIndex = path.indexOf('.')
+            if (dotIndex < 0) return
+            workingCorrections = workingCorrections.withoutInputFieldValueOverride(
+                path.substring(0, dotIndex),
+                path.substring(dotIndex + 1),
+            )
+        } else {
+            val parts = keyPart.split('.')
+            if (parts.size != 3) return
+            workingCorrections = workingCorrections.withoutArgumentValueOverride(parts[0], parts[1], parts[2])
+        }
+        refreshArgumentValuePickers()
+        refreshArgumentValueList()
+        statusLabel.text = "Value override removed. Save corrections to apply."
     }
 
     private fun effectiveSchema(): GraphQLSchema = scanResult.effectiveParsedSchema().schema

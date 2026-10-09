@@ -15,10 +15,23 @@ data class QueryWithVariables(
     val variables: Map<String, Any?>,
 )
 
+/**
+ * Identifies the location a generated value is for.
+ *
+ * For an argument on an output field, [inputTypeName] holds the *field* name (not a real input
+ * type), [fieldName] holds the *argument* name, and [parentType] holds the field's real container
+ * type (e.g. "Query", "User") — this is the historical, slightly overloaded shape already used by
+ * the enum-override lookups. For a nested input-object field, [inputTypeName] is the real input
+ * type, [fieldName] is the field, and [parentType] is unused.
+ */
 private data class InputFieldContext(
     val inputTypeName: String,
     val fieldName: String,
+    val parentType: String? = null,
 )
+
+/** A pre-validated JSON literal spliced verbatim into the generated `variables` body. */
+private data class RawJsonValue(val json: String)
 
 internal fun isSchemaPlaceholderField(fieldName: String): Boolean {
     return fieldName == "_inql_placeholder" || fieldName == "PLACEHOLDER"
@@ -266,6 +279,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         val args = processFieldArguments(
             schema = schema,
             field = field,
+            parentTypeName = container.name,
             currentDepth = pathIndex + 1,
             maxDepth = maxDepth,
             variablesMap = variablesMap,
@@ -339,6 +353,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         val args = processFieldArguments(
             schema = schema,
             field = field,
+            parentTypeName = container.name,
             currentDepth = pathIndex + 1,
             maxDepth = maxDepth,
             variablesMap = variablesMap,
@@ -410,12 +425,14 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             val inputContext = InputFieldContext(
                 inputTypeName = fieldName,
                 fieldName = arg.name,
+                parentType = rootType.name,
             )
             val value = buildRootArgumentValue(
                 schema = schema,
                 type = arg.type,
                 explicit = arguments[arg.name],
                 argValueDepth = argValueDepth,
+                inputContext = inputContext,
             )
                 ?: requiredArgumentFallback(schema, arg.type, inputContext)
                 ?: permissiveArgumentFallback(schema, arg.type, inputContext)
@@ -472,9 +489,10 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         type: GraphQLType,
         explicit: Any?,
         argValueDepth: Int,
+        inputContext: InputFieldContext,
     ): Any? {
         if (explicit != null) return explicit
-        return generateExampleValue(schema, type, 0, argValueDepth)
+        return generateExampleValue(schema, type, 0, argValueDepth, inputContext)
     }
 
     private fun getSelectionSet(
@@ -525,6 +543,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
                 buildFieldSelection(
                     schema = schema,
                     field = field,
+                    parentTypeName = type.name,
                     currentDepth = currentDepth,
                     maxDepth = maxDepth,
                     visitedTypes = visitedTypes,
@@ -548,6 +567,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     private fun buildFieldSelection(
         schema: GraphQLSchema,
         field: GraphQLFieldDefinition,
+        parentTypeName: String,
         currentDepth: Int,
         maxDepth: Int,
         visitedTypes: MutableSet<String>,
@@ -562,6 +582,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         val args = processFieldArguments(
             schema = schema,
             field = field,
+            parentTypeName = parentTypeName,
             currentDepth = nextDepth,
             maxDepth = maxDepth,
             variablesMap = variablesMap,
@@ -667,6 +688,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     private fun processFieldArguments(
         schema: GraphQLSchema,
         field: GraphQLFieldDefinition,
+        parentTypeName: String,
         currentDepth: Int,
         maxDepth: Int,
         variablesMap: MutableMap<String, Any?>,
@@ -682,6 +704,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
             val inputContext = InputFieldContext(
                 inputTypeName = field.name,
                 fieldName = arg.name,
+                parentType = parentTypeName,
             )
             val exampleValue = generateExampleValue(schema, arg.type, 0, argValueDepth, inputContext)
                 ?: requiredArgumentFallback(schema, arg.type, inputContext)
@@ -824,6 +847,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
                 val args = processFieldArguments(
                     schema = schema,
                     field = field,
+                    parentTypeName = container.name,
                     currentDepth = depth,
                     maxDepth = maxDepth,
                     variablesMap = variablesMap,
@@ -867,6 +891,8 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         maxDepth: Int = 3,
         inputContext: InputFieldContext? = null,
     ): Any? {
+        inputContext?.let { correctionArgumentValue(it) }?.let { return it }
+
         if (currentDepth > maxDepth) {
             return inputContext?.let { correctionEnumValue(it) }
         }
@@ -941,6 +967,18 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
         return scanResults.schemaCorrections.inputEnumFieldOverrides[ctx.inputTypeName]
             ?.get(ctx.fieldName)
             ?.firstOrNull { !isSchemaPlaceholderField(it) }
+    }
+
+    private fun correctionArgumentValue(ctx: InputFieldContext): RawJsonValue? {
+        val value = if (ctx.parentType != null) {
+            scanResults.schemaCorrections.argumentValueOverrides[ctx.parentType]
+                ?.get(ctx.inputTypeName)
+                ?.get(ctx.fieldName)
+        } else {
+            scanResults.schemaCorrections.inputFieldValueOverrides[ctx.inputTypeName]
+                ?.get(ctx.fieldName)
+        }
+        return value?.let { RawJsonValue(it) }
     }
 
     private fun resolveSchemaType(schema: GraphQLSchema, type: GraphQLType): GraphQLType {
@@ -1025,6 +1063,7 @@ class QueryToRequestConverter(private val scanResults: ScanResult) {
     private fun formatVariablesToJson(value: Any?): String {
         if (value == null) return "null"
         return when (value) {
+            is RawJsonValue -> value.json
             is String -> "\"${value.replace("\"", "\\\"")}\""
             is Number -> value.toString()
             is Boolean -> value.toString()
