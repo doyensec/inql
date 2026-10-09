@@ -20,7 +20,7 @@ private data class InputFieldContext(
     val fieldName: String,
 )
 
-private fun isSchemaPlaceholderField(fieldName: String): Boolean {
+internal fun isSchemaPlaceholderField(fieldName: String): Boolean {
     return fieldName == "_inql_placeholder" || fieldName == "PLACEHOLDER"
 }
 

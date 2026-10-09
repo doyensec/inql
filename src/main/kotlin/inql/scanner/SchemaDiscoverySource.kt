@@ -18,6 +18,9 @@ enum class SchemaDiscoverySource {
 
     /** Schema reconstructed passively from Proxy / History traffic. */
     HISTORY,
+
+    /** Schema produced by merging two schemas from other tabs / files. */
+    MERGED,
     ;
 
     /** Short label for the scan tree node, e.g. `(Introspection)`. */
@@ -28,5 +31,6 @@ enum class SchemaDiscoverySource {
             FEDERATION_SDL_FALLBACK -> "Federation SDL"
             BRUTEFORCE -> "Bruteforced"
             HISTORY -> "History"
+            MERGED -> "Merged"
         }
 }

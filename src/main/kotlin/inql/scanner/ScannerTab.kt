@@ -12,6 +12,7 @@ import inql.bruteforcer.Bruteforcer
 import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
+import inql.graphql.SchemaSdlMerger
 import inql.savestate.SavesAndLoadData
 import inql.Config
 import inql.savestate.SavesDataToProject
@@ -35,6 +36,11 @@ import javax.swing.JLabel
 import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
+
+sealed interface MergeSource {
+    data class Tab(val tab: ScannerTab) : MergeSource
+    data class File(val path: String) : MergeSource
+}
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
     companion object {
@@ -86,6 +92,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     val scanResultsView = ScanResultsView(this)
 
     private var bruteforcerJob: Job? = null
+    private var mergeJob: Job? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var recoverSchemaOnRestore = false
 
@@ -332,8 +339,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         )
 
         withContext(Dispatchers.Main) {
-            val hostKey = HistoryHostKey.fromRequest(this@ScannerTab.requestTemplate)?.let { HistoryHostKey.normalize(it) }
-                ?: HistoryHostKey.normalize(this@ScannerTab.host ?: return@withContext)
+            val hostKey = hostKey() ?: return@withContext
             scanner.applyScanResult(hostKey, SchemaDiscoverySource.BRUTEFORCE, requestTemplate, sr, focus = true)
             scanConfigView.setBusy(false)
             scanConfigView.setBruteforcerRunning(false)
@@ -417,12 +423,88 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         withContext(Dispatchers.Main) {
             scanResults.add(sr)
-            val hostKey = HistoryHostKey.fromRequest(requestTemplate)?.let { HistoryHostKey.normalize(it) }
-                ?: HistoryHostKey.normalize(this@ScannerTab.host ?: return@withContext)
+            val hostKey = hostKey() ?: return@withContext
             setTabTitle(Scanner.sourceTabTitle(schemaDiscoverySource, hostKey))
             scanner.updateChildObjectAsync(this@ScannerTab)
             scanCompleted()
             scanResultsView.ensureDefaultTreeExpansion()
+        }
+    }
+
+    private fun hostKey(): String? =
+        (HistoryHostKey.fromRequest(requestTemplate) ?: host)?.let { HistoryHostKey.normalize(it) }
+
+    fun primaryScanResult(): ScanResult? =
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))
+            ?.let { (source, _) -> scanResults.find { it.schemaDiscoverySource == source } }
+            ?: scanResults.singleOrNull()
+            ?: scanResults.lastOrNull()
+
+    fun mergeSchemaWith(source: MergeSource) {
+        if (mergeJob?.isActive == true) {
+            Logger.debug("Schema merge already running, ignoring duplicate launch request")
+            return
+        }
+        val primary = primaryScanResult() ?: run {
+            ErrorDialog("Merge failed: this tab has no schema")
+            return
+        }
+        val primaryLabel = getTabTitle()
+        val (sourceLabel, loadSecondary) = when (source) {
+            is MergeSource.Tab -> {
+                val result = source.tab.primaryScanResult()
+                    ?: run {
+                        ErrorDialog("Merge failed: the selected tab has no schema")
+                        return
+                    }
+                source.tab.getTabTitle() to { result.effectiveGraphQLSchema() }
+            }
+            is MergeSource.File -> File(source.path).name to { GQLSchema(File(source.path).readText()).schema }
+        }
+
+        mergeJob = coroutineScope.launch {
+            val secondary = try {
+                loadSecondary()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ErrorDialog("Merge failed: could not load schema from $sourceLabel: ${e.message}")
+                return@launch
+            }
+            val result = SchemaSdlMerger.merge(primary.effectiveGraphQLSchema(), secondary)
+            val merged = result.schema
+            if (merged == null) {
+                Logger.error("Merged schema failed validation:\n${result.errors.joinToString("\n") { "- $it" }}")
+                Logger.debug("Merged SDL:\n${result.sdl}")
+                ErrorDialog("Merged schema failed validation, see error log for details", false)
+                return@launch
+            }
+            result.conflicts.forEach { Logger.info("Schema merge conflict: $it") }
+            val sr = ScanResult(
+                primary.host,
+                requestTemplate,
+                merged,
+                sdlSchema = merged.sdlSchema,
+                schemaDiscoverySource = SchemaDiscoverySource.MERGED,
+            )
+
+            withContext(Dispatchers.Main) {
+                scanner.applyScanResult(
+                    hostKey() ?: HistoryHostKey.normalize(primary.host),
+                    SchemaDiscoverySource.MERGED,
+                    requestTemplate,
+                    sr,
+                    focus = true,
+                )
+                JOptionPane.showMessageDialog(
+                    Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                    "Merged $primaryLabel with $sourceLabel: +${result.addedTypes} types, " +
+                        "+${result.addedFields} fields, ${result.conflicts.size} conflicts " +
+                        "(primary kept; see extension output)",
+                    "InQL Schema Merge",
+                    JOptionPane.INFORMATION_MESSAGE,
+                )
+            }
         }
     }
 
