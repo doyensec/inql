@@ -73,7 +73,9 @@ class ThrottledClient(private val baseRequest: HttpRequest) {
                 resetBackoff()
                 return result
             } catch (_: TooManyRequestsException) {
+                // Throttled requests are retried until they succeed (or the scan is cancelled) instead of being lost.
                 increaseBackoff()
+                continue
             } catch (_: BlankResponseException) {
                 increaseBackoff()
             } catch (e: CancellationException) {
