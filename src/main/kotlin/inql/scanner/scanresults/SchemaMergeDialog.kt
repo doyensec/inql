@@ -62,8 +62,7 @@ class SchemaMergeDialog(private val scannerTab: ScannerTab) :
             fileRadio,
             row(pathField, browseButton),
             JLabel(
-                "<html>The current tab's schema takes precedence on conflicts. Result is a snapshot saved in the " +
-                    "[Merged] tab;<br>re-run merge to pick up new History data.</html>",
+                "The current tab's schema takes precedence on conflicts. Result is a snapshot saved in a new tab. "",
             ),
         )
         content.components.forEach { (it as? JComponent)?.alignmentX = Component.LEFT_ALIGNMENT }
