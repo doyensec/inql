@@ -14,6 +14,10 @@ data class SchemaCorrections(
     val removedFields: Map<String, Set<String>> = emptyMap(),
     val fieldTypeOverrides: Map<String, Map<String, String>> = emptyMap(),
     val argumentTypeOverrides: Map<String, Map<String, Map<String, String>>> = emptyMap(),
+    /** parent type → field name → argument name → raw JSON literal overriding the auto-generated placeholder. */
+    val argumentValueOverrides: Map<String, Map<String, Map<String, String>>> = emptyMap(),
+    /** input type → field name → raw JSON literal overriding the auto-generated placeholder. */
+    val inputFieldValueOverrides: Map<String, Map<String, String>> = emptyMap(),
     /** input type → field name → allowed enum values (from server error hints). */
     val inputEnumFieldOverrides: Map<String, Map<String, List<String>>> = emptyMap(),
     /** leaf input type → field name → full display path (root.nested.field) for the corrections UI. */
@@ -71,6 +75,8 @@ data class SchemaCorrections(
             removedFields.values.all { it.isEmpty() } &&
             fieldTypeOverrides.isEmpty() &&
             argumentTypeOverrides.isEmpty() &&
+            argumentValueOverrides.isEmpty() &&
+            inputFieldValueOverrides.isEmpty() &&
             inputEnumFieldOverrides.isEmpty() &&
             inputEnumFieldDisplayPaths.isEmpty() &&
             enumValueOverrides.isEmpty() &&
@@ -102,6 +108,12 @@ data class SchemaCorrections(
         }
         if (argumentTypeOverrides.isNotEmpty()) {
             root.add("argumentTypeOverrides", gson.toJsonTree(argumentTypeOverrides))
+        }
+        if (argumentValueOverrides.isNotEmpty()) {
+            root.add("argumentValueOverrides", gson.toJsonTree(argumentValueOverrides))
+        }
+        if (inputFieldValueOverrides.isNotEmpty()) {
+            root.add("inputFieldValueOverrides", gson.toJsonTree(inputFieldValueOverrides))
         }
         if (inputEnumFieldOverrides.isNotEmpty()) {
             root.add("inputEnumFieldOverrides", gson.toJsonTree(inputEnumFieldOverrides))
@@ -232,6 +244,60 @@ data class SchemaCorrections(
             argumentTypeOverrides + (parentType to updatedParentOverrides)
         }
         return copy(argumentTypeOverrides = topLevel)
+    }
+
+    fun withArgumentValueOverride(
+        parentType: String,
+        fieldName: String,
+        argumentName: String,
+        value: String,
+    ): SchemaCorrections {
+        val parentOverrides = argumentValueOverrides[parentType].orEmpty()
+        val fieldOverrides = parentOverrides[fieldName].orEmpty()
+        return copy(
+            argumentValueOverrides = argumentValueOverrides + mapOf(
+                parentType to (parentOverrides + mapOf(fieldName to (fieldOverrides + (argumentName to value)))),
+            ),
+        )
+    }
+
+    fun withoutArgumentValueOverride(
+        parentType: String,
+        fieldName: String,
+        argumentName: String,
+    ): SchemaCorrections {
+        val parentOverrides = argumentValueOverrides[parentType] ?: return this
+        val fieldOverrides = parentOverrides[fieldName] ?: return this
+        val updatedFieldOverrides = fieldOverrides - argumentName
+        val updatedParentOverrides = if (updatedFieldOverrides.isEmpty()) {
+            parentOverrides - fieldName
+        } else {
+            parentOverrides + (fieldName to updatedFieldOverrides)
+        }
+        val topLevel = if (updatedParentOverrides.isEmpty()) {
+            argumentValueOverrides - parentType
+        } else {
+            argumentValueOverrides + (parentType to updatedParentOverrides)
+        }
+        return copy(argumentValueOverrides = topLevel)
+    }
+
+    fun withInputFieldValueOverride(inputTypeName: String, fieldName: String, value: String): SchemaCorrections {
+        val fieldOverrides = inputFieldValueOverrides[inputTypeName].orEmpty()
+        return copy(
+            inputFieldValueOverrides = inputFieldValueOverrides + (inputTypeName to (fieldOverrides + (fieldName to value))),
+        )
+    }
+
+    fun withoutInputFieldValueOverride(inputTypeName: String, fieldName: String): SchemaCorrections {
+        val fieldOverrides = inputFieldValueOverrides[inputTypeName] ?: return this
+        val updated = fieldOverrides - fieldName
+        val topLevel = if (updated.isEmpty()) {
+            inputFieldValueOverrides - inputTypeName
+        } else {
+            inputFieldValueOverrides + (inputTypeName to updated)
+        }
+        return copy(inputFieldValueOverrides = topLevel)
     }
 
     fun typeAliasMap(): Map<String, String> {
