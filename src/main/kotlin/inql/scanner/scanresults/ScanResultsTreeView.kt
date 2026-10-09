@@ -8,6 +8,7 @@ import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.event.HierarchyEvent
 import javax.swing.BorderFactory
+import javax.swing.JButton
 import javax.swing.JLabel
 import javax.swing.JScrollPane
 import javax.swing.JTextField
@@ -34,6 +35,11 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     private val searchField = JTextField(24).also {
         it.putClientProperty("JTextField.showClearButton", true)
     }
+    private val mergeButton = JButton("Merge schema…").apply {
+        toolTipText = "Merge this schema with another tab or a schema file"
+        isEnabled = false
+        addActionListener { view.openMergeDialog() }
+    }
     private val searchTimer = Timer(300) { applySearchFilter() }.apply { isRepeats = false }
     private var expansionBeforeFilter: Set<List<String>>? = null
 
@@ -55,6 +61,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             border = BorderFactory.createEmptyBorder(4, 0, 0, 0)
             add(JLabel("Search:"))
             add(searchField)
+            add(mergeButton)
         }
 
         val nestedPanel = BorderPanel()
@@ -186,6 +193,7 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     }
 
     fun refresh(preserveSchemaCorrectionsFor: String? = null) {
+        mergeButton.isEnabled = view.scannerTab.scanResults.isNotEmpty()
         val expandedPaths = if (wantsDefaultExpansion) emptySet() else captureExpandedPaths()
         if (expandedPaths.isNotEmpty()) {
             wantsDefaultExpansion = false

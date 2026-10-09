@@ -165,6 +165,11 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         scannerTab.applyRequestTemplate(payloadView.currentRequestTemplate())
     }
 
+    fun openMergeDialog() {
+        commitRequestTemplateEdits()
+        SchemaMergeDialog(scannerTab).isVisible = true
+    }
+
     fun effectiveRequestTemplate(): HttpRequest {
         commitRequestTemplateEdits()
         return scannerTab.requestTemplate

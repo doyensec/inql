@@ -983,9 +983,9 @@ class SchemaCorrectionsPanel(
     }
 
     private fun selectedComboText(combo: JComboBox<String>): String? {
-        val fromItem = (combo.selectedItem as? String)?.trim()
-        if (!fromItem.isNullOrEmpty()) return fromItem
-        return combo.editor.item?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        val fromEditor = if (combo.isEditable) combo.editor.item?.toString()?.trim() else null
+        if (!fromEditor.isNullOrEmpty()) return fromEditor
+        return (combo.selectedItem as? String)?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun selectComboValue(combo: JComboBox<String>, value: String) {
@@ -996,8 +996,8 @@ class SchemaCorrectionsPanel(
     }
 
     private fun addRename() {
-        val oldName = selectedComboText(renameOldCombo) ?: renameOldCombo.editor.item?.toString()?.trim()
-        val newName = selectedComboText(renameNewCombo) ?: renameNewCombo.editor.item?.toString()?.trim()
+        val oldName = selectedComboText(renameOldCombo)
+        val newName = selectedComboText(renameNewCombo)
         if (oldName.isNullOrEmpty() || newName.isNullOrEmpty()) {
             showError("Both type names are required.")
             return
