@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken
 import graphql.GraphQL
 import graphql.introspection.IntrospectionQuery
 import graphql.introspection.IntrospectionResultToSchema
+import graphql.language.Document
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLSchema
 import graphql.schema.idl.*
@@ -64,12 +65,11 @@ class GQLSchema {
             throw e
         }
 
-        // TypeDefinitionRegistry -> GraphQLSchema
-        val schemaGenerator = SchemaGenerator()
-        this.schema = schemaGenerator.makeExecutableSchema(
-            typeDefinitionRegistry,
-            SchemaInspectionRuntimeWiring.build(typeDefinitionRegistry),
-        )
+        this.schema = buildSchema(typeDefinitionRegistry)
+    }
+
+    constructor(sdlDocument: Document) {
+        this.schema = buildSchema(SchemaParser().buildRegistry(sdlDocument))
     }
 
     /** Wraps an already-built executable schema without re-parsing SDL/JSON. */
@@ -78,6 +78,9 @@ class GQLSchema {
         this._sdlSchema = sdlSchema
         this._jsonSchema = jsonSchema
     }
+
+    private fun buildSchema(registry: TypeDefinitionRegistry): GraphQLSchema =
+        SchemaGenerator().makeExecutableSchema(registry, SchemaInspectionRuntimeWiring.build(registry))
 
     val queries: Map<String, GraphQLFieldDefinition>
         get() = schema.queryType.fields.associateBy { it.name }

@@ -63,14 +63,9 @@ class IntrospectionCache(val inql: InQL) {
         val tabs = this.inql.scanner.getScannerTabs()
         for (tab in tabs) {
             Logger.debug("Found tab for url ${tab.url}")
-            if (tab.scanResults.isNotEmpty()) {
-                Logger.debug("Found result for ${tab.url}, inserting...")
-                val scanResult = Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(tab))
-                    ?.let { (source, _) -> tab.scanResults.find { it.schemaDiscoverySource == source } }
-                    ?: tab.scanResults.singleOrNull()
-                    ?: tab.scanResults.last()
-                this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, scanResult)
-            }
+            val scanResult = tab.primaryScanResult() ?: continue
+            Logger.debug("Found result for ${tab.url}, inserting...")
+            this.putIfNewer(tab.url, tab.linkedProfile?.name ?: NO_PROFILE, scanResult)
         }
         Logger.debug("All cached urls: ${this.cache.keys}")
 
