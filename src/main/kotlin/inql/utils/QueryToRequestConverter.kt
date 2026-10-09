@@ -33,7 +33,7 @@ private data class InputFieldContext(
 /** A pre-validated JSON literal spliced verbatim into the generated `variables` body. */
 private data class RawJsonValue(val json: String)
 
-private fun isSchemaPlaceholderField(fieldName: String): Boolean {
+internal fun isSchemaPlaceholderField(fieldName: String): Boolean {
     return fieldName == "_inql_placeholder" || fieldName == "PLACEHOLDER"
 }
 
