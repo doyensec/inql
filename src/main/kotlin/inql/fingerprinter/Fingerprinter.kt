@@ -6,8 +6,11 @@ import inql.InQL
 import inql.bruteforcer.ThrottledClient
 import inql.Logger
 import inql.ui.BorderPanel
+import inql.ui.DescriptionPane
+import inql.ui.HtmlDocument
 import inql.ui.HtmlScrollPane
 import inql.ui.applyEqualSplit
+import inql.ui.fitTopComponent
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.Color
@@ -21,7 +24,7 @@ class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var fingerPrinterJob: Job? = null
     private lateinit var graphQLClient: ThrottledClient
-    private val markdownEditorPane = JEditorPane()
+    private val resultsPane = JEditorPane()
     private val urlField = JTextField()
     private val sendButton = JButton("Start fingerprinting").also {
         it.addActionListener(this)
@@ -62,40 +65,33 @@ class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
             it.add(this.requestEditor.uiComponent(), BorderLayout.CENTER)
         }
 
-        val editorPane = JEditorPane()
-        editorPane.setContentType("text/html")
-        editorPane.setText("""
-<h2>Engine Fingerprinter</h2>
-This tab allows fingerprinting engine used by the GraphQL server. It works by sending various types of requests, including malformed ones, and comparing the responses with those typically returned by known engines. 
-<br/>
-When a match is found, it displays the server’s security features based on data from the GraphQL Threat Matrix.
-<br/><br/>
-<h2>References</h2>
-- https://github.com/nicholasaleks/graphql-threat-matrix<br/><br/>
-""")
-        editorPane.setEditable(false)
+        val helpPane = DescriptionPane(
+            """
+                <h2>Engine Fingerprinter</h2>
+                This tab fingerprints the engine used by the GraphQL server. It sends various types of requests,
+                including malformed ones, and compares the responses with those typically returned by known engines.
+                <br/><br/>
+                When a match is found, it shows the engine's default security posture and known vulnerabilities,
+                based on data adapted from the <a href="https://github.com/nicholasaleks/graphql-threat-matrix">GraphQL Threat Matrix</a>.
+            """.trimIndent(),
+        )
 
         // Left section
         val leftSection = JSplitPane(
             JSplitPane.VERTICAL_SPLIT,
-            JScrollPane(editorPane),
+            JScrollPane(helpPane),
             reqEditorPanel,
-        )
-
-        markdownEditorPane.setContentType("text/html")
-        markdownEditorPane.setText("""
-<h2>Engine Fingerprinter</h2>
-The results will appear here
-""")
-        markdownEditorPane.setEditable(false)
-        HtmlScrollPane.attachHyperlinkHandler(markdownEditorPane)
-
-        // Right section
-        val rightSection = JScrollPane(markdownEditorPane).also {
-            HtmlScrollPane.configure(it)
+        ).apply {
+            fitTopComponent(helpPane)
         }
 
+        showMessage("Engine Fingerprinter", "The results will appear here.")
+        HtmlScrollPane.attachHyperlinkHandler(resultsPane)
 
+        // Right section
+        val rightSection = JScrollPane(resultsPane).also {
+            HtmlScrollPane.configure(it)
+        }
 
         // Main layout
         val horizontalSplit = JSplitPane(
@@ -108,34 +104,24 @@ The results will appear here
         this.add(horizontalSplit)
     }
 
-    private fun setMarkdown(markdown: String) {
-        EngineFingerprintReport.applyHtml(markdownEditorPane, EngineFingerprintReport.htmlForMarkdown(markdown))
+    private fun showResult(html: String) {
+        SwingUtilities.invokeLater { HtmlDocument.show(resultsPane, html) }
     }
 
-    private fun setMarkdownFromUrl(enginedetails: Helpers.Companion.EngineDetails) {
-        setMarkdown(EngineFingerprintReport.markdownForEngine(enginedetails))
+    private fun showMessage(title: String, message: String) {
+        showResult(HtmlDocument.wrap("<h2>$title</h2><p>$message</p>"))
     }
 
     override fun actionPerformed(e: ActionEvent?) {
         Logger.debug("Initiate Attack handler fired")
-        setMarkdownInprogress()
+        showMessage("Engine Fingerprinter", "Fingerprinting...")
         fingerPrinterJob = coroutineScope.launch {
-            try {
-                run()
-            } finally {
-            }
+            run()
         }
     }
 
     fun cancel() {
         fingerPrinterJob?.cancel()
-    }
-
-    private fun setMarkdownInprogress() {
-        markdownEditorPane.setText("""
-<h2>Engine Fingerprinter</h2>
-Fingerprinting...
-""")
     }
 
     private suspend fun run() {
@@ -145,23 +131,26 @@ Fingerprinting...
         graphQLClient = ThrottledClient(req)
         val probes = EngineProbes(graphQLClient)
 
-        if (probes.isGraphQLServer()) {
-            val engine = probes.detectEngine()
-            Logger.debug(engine.toString())
-            if (engine != null) {
-                Helpers.engines[engine]?.let { setMarkdownFromUrl(it) }
-            } else {
-                setMarkdown("# Couldn't fingerprint server engine")
-            }
-        } else {
-          var markdown = """
-# Couldn't fingerprint server engine
-The server is not a GraphQL server or the server is not responding.<br/>
-If you think this is a mistake, please report it to the InQL team.<br/>
-https://github.com/inql/inql/issues<br/>
-If you want to help us fix this, please submit a pull request.<br/>
-          """
-          setMarkdown(markdown)
+        if (!probes.isGraphQLServer()) {
+            showMessage(
+                "Couldn't fingerprint server engine",
+                """
+                The server is not a GraphQL server or the server is not responding.<br>
+                If you think this is a mistake, please report it to the InQL team at
+                <a href="https://github.com/doyensec/inql/issues">https://github.com/doyensec/inql/issues</a>,
+                or submit a pull request.
+                """.trimIndent(),
+            )
+            return
+        }
+
+        val engineKey = probes.detectEngine()
+        Logger.debug(engineKey.toString())
+        val engine = engineKey?.let { ThreatMatrix.engine(it) }
+        when {
+            engine != null -> showResult(ThreatMatrixRenderer.render(engine))
+            engineKey != null -> showMessage("Server engine found: $engineKey", "No threat matrix data is available for this engine.")
+            else -> showMessage("Couldn't fingerprint server engine", "The server responds to GraphQL, but its engine was not recognized.")
         }
     }
 }

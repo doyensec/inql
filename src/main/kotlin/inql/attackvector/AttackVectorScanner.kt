@@ -9,14 +9,16 @@ import inql.attackvector.tests.BatchArrayLimitTest
 import inql.attackvector.tests.QueryComplexityLimitTest
 import inql.attackvector.tests.QueryDepthLimitTest
 import inql.bruteforcer.ThrottledClient
-import inql.fingerprinter.EngineFingerprintReport
 import inql.graphql.formatting.Style
 import inql.ui.BorderPanel
 import inql.ui.CheckBox
+import inql.ui.DescriptionPane
+import inql.ui.HtmlDocument
 import inql.ui.HtmlScrollPane
 import inql.ui.MessageEditor
 import inql.ui.Spinner
 import inql.ui.applyEqualSplit
+import inql.ui.fitTopComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -121,18 +123,16 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
     }
 
     init {
-        val helpPane = JEditorPane().apply {
-            contentType = "text/html"
-            text = """
+        val helpPane = DescriptionPane(
+            """
                 <h2>Attack Vector Scanner</h2>
                 This tab probes a GraphQL endpoint for common security misconfigurations: public introspection,
                 batching limits, GET query/mutation support, field suggestions, interface discovery, and more.
                 <br/><br/>
                 Select the tests to run, configure depth/batch/complexity limits, then click <b>Start Scan</b>.
                 Select a result row to view details and the request/response that produced it.
-            """.trimIndent()
-            isEditable = false
-        }
+            """.trimIndent(),
+        )
 
         val configPanel = buildConfigPanel()
 
@@ -154,9 +154,7 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
 
         val leftTop = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            add(JScrollPane(helpPane).apply {
-                preferredSize = Dimension(0, 110)
-            })
+            add(JScrollPane(helpPane))
             add(configPanel)
         }
 
@@ -165,7 +163,7 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
             leftTop,
             reqEditorPanel,
         ).apply {
-            resizeWeight = 0.35
+            fitTopComponent(helpPane)
         }
 
         val resultsToolbar = BorderPanel().also {
@@ -522,14 +520,14 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
 
     private fun showResultDetails(result: TestResult?) {
         if (result == null) {
-            EngineFingerprintReport.applyHtml(detailsPane, "")
+            HtmlDocument.show(detailsPane, "")
             evidenceViewer.isVisible = false
             evidenceViewer.response.response = null
             collapseEvidencePanel()
             return
         }
 
-        EngineFingerprintReport.applyHtml(detailsPane, ScanResultDetailsRenderer.render(result))
+        HtmlDocument.show(detailsPane, ScanResultDetailsRenderer.render(result))
 
         val evidence = result.evidence
         if (evidence != null) {

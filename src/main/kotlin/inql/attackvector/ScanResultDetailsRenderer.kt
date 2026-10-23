@@ -1,25 +1,24 @@
 package inql.attackvector
 
-import inql.fingerprinter.EngineFingerprintReport
-import java.awt.Color
+import inql.ui.HtmlDocument
 
 object ScanResultDetailsRenderer {
     fun render(result: TestResult): String {
         return when (result.detailsFormat) {
             DetailsFormat.HTML -> result.details
-            DetailsFormat.PLAIN -> EngineFingerprintReport.wrapHtmlBody(
-                renderPlainBody(result.details, ScanResultsTable.statusColor(result.status)),
+            DetailsFormat.PLAIN -> HtmlDocument.wrap(
+                renderPlainBody(result.details, result.status),
             )
         }
     }
 
-    private fun renderPlainBody(text: String, color: Color): String {
+    private fun renderPlainBody(text: String, status: TestStatus): String {
         val escaped = ProbeUtils.htmlEscape(text)
             .replace("\r\n", "\n")
             .replace("\r", "\n")
             .replace("\n", "<br>")
         return """
-            <p style="color: rgb(${color.red},${color.green},${color.blue}); margin: 0;">
+            <p class="${HtmlDocument.statusClass(status)}" style="margin: 0;">
             $escaped
             </p>
         """.trimIndent()
