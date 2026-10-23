@@ -8,9 +8,9 @@ import inql.attackvector.ScannerTest
 import inql.attackvector.TestEvidence
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
-import inql.fingerprinter.EngineFingerprintReport
 import inql.fingerprinter.EngineProbes
-import inql.fingerprinter.Helpers
+import inql.fingerprinter.ThreatMatrix
+import inql.fingerprinter.ThreatMatrixRenderer
 
 object BackendFingerprintingTest : ScannerTest {
     override val id = "backend_fingerprint"
@@ -36,22 +36,21 @@ object BackendFingerprintingTest : ScannerTest {
 
         val engineKey = probes.detectEngine()
         return if (engineKey != null) {
-            val engineName = Helpers.engines[engineKey]?.name ?: engineKey
-            val html = EngineFingerprintReport.htmlForEngine(engineKey)
-            if (html != null) {
+            val engine = ThreatMatrix.engine(engineKey)
+            if (engine != null) {
                 TestResult(
                     name,
                     TestStatus.IDENTIFIED,
-                    html,
+                    ThreatMatrixRenderer.render(engine),
                     detailsFormat = DetailsFormat.HTML,
-                    statusLabel = engineName,
+                    statusLabel = engine.name,
                 )
             } else {
                 TestResult(
                     name,
                     TestStatus.IDENTIFIED,
-                    "Identified GraphQL engine: $engineName",
-                    statusLabel = engineName,
+                    "Identified GraphQL engine: $engineKey",
+                    statusLabel = engineKey,
                 )
             }
         } else {

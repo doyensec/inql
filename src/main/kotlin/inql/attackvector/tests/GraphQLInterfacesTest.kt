@@ -9,7 +9,7 @@ import inql.attackvector.ScannerTest
 import inql.attackvector.TestEvidence
 import inql.attackvector.TestResult
 import inql.attackvector.TestStatus
-import inql.fingerprinter.EngineFingerprintReport
+import inql.ui.HtmlDocument
 import java.util.UUID
 
 object GraphQLInterfacesTest : ScannerTest {
@@ -73,7 +73,7 @@ object GraphQLInterfacesTest : ScannerTest {
             discovered.isNotEmpty() -> TestResult(
                 name,
                 TestStatus.VULNERABLE,
-                EngineFingerprintReport.wrapHtmlBody(
+                HtmlDocument.wrap(
                     buildString {
                         append("Discovered ${discovered.size} interface(s):<br>")
                         append(discovered.joinToString("<br>"))
@@ -87,7 +87,7 @@ object GraphQLInterfacesTest : ScannerTest {
             else -> TestResult(
                 name,
                 TestStatus.NOT_VULNERABLE,
-                EngineFingerprintReport.wrapHtmlBody(
+                HtmlDocument.wrap(
                     buildString {
                         append("No common GraphQL interfaces discovered on the probed paths (GET and POST).")
                         append("<br><br>Endpoints tried:<br>")
