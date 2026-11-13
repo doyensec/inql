@@ -22,22 +22,38 @@ object SchemaSdlMerger {
         val addedFields: Int,
     )
 
+    private const val PLACEHOLDER_FIELD = "_inql_placeholder"
+    private const val PLACEHOLDER_VALUE = "PLACEHOLDER"
+
     private val BUILT_IN_DIRECTIVES = setOf(
         "skip", "include", "deprecated", "specifiedBy", "oneOf", "defer", "experimental_disableErrorPropagation",
     )
 
-    fun merge(primary: GraphQLSchema, secondary: GraphQLSchema): MergeResult = Merger().run(primary, secondary)
+    data class SecondaryAdjustments(
+        val renames: Map<String, String> = emptyMap(),
+        val removedEntries: Map<String, Set<String>> = emptyMap(),
+        val removedArguments: Map<String, Set<String>> = emptyMap(),
+        val entryNote: String? = null,
+        val authoritativeTypes: Set<String> = emptySet(),
+    )
 
-    private class Merger {
+    fun merge(
+        primary: GraphQLSchema,
+        secondary: GraphQLSchema,
+        adjustments: SecondaryAdjustments = SecondaryAdjustments(),
+    ): MergeResult = Merger(adjustments.authoritativeTypes).run(primary, secondary, adjustments)
+
+    private class Merger(private val authoritativeTypes: Set<String>) {
         private val conflicts = mutableListOf<String>()
         private var addedTypes = 0
         private var addedFields = 0
 
-        fun run(primary: GraphQLSchema, secondary: GraphQLSchema): MergeResult {
+        fun run(primary: GraphQLSchema, secondary: GraphQLSchema, adjustments: SecondaryAdjustments): MergeResult {
             val primaryDoc = toDocument(primary)
-            val secondaryDoc = renameTypeReferences(toDocument(secondary), rootRenames(primary, secondary))
-
-            val types = unionByName(typeDefinitions(primaryDoc), typeDefinitions(secondaryDoc), { addedTypes++ }, ::mergeType)
+            val adjusted = annotate(removeEntries(toDocument(secondary), adjustments), adjustments.entryNote)
+            val secondaryDoc = renameTypeReferences(adjusted, rootRenames(primary, secondary) + adjustments.renames)
+            val secondaryTypes = mergeSameNamed(typeDefinitions(secondaryDoc))
+            val types = unionByName(typeDefinitions(primaryDoc), secondaryTypes, { addedTypes++ }, ::mergeType)
                 .map(::stripPlaceholders)
             val directives = unionByName(directiveDefinitions(primaryDoc), directiveDefinitions(secondaryDoc))
             val roots = listOfNotNull(
@@ -61,13 +77,18 @@ object SchemaSdlMerger {
             return MergeResult(schema, sdl, conflicts, errors, addedTypes, addedFields)
         }
 
+        private fun mergeSameNamed(types: List<TypeDefinition<*>>): List<TypeDefinition<*>> {
+            val counted = addedFields
+            return types.groupBy { it.name }.values.map { it.reduce(::mergeType) }.also { addedFields = counted }
+        }
+
         private fun onEntryAdded(entry: NamedNode<*>) {
             if (!isSchemaPlaceholderField(entry.name)) addedFields++
         }
 
         private fun mergeType(p: TypeDefinition<*>, s: TypeDefinition<*>): TypeDefinition<*> {
             if (p.javaClass != s.javaClass) {
-                if (isStub(p) && !isStub(s)) return s
+                if (isStub(p) && !isStub(s) && p.name !in authoritativeTypes) return s
                 if (!isStub(s)) conflicts += "Type ${p.name}: kept ${kindOf(p)}, dropped ${kindOf(s)}"
                 return p
             }
@@ -181,15 +202,88 @@ object SchemaSdlMerger {
                 return TreeTransformerUtil.changeNode(context, node.transform { it.name(target) })
             }
 
-            override fun visitObjectTypeDefinition(
-                node: ObjectTypeDefinition,
-                context: TraverserContext<Node<*>>,
-            ): TraversalControl {
-                val target = renames[node.name] ?: return TraversalControl.CONTINUE
-                return TreeTransformerUtil.changeNode(context, node.transform { it.name(target) })
+            override fun visitObjectTypeDefinition(node: ObjectTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            override fun visitInterfaceTypeDefinition(node: InterfaceTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            override fun visitUnionTypeDefinition(node: UnionTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            override fun visitEnumTypeDefinition(node: EnumTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            override fun visitInputObjectTypeDefinition(node: InputObjectTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            override fun visitScalarTypeDefinition(node: ScalarTypeDefinition, context: TraverserContext<Node<*>>) =
+                rename(node.name, context) { target -> node.transform { it.name(target) } }
+
+            private fun rename(name: String, context: TraverserContext<Node<*>>, renamed: (String) -> Node<*>): TraversalControl {
+                val target = renames[name] ?: return TraversalControl.CONTINUE
+                return TreeTransformerUtil.changeNode(context, renamed(target))
             }
         }
         return AstTransformer().transform(doc, visitor) as Document
+    }
+
+    private fun removeEntries(doc: Document, adjustments: SecondaryAdjustments): Document {
+        if (adjustments.removedEntries.isEmpty() && adjustments.removedArguments.isEmpty()) return doc
+        fun <T : NamedNode<*>> kept(owner: String, items: List<T>): List<T> {
+            val removed = adjustments.removedEntries[owner] ?: return items
+            return items.filterNot { it.name in removed }
+        }
+        fun keptFields(owner: String, fields: List<FieldDefinition>): List<FieldDefinition> =
+            kept(owner, fields).map { field ->
+                val removed = adjustments.removedArguments["$owner.${field.name}"] ?: return@map field
+                field.transform { it.inputValueDefinitions(field.inputValueDefinitions.filterNot { a -> a.name in removed }) }
+            }.ifEmpty { listOf(FieldDefinition.newFieldDefinition().name(PLACEHOLDER_FIELD).type(TypeName("String")).build()) }
+
+        val definitions = doc.definitions.map { definition ->
+            when (definition) {
+                is ObjectTypeDefinition -> definition.transform { it.fieldDefinitions(keptFields(definition.name, definition.fieldDefinitions)) }
+                is InterfaceTypeDefinition -> definition.transform { it.definitions(keptFields(definition.name, definition.fieldDefinitions)) }
+                is InputObjectTypeDefinition -> definition.transform {
+                    it.inputValueDefinitions(
+                        kept(definition.name, definition.inputValueDefinitions).ifEmpty {
+                            listOf(InputValueDefinition.newInputValueDefinition().name(PLACEHOLDER_FIELD).type(TypeName("String")).build())
+                        },
+                    )
+                }
+                is EnumTypeDefinition -> definition.transform {
+                    it.enumValueDefinitions(kept(definition.name, definition.enumValueDefinitions).ifEmpty { listOf(EnumValueDefinition(PLACEHOLDER_VALUE)) })
+                }
+                else -> definition
+            }
+        }
+        return doc.transform { it.definitions(definitions) }
+    }
+
+    private fun annotate(doc: Document, note: String?): Document {
+        if (note == null) return doc
+        val description = Description(note, null, true)
+        fun needsNote(name: String, existing: Description?) = existing == null && !isSchemaPlaceholderField(name)
+        fun inputValues(values: List<InputValueDefinition>) =
+            values.map { v -> if (needsNote(v.name, v.description)) v.transform { it.description(description) } else v }
+        fun fields(values: List<FieldDefinition>) = values.map { f ->
+            f.transform {
+                if (needsNote(f.name, f.description)) it.description(description)
+                it.inputValueDefinitions(inputValues(f.inputValueDefinitions))
+            }
+        }
+        val definitions = doc.definitions.map { definition ->
+            when (definition) {
+                is ObjectTypeDefinition -> definition.transform { it.fieldDefinitions(fields(definition.fieldDefinitions)) }
+                is InterfaceTypeDefinition -> definition.transform { it.definitions(fields(definition.fieldDefinitions)) }
+                is InputObjectTypeDefinition -> definition.transform { it.inputValueDefinitions(inputValues(definition.inputValueDefinitions)) }
+                is EnumTypeDefinition -> definition.transform {
+                    it.enumValueDefinitions(definition.enumValueDefinitions.map { v -> if (needsNote(v.name, v.description)) v.transform { b -> b.description(description) } else v })
+                }
+                else -> definition
+            }
+        }
+        return doc.transform { it.definitions(definitions) }
     }
 
     private fun entryNames(type: TypeDefinition<*>): List<String> = when (type) {

@@ -486,7 +486,7 @@ private class PayloadSourceEditor : JPanel() {
             "Payloads that are not valid values of the chosen type stop the attack."
     }
     private val pathField = JTextField(18).also { it.isEditable = false }
-    private val browseButton = JButton("Browse…")
+    private val browseButton = JButton("Browse...")
     private val fromSpinner = JSpinner(SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1))
     private val toSpinner = JSpinner(SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1))
     private val minDigitsSpinner = JSpinner(SpinnerNumberModel(0, 0, 18, 1)).also {

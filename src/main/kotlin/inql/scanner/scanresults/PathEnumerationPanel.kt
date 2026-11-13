@@ -153,7 +153,7 @@ class PathEnumerationPanel(private val view: ScanResultsView) : BorderPanel(8) {
         add(statusLabel)
     }
 
-    private val loadingLabel = JLabel("Searching schema for paths…", JLabel.CENTER).apply {
+    private val loadingLabel = JLabel("Searching schema for paths...", JLabel.CENTER).apply {
         border = BorderFactory.createEmptyBorder(24, 8, 24, 8)
     }
 
@@ -548,7 +548,7 @@ class PathEnumerationPanel(private val view: ScanResultsView) : BorderPanel(8) {
         blurTargetField()
         searchRunning = true
         searchButton.isEnabled = false
-        statusLabel.text = "Searching…"
+        statusLabel.text = "Searching..."
         centerCard.removeAll()
         centerCard.add(loadingLabel, BorderLayout.CENTER)
         centerCard.revalidate()

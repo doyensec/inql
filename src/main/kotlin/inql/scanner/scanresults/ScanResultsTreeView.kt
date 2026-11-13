@@ -3,9 +3,10 @@ package inql.scanner.scanresults
 import inql.Logger
 import inql.scanner.ScanResult
 import inql.ui.BorderPanel
-import inql.ui.FlowPanel
+import inql.ui.FlatPanel
+import inql.ui.WrapLayout
 import java.awt.BorderLayout
-import java.awt.FlowLayout
+import java.awt.Dimension
 import java.awt.event.HierarchyEvent
 import javax.swing.BorderFactory
 import javax.swing.JButton
@@ -28,6 +29,10 @@ import javax.swing.tree.TreePath
 import javax.swing.tree.TreeSelectionModel
 
 class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelectionListener {
+    companion object {
+        private const val VERIFY_LABEL = "Verify with server"
+        private const val MIN_WIDTH = 280
+    }
 
     private val tree: JTree
     private val treeModel: DefaultTreeModel
@@ -35,10 +40,15 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     private val searchField = JTextField(24).also {
         it.putClientProperty("JTextField.showClearButton", true)
     }
-    private val mergeButton = JButton("Merge schema…").apply {
+    private val mergeButton = JButton("Merge schema").apply {
         toolTipText = "Merge this schema with another tab or a schema file"
         isEnabled = false
         addActionListener { view.openMergeDialog() }
+    }
+    private val verifyButton = JButton(VERIFY_LABEL).apply {
+        toolTipText = "Check this History schema against the server and open the verified copy in a new tab"
+        isVisible = false
+        addActionListener { view.toggleHistoryVerification() }
     }
     private val searchTimer = Timer(300) { applySearchFilter() }.apply { isRepeats = false }
     private var expansionBeforeFilter: Set<List<String>>? = null
@@ -57,11 +67,14 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     }
 
     private fun initUI() {
-        val searchBar = FlowPanel(FlowLayout.LEFT, 8).apply {
+        minimumSize = Dimension(MIN_WIDTH, 0)
+        val searchBar = FlatPanel().apply {
+            layout = WrapLayout(8, 6)
             border = BorderFactory.createEmptyBorder(4, 0, 0, 0)
             add(JLabel("Search:"))
             add(searchField)
             add(mergeButton)
+            add(verifyButton)
         }
 
         val nestedPanel = BorderPanel()
@@ -125,6 +138,10 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
                 scheduleApplyTreeState()
             }
         }
+    }
+
+    fun setVerificationRunning(running: Boolean) {
+        verifyButton.text = if (running) "Cancel verification" else VERIFY_LABEL
     }
 
     fun refreshKeepingSchemaCorrections(scanResultUuid: String) {
@@ -194,6 +211,8 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
 
     fun refresh(preserveSchemaCorrectionsFor: String? = null) {
         mergeButton.isEnabled = view.scannerTab.scanResults.isNotEmpty()
+        verifyButton.isVisible = view.scannerTab.canVerifyHistory()
+        setVerificationRunning(view.scannerTab.isVerifyingHistory)
         val expandedPaths = if (wantsDefaultExpansion) emptySet() else captureExpandedPaths()
         if (expandedPaths.isNotEmpty()) {
             wantsDefaultExpansion = false
