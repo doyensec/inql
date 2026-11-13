@@ -18,6 +18,7 @@ import inql.Config
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
 import inql.history.HistoryHostKey
+import inql.history.verification.HistorySchemaVerifier
 import inql.scanner.SchemaDiscoverySource
 import inql.scanner.scanconfig.ScanConfigView
 import inql.scanner.scanresults.ScanResultsView
@@ -93,6 +94,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     private var bruteforcerJob: Job? = null
     private var mergeJob: Job? = null
+    private var verificationJob: Job? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var recoverSchemaOnRestore = false
 
@@ -154,6 +156,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun cancel() {
         bruteforcerJob?.cancel()
+        verificationJob?.cancel()
         this.scanConfigView.setBusy(false)
         this.scanConfigView.setBruteforcerRunning(false)
     }
@@ -439,6 +442,93 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             ?.let { (source, _) -> scanResults.find { it.schemaDiscoverySource == source } }
             ?: scanResults.singleOrNull()
             ?: scanResults.lastOrNull()
+
+    val isVerifyingHistory: Boolean
+        get() = verificationJob?.isActive == true
+
+    private fun historyScanResult(): ScanResult? =
+        primaryScanResult()?.takeIf { it.schemaDiscoverySource == SchemaDiscoverySource.HISTORY }
+
+    fun canVerifyHistory(): Boolean = historyScanResult() != null
+
+    fun launchHistoryVerification(template: HttpRequest) {
+        if (isVerifyingHistory) {
+            Logger.debug("History verification already running, ignoring duplicate launch request")
+            return
+        }
+        val history = historyScanResult() ?: run {
+            ErrorDialog("Verification failed: this tab has no History schema")
+            return
+        }
+        val hostKey = hostKey() ?: HistoryHostKey.normalize(history.host)
+        if (host != null) normalizeHeaders()
+        val requestTemplate = template.withPath(template.path().substringBefore('?'))
+        if (!confirmHistoryVerification(requestTemplate)) return
+        val historySchema = history.effectiveGraphQLSchema()
+        scanResultsView.setVerificationRunning(true)
+        verificationJob = coroutineScope.launch {
+            try {
+                val outcome = HistorySchemaVerifier(inql).verify(requestTemplate, hostKey, historySchema)
+                val sr = ScanResult(
+                    history.host,
+                    requestTemplate,
+                    outcome.schema,
+                    sdlSchema = outcome.schema.sdlSchema,
+                    schemaDiscoverySource = SchemaDiscoverySource.HISTORY_VERIFIED,
+                )
+                Logger.info("History verification for $hostKey finished:\n${outcome.summary.describe()}")
+                withContext(Dispatchers.Main) {
+                    scanner.applyScanResult(hostKey, SchemaDiscoverySource.HISTORY_VERIFIED, requestTemplate, sr, focus = true)
+                    JOptionPane.showMessageDialog(
+                        Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                        "Verified schema for $hostKey opened in a new tab.\n\n${outcome.summary.describe()}",
+                        "InQL History Verification",
+                        JOptionPane.INFORMATION_MESSAGE,
+                    )
+                }
+            } catch (e: CancellationException) {
+                Logger.info("History verification for $hostKey cancelled")
+                throw e
+            } catch (e: HistorySchemaVerifier.VerificationFailedException) {
+                ErrorDialog("History verification failed: ${e.message}")
+            } catch (e: Exception) {
+                Logger.debug(e.stackTraceToString())
+                ErrorDialog("History verification failed: ${e.message ?: e.toString()}")
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main) {
+                    scanResultsView.setVerificationRunning(false)
+                }
+                verificationJob = null
+            }
+        }
+    }
+
+    fun cancelHistoryVerification() {
+        verificationJob?.cancel()
+    }
+
+    private fun confirmHistoryVerification(requestTemplate: HttpRequest): Boolean {
+        val config = Config.getInstance()
+        val panel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
+            add(JLabel("This action will send multiple requests to ${requestTemplate.url()}."))
+            add(JLabel(" "))
+            add(JLabel("Depth limit: ${config.getInt("bruteforcer.depth_limit")}"))
+            add(JLabel("Bucket size: ${config.getInt("bruteforcer.bucket_size")}"))
+            add(JLabel("Number of threads: ${config.getInt("bruteforcer.concurrency_limit")}"))
+        }
+        val result = JOptionPane.showOptionDialog(
+            Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+            panel,
+            "Verify with server",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            arrayOf("Verify", "Cancel"),
+            "Verify",
+        )
+        return result == JOptionPane.YES_OPTION
+    }
 
     fun mergeSchemaWith(source: MergeSource) {
         if (mergeJob?.isActive == true) {

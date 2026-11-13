@@ -22,10 +22,7 @@ data class GraphQLOperation(
 
 object Utils {
     private val gson = Gson() // Initialize once
-    private val jsonGraphQLEnvelopePattern = Regex(
-        """^\{\s*"(?:query|mutation|operationName)"\s*:""",
-        RegexOption.IGNORE_CASE,
-    )
+    private val jsonGraphQLKeyPattern = Regex(""""(?:query|mutation)"\s*:""")
     private val shorthandSelectionSetPattern = Regex("""^\{\s*(?:__)?[A-Za-z_][A-Za-z0-9_]*""")
 
     /**
@@ -217,7 +214,14 @@ object Utils {
     }
 
     private fun looksLikeJsonGraphQLEnvelope(body: String): Boolean {
-        return jsonGraphQLEnvelopePattern.containsMatchIn(body.trim())
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("{") || !jsonGraphQLKeyPattern.containsMatchIn(trimmed)) return false
+        return try {
+            val json = JSONObject(trimmed)
+            json.opt("query") is String || json.opt("mutation") is String
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun stripBom(value: String): String {

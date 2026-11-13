@@ -34,7 +34,7 @@ class SchemaMergeDialog(private val scannerTab: ScannerTab) :
     private val fileRadio = JRadioButton("Schema file (.json / .graphql)")
     private val tabCombo = JComboBox(candidates.toTypedArray())
     private val pathField = JTextField(32)
-    private val browseButton = JButton("Browse…")
+    private val browseButton = JButton("Browse...")
     private val mergeButton = JButton("Merge")
 
     init {

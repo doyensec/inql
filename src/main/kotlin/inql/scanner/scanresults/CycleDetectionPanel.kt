@@ -89,7 +89,7 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         add(pageSizeCombo)
     }
 
-    private val loadingLabel = JLabel("Scanning schema for cycles…", JLabel.CENTER).apply {
+    private val loadingLabel = JLabel("Scanning schema for cycles...", JLabel.CENTER).apply {
         border = BorderFactory.createEmptyBorder(24, 8, 24, 8)
     }
 

@@ -116,15 +116,15 @@ class POIScanner(private val schema: GQLSchema) {
         val tmpResultsCache = mutableMapOf<String, MutableList<String>>() // for de-duplication
 
         for (q in queries) {
-            results.addAll(scanField(q.value.type, "", "Query", depth))
+            results.addAll(scanRootField(q.value, "Query", depth))
         }
 
         for (q in mutations) {
-            results.addAll(scanField(q.value.type, "", "Mutation", depth))
+            results.addAll(scanRootField(q.value, "Mutation", depth))
         }
 
         for (q in subscriptions) {
-            results.addAll(scanField(q.value.type, "", "Subscription", depth))
+            results.addAll(scanRootField(q.value, "Subscription", depth))
         }
 
         for (r in results.distinct().toMutableList()) {
@@ -140,6 +140,16 @@ class POIScanner(private val schema: GQLSchema) {
         }
 
         return finalResults
+    }
+
+    private fun scanRootField(
+        field: GraphQLFieldDefinition,
+        queryType: String,
+        depth: Int
+    ): List<FieldResult> {
+        // Start the path at the root operation so results show which query/mutation they belong to
+        val rootPath = " -> ${field.name}"
+        return checkField(field, rootPath, queryType) + scanField(field.type, rootPath, queryType, depth)
     }
 
     private fun scanField(

@@ -8,12 +8,14 @@ import inql.bruteforcer.DiscoveredSchema.Kind
 import inql.bruteforcer.DiscoveredSchema.TypeRef
 import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
+import inql.graphql.isGraphQLName
 import inql.utils.ResourceFileReader
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.Collections
@@ -28,32 +30,17 @@ import java.util.Collections
  */
 class Bruteforcer(private val inql: InQL) {
     companion object {
-        private const val SENTINEL = "____i_n_q_l____"
+        private const val SENTINEL = SchemaProber.SENTINEL
         private const val ENUM_SENTINEL = "INQL_SENTINEL_VALUE"
-
-        /** Unknown root field that keeps mutation and subscription probes from executing; distinct from [SENTINEL]. */
-        private const val NO_EXECUTION_FIELD = "____inql_no_execution____"
-        private const val SECOND_SENTINEL = "____i_n_q_l_2____"
         private const val MAX_VERIFY_ROUNDS = 25
         private const val TRUNCATION_THRESHOLD = 50
         private const val MAX_REQUIRED_FILL_ROUNDS = 8
-        private val NAME_REGEX = Regex("^[_A-Za-z][_0-9A-Za-z]*$")
-
-        private fun isSchemaName(name: String) = NAME_REGEX.matches(name) && !name.startsWith("__")
+        private const val MAX_REACHED_PATHS = 16
+        private const val DEPTH_LIMIT_NOTE = "not scanned because of the depth limit"
+        internal fun isSchemaName(name: String) = isGraphQLName(name) && !name.startsWith("__")
 
         /** Literals sent to learn a value's type; the first six are accepted by custom scalars only. */
         private val VALUE_PROBES = listOf("\"inql\"", "123", "true", "1.5", ENUM_SENTINEL, "{ $SENTINEL: 0 }", "[123]")
-    }
-
-    private sealed interface Step {
-        data class Field(val parent: String, val name: String) : Step
-        data class Fragment(val type: String) : Step
-    }
-
-    private class Path(val operation: String, val steps: List<Step>) {
-        val depth get() = steps.count { it is Step.Field }
-        fun field(parent: String, name: String) = Path(operation, steps + Step.Field(parent, name))
-        fun fragment(type: String) = Path(operation, steps + Step.Fragment(type))
     }
 
     /** Argument [argument] of [parent].[field] at [path], nested inside (input type, input field) levels [nesting]. */
@@ -69,53 +56,83 @@ class Bruteforcer(private val inql: InQL) {
             ValueSite(path, parent, field, selection, argument, nesting + (inputType to inputField))
     }
 
-    /** An error with its location: a column on the one-line query, or the alias index named in Hasura's path. */
-    private class ProbeError(val evidence: List<Evidence>, val column: Int?, val alias: Int?) {
-        val located get() = column != null || alias != null
+    internal class Rejections {
+        enum class Kind { FIELD, ARGUMENT, INPUT_FIELD, ENUM_VALUE }
+
+        private val names = mutableMapOf<Pair<Kind, String>, MutableSet<String>>()
+
+        @Synchronized
+        fun add(kind: Kind, key: String, rejected: Collection<String>) {
+            if (rejected.isNotEmpty()) names.getOrPut(kind to key) { linkedSetOf() } += rejected
+        }
+
+        @Synchronized
+        fun get(kind: Kind, key: String): Set<String> = names[kind to key]?.toSet().orEmpty()
+
+        @Synchronized
+        fun remove(kind: Kind, key: String, accepted: Collection<String>) {
+            names[kind to key]?.removeAll(accepted.toSet())
+        }
+
+        @Synchronized
+        fun addAll(other: Rejections) {
+            for ((key, rejected) in other.snapshot()) names.getOrPut(key) { linkedSetOf() } += rejected
+        }
+
+        @Synchronized
+        private fun snapshot() = names.mapValues { it.value.toSet() }
     }
 
-    private class Probe(val passed: Boolean, val errors: List<ProbeError>, private val ranges: List<IntRange>) {
-        val evidence get() = errors.flatMap { it.evidence }
-        fun segmentErrors(i: Int) = errors.filter { (it.column != null && it.column in ranges[i]) || it.alias == i }
+    internal class Verification(val sdl: String, val revealed: Boolean, val rejections: Rejections, val provenScalars: Set<String>)
 
-        /** True when segment [i] produced no error and every error could be located. */
-        fun segmentPassed(i: Int) = passed || (errors.isNotEmpty() && errors.all { it.located } && segmentErrors(i).isEmpty())
-    }
-
-    private lateinit var client: ThrottledClient
+    private lateinit var prober: SchemaProber
+    private lateinit var names: NameSource
     private var bucketSize = 64
     private var depthLimit = 2
     private var concurrencyLimit = 8
-    private var bruteforceArguments = true
-    private var wordlist: List<String> = emptyList()
-    private var argumentWordlist: List<String> = emptyList()
 
     private val schema = DiscoveredSchema()
     private val paths = mutableMapOf<String, Path>()
     private val queue = linkedSetOf<String>()
     private val requiredArguments = mutableMapOf<String, MutableMap<String, String?>>()
     private val scannedValueTypes = mutableSetOf<String>()
+    private val skippedForDepth = mutableSetOf<String>()
+    private val reachedPaths = mutableMapOf<String, MutableMap<String, Path>>()
+    private val rejections = Rejections()
+    private var revealed = false
+    private val acceptedSamples = mutableMapOf<String, Map<String, String>>()
+    private val checkedSamples = mutableSetOf<String>()
+    private val pathOrder = compareBy<Path>({ !names.ignoresDepthLimit(it) }, { it.depth })
 
     /** Required fields (printed types) of input objects, sent with every object literal of that type. */
     private val requiredInputFields = mutableMapOf<String, MutableMap<String, String>>()
     private val unionSelections = mutableSetOf<String>()
     private val hintedPossibleTypes = mutableMapOf<String, MutableSet<String>>()
     private val discoveredPossibleTypes = mutableMapOf<String, MutableSet<String>>()
-    private var leafModifiersPrinted: Boolean? = null
-    private var compositeModifiersPrinted: Boolean? = null
 
-    /** The server reports only the first validation error (Hasura), so names are probed sequentially. */
-    private var singleError = false
+    private val singleError get() = prober.singleError
 
     suspend fun startFromRequest(req: HttpRequest): String {
+        val config = Config.getInstance()
+        val wordlist = loadWordlist(config.getString("bruteforcer.custom_wordlist")?.takeIf { it.isNotEmpty() } ?: "wordlist.txt")
+        val argumentWordlist = loadWordlist(config.getString("bruteforcer.custom_arg_wordlist")?.takeIf { it.isNotEmpty() } ?: "arg_wordlist.txt")
+        val scanArguments = config.getBoolean("bruteforcer.bruteforce_arguments") ?: true
+        return run(req, WordlistNames(wordlist, argumentWordlist, scanArguments))
+    }
+
+    internal suspend fun verify(req: HttpRequest, names: NameSource): Verification {
+        val sdl = run(req, names)
+        val provenScalars = schema.types.values.filter { it.kind == Kind.SCALAR }.map { it.name }.toSet()
+        return Verification(sdl, revealed, rejections, provenScalars)
+    }
+
+    private suspend fun run(req: HttpRequest, names: NameSource): String {
         val config = Config.getInstance()
         bucketSize = config.getInt("bruteforcer.bucket_size") ?: 64
         depthLimit = config.getInt("bruteforcer.depth_limit") ?: 2
         concurrencyLimit = config.getInt("bruteforcer.concurrency_limit") ?: 8
-        bruteforceArguments = config.getBoolean("bruteforcer.bruteforce_arguments") ?: true
-        client = ThrottledClient(req)
-        wordlist = loadWordlist(config.getString("bruteforcer.custom_wordlist")?.takeIf { it.isNotEmpty() } ?: "wordlist.txt")
-        argumentWordlist = loadWordlist(config.getString("bruteforcer.custom_arg_wordlist")?.takeIf { it.isNotEmpty() } ?: "arg_wordlist.txt")
+        this.names = names
+        prober = SchemaProber(ThrottledClient(req), ::stepArguments)
 
         discover()
         val sdl = schema.toSdl()
@@ -138,8 +155,15 @@ class Bruteforcer(private val inql: InQL) {
             .ifEmpty { throw EmptyOrIncorrectWordlistException("No valid words in the $wordlistFile") }
     }
 
+    private suspend fun probe(query: String) = prober.probe(query)
+
+    private suspend fun probeSegments(path: Path, segments: List<String>, variables: Map<String, String> = emptyMap()) =
+        prober.probeSegments(path, segments, variables)
+
+    private fun wrap(path: Path, inner: String) = prober.wrap(path, inner)
+
     private suspend fun discover() {
-        calibrateModifiers()
+        prober.calibrate()
         for (operation in listOf("query", "mutation", "subscription")) {
             val root = Path(operation, emptyList())
             // A single unknown root field: some servers allow only one selection in subscriptions.
@@ -159,12 +183,14 @@ class Bruteforcer(private val inql: InQL) {
             schema.type("Query").apply { kind = Kind.OBJECT; notes += "the server did not reveal its schema" }
             return
         }
+        revealed = true
         while (queue.isNotEmpty()) {
             val name = queue.minBy { paths.getValue(it).depth }
             queue.remove(name)
             val path = paths.getValue(name)
-            if (path.depth > depthLimit) {
-                schema.type(name).notes += "not scanned because of the depth limit"
+            if (path.depth > depthLimit && !names.ignoresDepthLimit(path)) {
+                schema.type(name).notes += DEPTH_LIMIT_NOTE
+                skippedForDepth += name
                 continue
             }
             scanComposite(name, path)
@@ -172,36 +198,56 @@ class Bruteforcer(private val inql: InQL) {
         classifyComposites()
     }
 
-    /** `__typename` is `String!` and `__schema` is `__Schema!`: servers printing them bare strip type modifiers. */
-    private suspend fun calibrateModifiers() {
-        probe("query { __typename { $SENTINEL } }").evidence.filterIsInstance<Evidence.LeafSelection>()
-            .firstOrNull { it.field == "__typename" && it.type != null }?.let { leafModifiersPrinted = it.type!!.endsWith("!") }
-        probe("query { __schema }").evidence.filterIsInstance<Evidence.MissingSelection>()
-            .firstOrNull { it.field == "__schema" }?.let { compositeModifiersPrinted = it.type.endsWith("!") }
-        singleError = probe("query { $SENTINEL $SECOND_SENTINEL }").evidence.filterIsInstance<Evidence.UnknownField>().size == 1
-    }
-
+    @Synchronized
     private fun registerComposite(name: String, path: Path) {
         if (ErrorEvidence.isBuiltInScalar(name) || !isSchemaName(name)) return
         val known = paths[name]
         if (known == null) queue += name
-        if (known == null || path.depth < known.depth) paths[name] = path
+        if (known == null || pathOrder.compare(path, known) < 0) paths[name] = path
+        if (names.ignoresDepthLimit(path)) addReachedPath(name, path)
+    }
+
+    private fun addReachedPath(name: String, path: Path) {
+        if (skippedForDepth.remove(name)) {
+            schema.type(name).notes -= DEPTH_LIMIT_NOTE
+            queue += name
+        }
+        val reached = reachedPaths.getOrPut(name) { linkedMapOf() }
+        if (reached.size >= MAX_REACHED_PATHS || reached.putIfAbsent("${path.operation}:${path.steps}", path) != null) return
+        schema.types[name]?.fields?.values?.toList()?.forEach { field ->
+            if (field.type.named in paths) registerComposite(field.type.named, path.field(name, field.name))
+        }
+        (hintedPossibleTypes[name].orEmpty() + discoveredPossibleTypes[name].orEmpty()).toList().forEach { member ->
+            registerComposite(member, path.fragment(member))
+        }
+    }
+
+    private fun registerChild(parent: String, path: Path, child: String, step: Path.() -> Path) {
+        registerComposite(child, path.step())
+        reachedPaths[parent]?.values?.toList()?.forEach { registerComposite(child, it.step()) }
     }
 
     private suspend fun scanComposite(typeName: String, path: Path) {
         Logger.debug("Bruteforcer: scanning $typeName")
+        checkArgumentSamples(path)
         val type = schema.type(typeName)
         resolveFieldTypes(typeName, path, discoverFieldNames(typeName, path))
-        if (type.fields.isEmpty() && path.steps.isNotEmpty()) discoverPossibleTypes(typeName, path)
+        if (path.steps.isNotEmpty()) {
+            val seenMembers = names.typesSeenAt(path) - typeName
+            when {
+                type.fields.isEmpty() -> discoverPossibleTypes(typeName, path, names.possibleTypeNames(typeName, path))
+                seenMembers.isNotEmpty() -> discoverPossibleTypes(typeName, path, seenMembers)
+            }
+        }
         for (field in type.fields.values.toList()) discoverArguments(typeName, path, field)
     }
 
     private suspend fun discoverFieldNames(typeName: String, path: Path): Set<String> {
         fun unknownFields(p: Probe) = p.evidence.filterIsInstance<Evidence.UnknownField>().filter { it.parentType == typeName }
         return discoverNames(
-            wordlist,
+            names.fieldNames(typeName, path),
             send = { names -> probe(wrap(path, names.joinToString(" "))) },
-            rejected = { p, _ -> unknownFields(p).map { it.field } },
+            rejected = { p, _ -> unknownFields(p).map { it.field }.also { rejections.add(Rejections.Kind.FIELD, typeName, it - SENTINEL) } },
             observe = { p ->
                 if (p.evidence.any { it is Evidence.UnionSelection && it.type == typeName }) unionSelections += typeName
                 unknownFields(p).flatMap { it.possibleTypes }.filter(::isSchemaName).forEach {
@@ -242,12 +288,12 @@ class Bruteforcer(private val inql: InQL) {
         val type = schema.type(typeName)
         for (name in names) {
             val fieldType = when (name) {
-                in composite -> typeRef(composite.getValue(name), compositeModifiersPrinted).also {
-                    if (it.printed.any { c -> c in "[!" }) compositeModifiersPrinted = true
-                    registerComposite(it.named, path.field(typeName, name))
+                in composite -> typeRef(composite.getValue(name), prober.compositeModifiersPrinted).also {
+                    if (it.printed.any { c -> c in "[!" }) prober.compositeModifiersPrinted = true
+                    registerChild(typeName, path, it.named) { field(typeName, name) }
                 }
-                in leaf -> leaf.getValue(name).type?.let { printed -> typeRef(printed, leafModifiersPrinted) }?.also {
-                    if (it.printed.any { c -> c in "[!" }) leafModifiersPrinted = true
+                in leaf -> leaf.getValue(name).type?.let { printed -> typeRef(printed, prober.leafModifiersPrinted) }?.also {
+                    if (it.printed.any { c -> c in "[!" }) prober.leafModifiersPrinted = true
                     if (!ErrorEvidence.isBuiltInScalar(it.named)) {
                         schema.type(it.named).apply { this.leaf = true; if (leaf.getValue(name).isEnum) kind = Kind.ENUM }
                     }
@@ -321,16 +367,16 @@ class Bruteforcer(private val inql: InQL) {
         }
     }
 
-    private suspend fun discoverPossibleTypes(typeName: String, path: Path) {
+    private suspend fun discoverPossibleTypes(typeName: String, path: Path, candidates: List<String>) {
         val members = discoverNames(
-            wordlist,
+            candidates,
             send = { names -> probeSegments(path, names.map { "... on $it { __typename }" }) },
             rejected = { p, names -> rejectedFragments(p, typeName, names) },
             observe = { p -> p.evidence.filterIsInstance<Evidence.UnknownType>().flatMap { it.suggestions } },
         )
         for (member in members) {
             discoveredPossibleTypes.getOrPut(typeName) { linkedSetOf() } += member
-            registerComposite(member, path.fragment(member))
+            registerChild(typeName, path, member) { fragment(member) }
         }
     }
 
@@ -355,14 +401,18 @@ class Bruteforcer(private val inql: InQL) {
 
         val names = linkedSetOf<String>()
         names += required.keys.filter(::isSchemaName)
-        if (bruteforceArguments) {
+        if (this.names.scanArguments) {
             names += discoverNames(
-                argumentWordlist,
+                this.names.argumentNames(typeName, path, field.name),
                 send = { args -> probe(wrap(path, "${field.name}(${args.joinToString(", ") { "$it: 0" }}) $selection")) },
-                rejected = { p, _ -> unknownArguments(p).map { it.argument } },
+                rejected = { p, _ ->
+                    unknownArguments(p).map { it.argument }
+                        .also { rejections.add(Rejections.Kind.ARGUMENT, "$typeName.${field.name}", it - SENTINEL) }
+                },
                 observe = { p -> unknownArguments(p).flatMap { it.suggestions } },
             )
         }
+        val samplesAccepted = checkSamples(path, typeName, field.name, names, finalAttempt = false)
         for (argument in names) {
             val site = ValueSite(path, typeName, field.name, selection, argument, emptyList())
             val type = resolveValueType(site, if (argument in required) required[argument] ?: "" else null)
@@ -374,6 +424,7 @@ class Bruteforcer(private val inql: InQL) {
             scanValueType(type.named, site)
             field.args[argument] = DiscoveredSchema.InputValue(argument, refineModifiers(site, type))
         }
+        if (!samplesAccepted) checkSamples(path, typeName, field.name, field.args.keys, finalAttempt = true)
     }
 
     /**
@@ -564,14 +615,19 @@ class Bruteforcer(private val inql: InQL) {
     }
 
     private suspend fun scanInputObject(type: DiscoveredSchema.Type, site: ValueSite) {
+        val hinted = fillRequiredFromHints(type.name, site)
         // Fields already known to be required are sent with every probe, so the server will not report them again.
-        val required = requiredInputFields[type.name].orEmpty().toMutableMap<String, String?>()
+        val required = requiredInputFields[type.name].orEmpty().mapValues { (name, printed) -> if (name in hinted) "" else printed }
+            .toMutableMap<String, String?>()
         fun relevant(inputType: String?) = inputType == null || inputType == type.name
 
         val names = discoverNames(
-            wordlist,
+            this.names.inputFieldNames(type.name),
             send = { fields -> probeValues(site, fields.map { literal(site, objectLiteral(type.name, "$it: 0", exclude = it)) }) },
-            rejected = { p, _ -> p.evidence.filterIsInstance<Evidence.UnknownInputField>().filter { relevant(it.inputType) }.map { it.field } },
+            rejected = { p, _ ->
+                p.evidence.filterIsInstance<Evidence.UnknownInputField>().filter { relevant(it.inputType) }.map { it.field }
+                    .also { rejections.add(Rejections.Kind.INPUT_FIELD, type.name, it - SENTINEL) }
+            },
             observe = { p ->
                 p.evidence.filterIsInstance<Evidence.MissingInputFields>().filter { relevant(it.inputType) }.forEach { m ->
                     m.fields.forEach { field ->
@@ -595,11 +651,35 @@ class Bruteforcer(private val inql: InQL) {
         }
     }
 
+    private suspend fun fillRequiredFromHints(inputType: String, site: ValueSite): Set<String> {
+        val filled = linkedSetOf<String>()
+        if (!names.providesTypeHints) return filled
+        repeat(MAX_REQUIRED_FILL_ROUNDS) {
+            val probe = probeValues(site, listOf(literal(site, objectLiteral(inputType, "$SENTINEL: 0", exclude = SENTINEL))))
+            val wrongHints = probe.evidence.filterIsInstance<Evidence.InputFieldValue>().map { it.field }.filter { it in filled }
+            if (wrongHints.isNotEmpty()) {
+                wrongHints.forEach { requiredInputFields[inputType]?.remove(it) }
+                return filled - wrongHints.toSet()
+            }
+            val missing = probe.evidence.filterIsInstance<Evidence.MissingInputFields>()
+                .filter { (it.inputType == null || it.inputType == inputType) && it.type == null }
+                .flatMap { it.fields }.filter { it !in requiredInputFields[inputType].orEmpty() }
+            val hints = missing.mapNotNull { field ->
+                names.inputFieldTypeHint(inputType, field)?.takeIf { valueLiteral(it) != null }?.let { field to it }
+            }
+            if (hints.isEmpty()) return filled
+            hints.forEach { (field, printed) ->
+                requiredInputFields.getOrPut(inputType) { linkedMapOf() }[field] = printed
+                filled += field
+            }
+        }
+        return filled
+    }
+
     private suspend fun scanEnum(type: DiscoveredSchema.Type, site: ValueSite) {
         if (type.enumValues.isNotEmpty()) return
-        val candidates = (wordlist.map { it.uppercase() } + wordlist).filter { it !in setOf("true", "false", "null") }.distinct()
         val values = discoverNames(
-            candidates,
+            names.enumValues(type.name),
             sentinel = ENUM_SENTINEL,
             send = { values -> probeValues(site, values.map { literal(site, it) }) },
             rejected = { p, values ->
@@ -613,6 +693,7 @@ class Bruteforcer(private val inql: InQL) {
                 val bySegment = values.filterIndexed { i, _ ->
                     p.segmentErrors(i).any { e -> e.evidence.any { it is Evidence.WrongValue || it is Evidence.UnknownEnumValue } }
                 }
+                rejections.add(Rejections.Kind.ENUM_VALUE, type.name, byValue - ENUM_SENTINEL)
                 byValue + bySegment
             },
             observe = { p -> p.evidence.filterIsInstance<Evidence.UnknownEnumValue>().flatMap { it.suggestions } },
@@ -697,47 +778,13 @@ class Bruteforcer(private val inql: InQL) {
 
     /** Sends each of [values] for [site] in its own aliased copy of the field. */
     private suspend fun probeValues(site: ValueSite, values: List<String>, variables: Map<String, String> = emptyMap()): Probe {
-        val otherArguments = requiredLiterals(site.parent, site.field) - site.argument
+        val otherArguments = requiredLiterals(site.parent, site.field) +
+            acceptedSamples[site.path.keyWith(site.field)].orEmpty() - site.argument
         val segments = values.mapIndexed { i, value ->
             val args = otherArguments + (site.argument to value)
             "inql$i: ${site.field}(${args.entries.joinToString(", ") { "${it.key}: ${it.value}" }}) ${site.selection}"
         }
         return probeSegments(site.path, segments, variables)
-    }
-
-    private suspend fun probeSegments(path: Path, segments: List<String>, variables: Map<String, String> = emptyMap()): Probe {
-        val (query, ranges) = build(path, segments, variables)
-        return probe(query, ranges)
-    }
-
-    private fun wrap(path: Path, inner: String): String = build(path, listOf(inner)).first
-
-    /** Builds a one-line query for [segments] at [path] and the 1-based column range of each segment. */
-    private fun build(path: Path, segments: List<String>, variables: Map<String, String> = emptyMap()): Pair<String, List<IntRange>> {
-        val definitions = if (variables.isEmpty()) "" else variables.entries.joinToString(", ", "(", ")") { "\$${it.key}: ${it.value}" }
-        val prefix = StringBuilder("${path.operation}$definitions { ")
-        for (step in path.steps) {
-            when (step) {
-                is Step.Field -> {
-                    val args = requiredLiterals(step.parent, step.name)
-                    prefix.append(step.name)
-                    if (args.isNotEmpty()) prefix.append(args.entries.joinToString(", ", "(", ")") { "${it.key}: ${it.value}" })
-                    prefix.append(" { ")
-                }
-                is Step.Fragment -> prefix.append("... on ${step.type} { ")
-            }
-        }
-        val ranges = mutableListOf<IntRange>()
-        val body = StringBuilder()
-        segments.forEachIndexed { i, segment ->
-            if (i > 0) body.append(' ')
-            val start = prefix.length + body.length + 1
-            body.append(segment)
-            ranges += start until start + segment.length
-        }
-        // The unknown root field comes last so servers reporting only the first error still report the probe.
-        val noExecution = if (path.operation != "query") " $NO_EXECUTION_FIELD" else ""
-        return (prefix.toString() + body + " }".repeat(path.steps.size) + noExecution + " }") to ranges
     }
 
     /** Literal values for the known required arguments of [parent].[field], so probes below it stay valid. */
@@ -748,6 +795,70 @@ class Bruteforcer(private val inql: InQL) {
         }.toMap()
     }
 
+    private fun stepArguments(prefix: Path, step: Step.Field): Map<String, String> =
+        requiredLiterals(step.parent, step.name) + acceptedSamples[prefix.keyWith(step.name)].orEmpty()
+
+    private suspend fun checkArgumentSamples(path: Path) {
+        path.steps.forEachIndexed { i, step ->
+            if (step !is Step.Field) return@forEachIndexed
+            val known = schema.types[step.parent]?.fields?.get(step.name)?.args ?: return@forEachIndexed
+            checkSamples(Path(path.operation, path.steps.take(i)), step.parent, step.name, known.keys, finalAttempt = true)
+        }
+    }
+
+    private suspend fun checkSamples(prefix: Path, parent: String, field: String, arguments: Collection<String>, finalAttempt: Boolean): Boolean {
+        val key = prefix.keyWith(field)
+        if (key in acceptedSamples) return true
+        if (key in checkedSamples) return false
+        if (finalAttempt) checkedSamples += key
+        val samples = names.argumentSamples(prefix, field).filterKeys { it in arguments }
+            .mapNotNull { (name, value) -> renderSample(value)?.let { name to it } }.toMap()
+        if (samples.isEmpty()) return false
+        val args = requiredLiterals(parent, field) + samples
+        val selection = "$field(${args.entries.joinToString(", ") { "${it.key}: ${it.value}" }}) { $SENTINEL }"
+        val evidence = probe(wrap(prefix, selection)).evidence
+        val reached = evidence.any {
+            (it is Evidence.UnknownField && it.field == SENTINEL) || it is Evidence.UnionSelection ||
+                (it is Evidence.LeafSelection && it.field == field)
+        }
+        val valueRejected = evidence.any {
+            it is Evidence.WrongValue || it is Evidence.InputFieldValue || it is Evidence.UnknownInputField ||
+                it is Evidence.UnknownEnumValue || it is Evidence.MissingInputFields || it is Evidence.UnknownArgument
+        }
+        if (reached && !valueRejected) {
+            acceptedSamples[key] = samples
+            return true
+        }
+        Logger.debug("Bruteforcer: argument values from traffic were not accepted for $key, using placeholders")
+        return false
+    }
+
+    private fun renderSample(value: SampleValue): String? = when (value) {
+        is SampleValue.Literal -> value.text
+        is SampleValue.Json -> jsonLiteral(value.value, value.declaredType)
+    }
+
+    private fun jsonLiteral(value: Any?, type: String?): String? {
+        val named = type?.let(::namedType)
+        val elementType = type?.trimEnd('!')?.takeIf { it.startsWith("[") && it.endsWith("]") }?.let { it.substring(1, it.length - 1) }
+        return when (value) {
+            null, JSONObject.NULL -> "null"
+            is Boolean -> value.toString()
+            is Int, is Long, is Short, is Byte -> value.toString()
+            is Number -> value.toDouble().let { d -> if (d % 1.0 == 0.0 && named != "Float") d.toLong().toString() else d.toString() }
+            is String ->
+                if (named != null && schema.types[named]?.kind == Kind.ENUM && isSchemaName(value)) value else JSONObject.quote(value)
+            is JSONArray -> jsonLiteral((0 until value.length()).map { value.opt(it) }, type)
+            is List<*> -> value.map { jsonLiteral(it, elementType ?: type) ?: return null }.joinToString(", ", "[", "]")
+            is JSONObject -> jsonLiteral(value.toMap(), type)
+            is Map<*, *> -> value.entries.map { (k, v) ->
+                val fieldType = named?.let { schema.types[it]?.inputFields?.get(k.toString())?.type?.printed }
+                "$k: ${jsonLiteral(v, fieldType) ?: return null}"
+            }.joinToString(", ", "{ ", " }")
+            else -> null
+        }
+    }
+
     private fun typeRef(printed: String, modifiersPrinted: Boolean?): TypeRef {
         val named = namedType(printed)
         val known = modifiersPrinted == true || printed.any { it in "[!" }
@@ -755,25 +866,4 @@ class Bruteforcer(private val inql: InQL) {
     }
 
     private fun namedType(printed: String) = printed.filter { it != '[' && it != ']' && it != '!' }
-
-    private suspend fun probe(query: String, ranges: List<IntRange> = emptyList()): Probe {
-        val response = client.send(query)
-        val errors = response.optJSONArray("errors")
-        val parsed = (0 until (errors?.length() ?: 0)).mapNotNull { i ->
-            val error = errors!!.optJSONObject(i) ?: return@mapNotNull null
-            val location = error.optJSONArray("locations")?.optJSONObject(0)
-            val path = error.optJSONObject("extensions")?.optString("path")?.takeIf { it.startsWith("$") }
-            ProbeError(
-                ErrorEvidence.parse(error.optString("message", ""), path),
-                location?.takeIf { it.optInt("line") == 1 }?.optInt("column"),
-                path?.let { Regex("""\binql(\d+)\b""").find(it)?.groupValues?.get(1)?.toInt() },
-            )
-        }
-        // Resolver errors carry an execution path and no validation evidence (DGS also puts paths on validation errors).
-        val executed = parsed.isNotEmpty() && parsed.all { it.evidence.isEmpty() } && (0 until errors!!.length()).all { i ->
-            val path = errors.optJSONObject(i)?.optJSONArray("path")
-            path != null && path.length() > 0 && path.opt(0) !in setOf("query", "mutation", "subscription")
-        }
-        return Probe(response.opt("data") is JSONObject || executed, parsed, ranges)
-    }
 }
