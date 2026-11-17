@@ -444,7 +444,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             ?: scanResults.lastOrNull()
 
     val isVerifyingHistory: Boolean
-        get() = verificationJob?.isActive == true
+        get() = verificationJob?.isCompleted == false
 
     private fun historyScanResult(): ScanResult? =
         primaryScanResult()?.takeIf { it.schemaDiscoverySource == SchemaDiscoverySource.HISTORY }
@@ -467,6 +467,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val historySchema = history.effectiveGraphQLSchema()
         scanResultsView.setVerificationRunning(true)
         verificationJob = coroutineScope.launch {
+            val job = coroutineContext[Job]
             try {
                 val outcome = HistorySchemaVerifier(inql).verify(requestTemplate, hostKey, historySchema)
                 val sr = ScanResult(
@@ -496,9 +497,11 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
                 ErrorDialog("History verification failed: ${e.message ?: e.toString()}")
             } finally {
                 withContext(NonCancellable + Dispatchers.Main) {
-                    scanResultsView.setVerificationRunning(false)
+                    if (verificationJob === job) {
+                        verificationJob = null
+                        scanResultsView.setVerificationRunning(false)
+                    }
                 }
-                verificationJob = null
             }
         }
     }

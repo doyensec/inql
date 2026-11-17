@@ -857,8 +857,9 @@ class Bruteforcer(private val inql: InQL) {
             is List<*> -> value.map { jsonLiteral(it, elementType ?: type) ?: return null }.joinToString(", ", "[", "]")
             is JSONObject -> jsonLiteral(value.toMap(), type)
             is Map<*, *> -> value.entries.map { (k, v) ->
-                val fieldType = named?.let { schema.types[it]?.inputFields?.get(k.toString())?.type?.printed }
-                "$k: ${jsonLiteral(v, fieldType) ?: return null}"
+                val key = (k as? String)?.takeIf(::isSchemaName) ?: return null
+                val fieldType = named?.let { schema.types[it]?.inputFields?.get(key)?.type?.printed }
+                "$key: ${jsonLiteral(v, fieldType) ?: return null}"
             }.joinToString(", ", "{ ", " }")
             else -> null
         }

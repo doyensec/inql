@@ -55,6 +55,7 @@ object SchemaSdlMerger {
             val secondaryTypes = mergeSameNamed(typeDefinitions(secondaryDoc))
             val types = unionByName(typeDefinitions(primaryDoc), secondaryTypes, { addedTypes++ }, ::mergeType)
                 .map(::stripPlaceholders)
+                .let(::objectMembersOnly)
             val directives = unionByName(directiveDefinitions(primaryDoc), directiveDefinitions(secondaryDoc))
             val roots = listOfNotNull(
                 "query" to primary.queryType.name,
@@ -75,6 +76,21 @@ object SchemaSdlMerger {
             }
             val sdl = schema?.sdlSchema ?: AstPrinter.printAst(document)
             return MergeResult(schema, sdl, conflicts, errors, addedTypes, addedFields)
+        }
+
+        /** Union members must be object types; history unions can name types the other schema proves to be interfaces. */
+        private fun objectMembersOnly(types: List<TypeDefinition<*>>): List<TypeDefinition<*>> {
+            val objects = types.filterIsInstance<ObjectTypeDefinition>().map { it.name }.toSet()
+            return types.map { type ->
+                if (type !is UnionTypeDefinition) return@map type
+                val (members, dropped) = type.memberTypes.partition { (it as? TypeName)?.name in objects }
+                if (dropped.isEmpty()) return@map type
+                conflicts += "Union ${type.name}: dropped non-object members ${dropped.map { (it as? TypeName)?.name }}"
+                if (members.isNotEmpty()) return@map type.transform { it.memberTypes(members) }
+                ObjectTypeDefinition.newObjectTypeDefinition().name(type.name).description(type.description)
+                    .fieldDefinition(FieldDefinition.newFieldDefinition().name(PLACEHOLDER_FIELD).type(TypeName("String")).build())
+                    .build()
+            }
         }
 
         private fun mergeSameNamed(types: List<TypeDefinition<*>>): List<TypeDefinition<*>> {
