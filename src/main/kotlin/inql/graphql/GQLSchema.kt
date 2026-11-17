@@ -113,18 +113,19 @@ class GQLSchema {
         type: OperationType,
         skipCache: Boolean = false,
         maxDepth: Int? = null,
+        cutCycles: Boolean = false,
     ): String {
         // Check cache first
         val config = Config.getInstance()
         val depth = maxDepth ?: config.codegenDepth()
         val pad = config.codegenPad()
-        val cacheKey = "${operation.name}:$depth:$pad"
+        val cacheKey = "${operation.name}:$depth:$pad:$cutCycles"
         if (!skipCache && queriesSdlCache.containsKey(cacheKey)) {
             return queriesSdlCache[cacheKey]!!
         }
 
         // Generate text
-        val sdl = GQLQueryPrinter(operation, type, depth, pad).printSDL()
+        val sdl = GQLQueryPrinter(operation, type, depth, pad, cutCycles).printSDL()
         if (!skipCache) {
             queriesSdlCache[cacheKey] = sdl
         }
@@ -136,6 +137,7 @@ class GQLSchema {
         type: OperationType,
         skipCache: Boolean = false,
         maxDepth: Int? = null,
+        cutCycles: Boolean = false,
     ): String {
         val operation = when(type) {
             OperationType.QUERY -> this.queries[operationName]
@@ -143,7 +145,7 @@ class GQLSchema {
             OperationType.SUBSCRIPTION -> this.subscriptions[operationName]
         }
 
-        return getOperationAsText(operation!!, type, skipCache, maxDepth)
+        return getOperationAsText(operation!!, type, skipCache, maxDepth, cutCycles)
     }
 
     fun getQueryAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,

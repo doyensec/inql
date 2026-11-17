@@ -2,7 +2,7 @@ package inql.bruteforcer
 
 /**
  * Schema facts collected by the bruteforcer. Only proven facts are rendered; details that could not be proven
- * are rendered as an "InQL bruteforcer:" description instead of a guess.
+ * are rendered as an "InQL:" description instead of a guess.
  */
 internal class DiscoveredSchema {
     enum class Kind { OBJECT, INTERFACE, UNION, ENUM, INPUT_OBJECT, SCALAR }
@@ -34,6 +34,8 @@ internal class DiscoveredSchema {
     val types = linkedMapOf<String, Type>()
 
     fun type(name: String): Type = types.getOrPut(name) { Type(name) }
+
+    var showModifierNotes = true
 
     fun toSdl(): String = buildString {
         val roots = listOfNotNull(
@@ -116,10 +118,11 @@ internal class DiscoveredSchema {
         return if (interfaces.isEmpty()) "" else interfaces.joinToString(" & ", " implements ") { it.name }
     }
 
-    private fun modifierNote(type: TypeRef) = if (type.modifiersKnown) emptyList() else listOf("list/non-null modifiers unknown")
+    private fun modifierNote(type: TypeRef) =
+        if (type.modifiersKnown || !showModifierNotes) emptyList() else listOf("list/non-null modifiers unknown")
 
     private fun StringBuilder.description(notes: List<String>, indent: String) {
         if (notes.isEmpty()) return
-        append("$indent\"\"\"InQL bruteforcer: ${notes.joinToString("; ")}\"\"\"\n")
+        append("$indent\"\"\"InQL: ${notes.joinToString("; ")}\"\"\"\n")
     }
 }

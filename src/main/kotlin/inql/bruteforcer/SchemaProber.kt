@@ -42,7 +42,7 @@ internal class SchemaProber(
         probe("query { __typename { $SENTINEL } }").evidence.filterIsInstance<Evidence.LeafSelection>()
             .firstOrNull { it.field == "__typename" && it.type != null }?.let { leafModifiersPrinted = it.type!!.endsWith("!") }
         probe("query { __schema }").evidence.filterIsInstance<Evidence.MissingSelection>()
-            .firstOrNull { it.field == "__schema" }?.let { compositeModifiersPrinted = it.type.endsWith("!") }
+            .firstOrNull { it.field == "__schema" && it.type.trimEnd('!') == "__Schema" }?.let { compositeModifiersPrinted = it.type.endsWith("!") }
         singleError = probe("query { $SENTINEL $SECOND_SENTINEL }").evidence.filterIsInstance<Evidence.UnknownField>().size == 1
     }
 

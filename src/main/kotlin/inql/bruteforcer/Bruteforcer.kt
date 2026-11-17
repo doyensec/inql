@@ -121,6 +121,7 @@ class Bruteforcer(private val inql: InQL) {
     }
 
     internal suspend fun verify(req: HttpRequest, names: NameSource): Verification {
+        schema.showModifierNotes = false
         val sdl = run(req, names)
         val provenScalars = schema.types.values.filter { it.kind == Kind.SCALAR }.map { it.name }.toSet()
         return Verification(sdl, revealed, rejections, provenScalars)
@@ -263,9 +264,13 @@ class Bruteforcer(private val inql: InQL) {
     private suspend fun resolveFieldTypes(typeName: String, path: Path, names: Set<String>) {
         val composite = mutableMapOf<String, String>()
         val leaf = mutableMapOf<String, Evidence.LeafSelection>()
+        val parentTyped = mutableMapOf<String, String>()
         for (chunk in names.chunked(bucketSize)) {
             probe(wrap(path, chunk.joinToString(" "))).evidence.forEach { e ->
-                if (e is Evidence.MissingSelection && e.field in chunk) composite[e.field] = e.type
+                // Some servers print the parent type here, so that type is only trusted once the sentinel probe below confirms it.
+                if (e is Evidence.MissingSelection && e.field in chunk) {
+                    if (namedType(e.type) == typeName) parentTyped[e.field] = e.type else composite[e.field] = e.type
+                }
                 if (e is Evidence.MissingArguments && e.field in chunk) {
                     e.arguments.forEach { requiredArguments.getOrPut("$typeName.${e.field}") { linkedMapOf() }[it] = e.type }
                 }
@@ -282,7 +287,7 @@ class Bruteforcer(private val inql: InQL) {
             val selectedType = evidence.filterIsInstance<Evidence.UnknownField>().singleOrNull { it.field == SENTINEL }?.parentType
                 ?: evidence.filterIsInstance<Evidence.UnionSelection>().singleOrNull()?.type
             if (leafSelection != null) leaf[name] = leafSelection
-            else if (selectedType != null) composite[name] = selectedType
+            else if (selectedType != null) composite[name] = parentTyped[name]?.takeIf { namedType(it) == selectedType } ?: selectedType
         }
 
         val type = schema.type(typeName)
