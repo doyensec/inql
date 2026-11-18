@@ -3,14 +3,8 @@ package inql.graphql
 import graphql.language.*
 import graphql.schema.*
 
-/** With [cutCycles], a composite field whose type is already being expanded above it is not expanded again. */
-class GQLQueryPrinter(
-    val field: GraphQLFieldDefinition,
-    val operationType: GQLSchema.OperationType,
-    val maxDepth: Int = 4,
-    val padSize: Int = 4,
-    val cutCycles: Boolean = false,
-) {
+/** A composite field whose type is already being expanded above it is not expanded again. */
+class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLSchema.OperationType, val maxDepth: Int = 4, val padSize: Int = 4) {
     companion object {
         private val BUILTIN_SCALARS = setOf("Int", "Float", "String", "Boolean", "ID")
     }
@@ -71,7 +65,7 @@ class GQLQueryPrinter(
             return
         }
         val typeName = (innerType as GraphQLNamedType).name
-        if (cutCycles && typeName in expanding) {
+        if (typeName in expanding) {
             sb.appendLine("$padding$name$args # { $typeName, expanded above }")
             return
         }

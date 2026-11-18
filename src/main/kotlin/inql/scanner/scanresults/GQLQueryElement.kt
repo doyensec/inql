@@ -9,7 +9,7 @@ class GQLQueryElement(
     private val maxDepth: Int? = null,
 ) : ScanResultElement(name) {
     override fun content(): String {
-        return schemaSupplier().getOperationAsText(name, type, skipCache = true, maxDepth = maxDepth, cutCycles = maxDepth != null)
+        return schemaSupplier().getOperationAsText(name, type, skipCache = true, maxDepth = maxDepth)
     }
 
     fun matchesSearch(needle: String): Boolean {
