@@ -1,4 +1,4 @@
-# InQL v6.1.2 - Burp Extension for Advanced GraphQL Testing
+# InQL v6.2.0 - Burp Extension for Advanced GraphQL Testing
 
 [![Doyensec Research Island](https://img.shields.io/static/v1?logo=data:image/png;base64,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&link=https://doyensec.com/research.html&message=Research%20Island&&label=Doyensec&color=purple)](https://doyensec.com/research.html)
 ![GitHub](https://img.shields.io/github/license/doyensec/inql?logo=github&color=darkgreen)
@@ -19,7 +19,7 @@ We appreciate your trust in InQL. Happy testing!
 
 ## :star2: Key Features
 
-The InQL user interface is equipped with three primary components: the *Scanner*, the *Batch Queries*, and the *Engine Fingerprinting* tab
+The InQL user interface is equipped with four primary components: the *Scanner*, the *Batch Queries*, the *Engine Fingerprinting*, and the *Attack Vector Scanner* tab
 
 ### :mag_right: Scanner
 
@@ -49,7 +49,7 @@ You have the ability to set custom headers per domain, with the domain list auto
 
 ### :crossed_swords: Batch Queries
 
-The *Batch Queries* tab lets you run batch GraphQL attacks, which can be useful for circumventing poorly implemented rate limits.
+The *Batch Queries* tab lets you run batch GraphQL attacks using alias or array batching, which can be useful for circumventing poorly implemented rate limits. It supports Intruder-style attack modes (Sniper, Battering ram, Pitchfork, and Cluster bomb) and multiple payload sources, such as wordlists, files, number ranges, and brute-force character sets.
 
 ### :memo: Burp's Native Message Editors
 
@@ -61,6 +61,12 @@ InQL now implements GraphiQL and GraphQL Voyager servers. You can send the analy
 
 ### :point_up: Engine Fingerprinting
 This tab allows you to scan a GraphQL URL to retrieve information about the backend server technology.
+
+### :dart: Attack Vector Scanner
+This tab runs a set of common GraphQL security checks against an endpoint, such as introspection exposure, field suggestions, batching limits, query depth and complexity limits, GET-based queries and mutations, and form-encoded POST-based requests.
+
+### :scroll: Schema Reconstruction From Burp History
+When introspection is disabled, InQL can rebuild the schema from GraphQL traffic observed in Burp's history. Use the 'Extract Schema from History' context menu option, then verify and correct the reconstructed schema in the Scanner.
 
 ### :construction: Schema Bruteforcer
 This scanner is designed to recreate the schema when introspection is disabled. It is based on [Clairvoyance CLI tool](https://github.com/nikitastupin/clairvoyance), using regex pattern matching to discover schema details.
