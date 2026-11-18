@@ -16,7 +16,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonSyntaxException
 import inql.InQL
 import inql.Logger
-import inql.graphql.Utils.isGraphQLRequest
+import inql.graphql.GraphQLRequestPayload
+import inql.graphql.GraphQLRequestTransformer
 import inql.graphql.formatting.Formatter
 import inql.utils.JsonPrettifier
 import inql.utils.getTextAreaComponent
@@ -54,6 +55,8 @@ class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
     private var varsEditor: RawEditor
 
     private var request: HttpRequest? = null
+    private var graphQLPayload: GraphQLRequestPayload? = null
+    private val transportState = GraphQLRequestEditorTransportState()
     private val queryState = EditorState<String>(0, false, "")
     private val varsState = EditorState<JsonObject?>(0, false, null)
 
@@ -107,50 +110,40 @@ class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
     }
 
     override fun setRequestResponse(requestResponse: HttpRequestResponse) {
-        this.request = requestResponse.request()
-        lateinit var body: JsonObject
-        val json_body = requestResponse.request().bodyToString()
-        Logger.debug("Body: $json_body")
-        try {
-            body = gson.fromJson<JsonObject>(json_body, JsonObject::class.java)
-        } catch (e: Exception) {
-            Logger.error("Failed to deserialize request body")
-            if (!this.queryState.error) this.queryState.backup = this.query
-            if (!this.varsState.error) this.varsState.backup = this.vars
+        transportState.onSetRequestResponse(
+            incoming = requestResponse.request(),
+            isModified = isModified(),
+            onLoad = { loaded ->
+                this.queryState.error = false
+                this.varsState.error = false
+                this.queryState.backup = ""
+                this.varsState.backup = null
 
-            // Mark errors and backup old values (unless these are repeated errors - don't overwrite backups)
-            this.queryState.error = true
-            this.varsState.error = true
+                this.graphQLPayload = loaded.payload
+                this.operationName = loaded.operationName
+                this.query = loaded.query
+                this.vars = loaded.variables
 
-            // Show the message about an error:
-            this.query = "There was an error during JSON deserialization."
-            this.vars = null
-            return
-        }
+                this.queryState.hash = this.query.hashCode()
+                this.varsState.hash = this.varsEditor.contents.toString().hashCode()
+                this.request = requestResponse.request()
+            },
+            onParseError = {
+                Logger.error("Failed to parse GraphQL request")
+                if (!this.queryState.error) this.queryState.backup = this.query
+                if (!this.varsState.error) this.varsState.backup = this.vars
 
-        // Reset backups and error info if JSON parsed successfully
-        this.queryState.error = false
-        this.varsState.error = false
-        this.queryState.backup = ""
-        this.varsState.backup = null
+                this.queryState.error = true
+                this.varsState.error = true
 
-        this.operationName = null
-        // Variables are optional, can be absent, {} and null
-        if (body.has("operation_name")) this.operationName = body.get("operation_name").asString
-
-        // Calculate new hashes (note that we need to re-read values as they might have changed due to normalization)
-        this.query = body.get("query").asString
-        this.vars =
-            if (body.has("variables") && body.get("variables").isJsonObject) body.get("variables").asJsonObject else null
-
-        this.queryState.hash = this.query.hashCode()
-        this.varsState.hash = this.vars.hashCode()
-
-        this.request = requestResponse.request()
+                this.query = "Could not parse GraphQL parameters from this request."
+                this.vars = null
+            },
+        )
     }
 
     override fun isEnabledFor(requestResponse: HttpRequestResponse): Boolean {
-        return isGraphQLRequest(requestResponse.request())
+        return GraphQLRequestTransformer.parsePayload(requestResponse.request()) != null
     }
 
     override fun caption(): String {
@@ -166,7 +159,8 @@ class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
     }
 
     override fun isModified(): Boolean {
-        return this.queryState.hash != this.query.hashCode() || this.varsState.hash != this.vars.hashCode()
+        return this.queryState.hash != this.query.hashCode() ||
+            this.varsState.hash != this.varsEditor.contents.toString().hashCode()
     }
 
     override fun getRequest(): HttpRequest {
@@ -192,12 +186,22 @@ class PayloadEditor private constructor(val inql: InQL, readOnly: Boolean) :
             }
         }
 
-        val body = JsonObject().also { it.addProperty("query", query) }
-        if (vars != null) body.add("variables", vars)
-        if (operationName != null) body.addProperty("operationName", operationName)
+        val variablesJson = vars?.let { gson.toJson(it) }
+        val payload = graphQLPayload?.withFirstOperation(
+            query = query,
+            variables = variablesJson,
+            operationName = operationName,
+        ) ?: GraphQLRequestPayload.single(
+            query = query,
+            variables = variablesJson,
+            operationName = operationName,
+        )
 
-        val req = if (this.request != null) this.request else HttpRequest.httpRequest()
-        return req!!.withBody(gson.toJson(body))
+        val built = transportState.buildRequest(payload)
+        this.request = built
+        this.queryState.hash = query.hashCode()
+        this.varsState.hash = this.varsEditor.contents.toString().hashCode()
+        return built
     }
 
     class EditorSendRequestFromInqlHandler(val editor: PayloadEditor) : SendFromInqlHandler(editor.inql, true) {

@@ -35,12 +35,22 @@ class Label(text: String, bold: Boolean = false, big: Boolean = false) : JLabel(
     }
 }
 
+/** Word-wrapping, read-only text that looks and behaves like a [JLabel]. */
 class MultilineLabel(text: String) : JTextArea(text) {
     init {
         isEditable = false
         isOpaque = false
         lineWrap = true
         wrapStyleWord = true
+        isFocusable = false
+        cursor = Cursor.getDefaultCursor()
+    }
+
+    // Theme changes reinstall the text area's highlighter and font, so reapply the label look every time.
+    override fun updateUI() {
+        super.updateUI()
+        highlighter = null
+        font = UIManager.getFont("Label.font") ?: font
     }
 }
 
@@ -62,6 +72,67 @@ open class FlowPanel(val alignment: Int, val gap: Int = 5) : FlatPanel() {
         val hgap = if (alignment < FlowLayout.LEADING) gap else 0
         val vgap = if (alignment >= FlowLayout.LEADING || alignment == FlowLayout.CENTER) gap else 0
         this.layout = FlowLayout(alignment, hgap, vgap)
+    }
+}
+
+class WrapLayout(private val hgap: Int, private val rowGap: Int) : LayoutManager {
+    private var lastSize: Dimension? = null
+
+    override fun addLayoutComponent(name: String?, comp: Component?) {}
+
+    override fun removeLayoutComponent(comp: Component?) {}
+
+    override fun preferredLayoutSize(target: Container): Dimension = layoutSize(target, preferred = true)
+
+    override fun minimumLayoutSize(target: Container): Dimension = layoutSize(target, preferred = false)
+
+    override fun layoutContainer(target: Container) = synchronized(target.treeLock) {
+        val insets = target.insets
+        var y = insets.top
+        for (row in rows(target, preferred = true)) {
+            val rowHeight = row.maxOf { it.second.height }
+            var x = insets.left + hgap
+            for ((component, size) in row) {
+                component.setBounds(x, y + (rowHeight - size.height) / 2, size.width, size.height)
+                x += size.width + hgap
+            }
+            y += rowHeight + rowGap
+        }
+        val size = preferredLayoutSize(target)
+        if (size != lastSize) {
+            lastSize = size
+            SwingUtilities.invokeLater { target.revalidate() }
+        }
+    }
+
+    private fun layoutSize(target: Container, preferred: Boolean): Dimension = synchronized(target.treeLock) {
+        val rows = rows(target, preferred)
+        val insets = target.insets
+        val width = rows.maxOfOrNull { row -> row.sumOf { it.second.width } + hgap * (row.size - 1) } ?: 0
+        val height = rows.sumOf { row -> row.maxOf { it.second.height } } + rowGap * maxOf(0, rows.size - 1)
+        Dimension(width + insets.left + insets.right + hgap * 2, height + insets.top + insets.bottom)
+    }
+
+    private fun rows(target: Container, preferred: Boolean): List<List<Pair<Component, Dimension>>> {
+        var container: Container = target
+        while (container.width == 0 && container.parent != null) container = container.parent
+        val available = container.width.takeIf { it > 0 } ?: Int.MAX_VALUE
+        val maxWidth = maxOf(0, available - target.insets.left - target.insets.right - hgap * 2)
+        val rows = mutableListOf<MutableList<Pair<Component, Dimension>>>()
+        var rowWidth = 0
+        for (component in target.components) {
+            if (!component.isVisible) continue
+            val size = Dimension(if (preferred) component.preferredSize else component.minimumSize)
+            size.width = minOf(size.width, maxWidth)
+            if (rows.isEmpty() || (rowWidth > 0 && rowWidth + hgap + size.width > maxWidth)) {
+                rows += mutableListOf<Pair<Component, Dimension>>()
+                rowWidth = 0
+            }
+            if (rowWidth > 0) rowWidth += hgap
+            rowWidth += size.width
+            rows.last() += component to size
+        }
+        return rows
     }
 }
 
@@ -97,7 +168,11 @@ open class Input<out T : JComponent>(val component: T, val description: String =
 
     override fun isEnabled(): Boolean = this.component.isEnabled
     override fun setEnabled(enabled: Boolean) {
+        super.setEnabled(enabled)
         this.component.isEnabled = enabled
+        for (child in components) {
+            child.isEnabled = enabled
+        }
     }
 }
 
@@ -131,10 +206,29 @@ class ComboBox(description: String, vararg items: String) :
     fun addItemListener(il: ItemListener) = this.component.addItemListener(il)
 }
 
+/** Commits text typed into the spinner and returns its value; invalid input keeps the last valid value. */
+fun JSpinner.committedInt(): Int {
+    try {
+        commitEdit()
+    } catch (_: java.text.ParseException) {
+        // Keep last valid value when input is invalid.
+    }
+    return value as Int
+}
+
+class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
+    override fun insertUpdate(e: DocumentEvent?) = this.callback()
+    override fun removeUpdate(e: DocumentEvent?) = this.callback()
+    override fun changedUpdate(e: DocumentEvent?) = this.callback()
+}
+
 class Spinner(description: String, min: Int, val max: Int, val step: Int = 1) :
     Input<JSpinner>(JSpinner(SpinnerNumberModel(min, min, max, step)), description) {
 
     fun getValue(): Int = this.component.value as Int
+
+    fun getCommittedValue(): Int = component.committedInt()
+
     fun setValue(value: Int) {
         this.component.value = value
     }
@@ -155,12 +249,6 @@ class TextField(description: String, val columns: Int = 20) :
     fun getText(): String = this.component.text
     fun setText(text: String) {
         this.component.text = text
-    }
-
-    class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
-        override fun insertUpdate(e: DocumentEvent?) = this.callback()
-        override fun removeUpdate(e: DocumentEvent?) = this.callback()
-        override fun changedUpdate(e: DocumentEvent?) = this.callback()
     }
 
     private fun changeHandler() {
@@ -206,12 +294,6 @@ class TextArea(description: String, val rows: Int, val cols: Int) :
     override fun isEnabled(): Boolean = this.component.isEnabled
     override fun setEnabled(enabled: Boolean) {
         this.component.isEnabled = enabled
-    }
-
-    class SimpleDocumentListener(val callback: () -> Unit) : DocumentListener {
-        override fun insertUpdate(e: DocumentEvent?) = this.callback()
-        override fun removeUpdate(e: DocumentEvent?) = this.callback()
-        override fun changedUpdate(e: DocumentEvent?) = this.callback()
     }
 
     private fun changeHandler() {
@@ -308,7 +390,6 @@ fun loadSvgIcon(resourcePath: String, height: Int): FlatSVGIcon? {
     val scalingFactor = height.toFloat() / svgIcon.iconHeight.toFloat()
 
     // Return a new svgIcon derived with the scaling factor, or null if the original icon had a height of 0 to prevent division by zero.
-    svgIcon.colorFilter
     return if (svgIcon.iconHeight > 0) svgIcon.derive(scalingFactor) else null
 }
 
@@ -357,18 +438,39 @@ class SettingsTabButton() : JPanel() {
         })
         add(clickablePart)
     }
+}
 
-    private fun autoScale(icon: FlatSVGIcon): FlatSVGIcon {
-        val height = this.preferredSize.height
-        val scalingFactor = height.toFloat() / icon.iconHeight
-        return icon.derive(scalingFactor)
-    }
+fun JSplitPane.applyEqualSplit(initialRatio: Double = 0.5) {
+    resizeWeight = initialRatio
+    getLeftComponent()?.minimumSize = Dimension(0, 0)
+    getRightComponent()?.minimumSize = Dimension(0, 0)
+    var initialized = false
+    addComponentListener(object : java.awt.event.ComponentAdapter() {
+        override fun componentResized(e: java.awt.event.ComponentEvent?) {
+            if (initialized) return
+            val size = if (orientation == JSplitPane.HORIZONTAL_SPLIT) width else height
+            if (size <= 0) return
+            dividerLocation = (size * initialRatio).toInt()
+            initialized = true
+        }
+    })
 }
 
 class ErrorDialog(val msg: String, logToError: Boolean = true) {
     init {
-        if(logToError) Logger.error(msg)
-        val burpWindow = Burp.Montoya.userInterface().swingUtils().suiteFrame()
-        JOptionPane.showMessageDialog(burpWindow, msg, "InQL Error", JOptionPane.ERROR_MESSAGE)
+        if (logToError) Logger.error(msg)
+        val show = Runnable {
+            val burpWindow = Burp.Montoya.userInterface().swingUtils().suiteFrame()
+            JOptionPane.showMessageDialog(burpWindow, msg, "InQL Error", JOptionPane.ERROR_MESSAGE)
+        }
+        if (SwingUtilities.isEventDispatchThread()) {
+            show.run()
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(show)
+            } catch (e: Exception) {
+                Logger.error("Failed to show error dialog: ${e.message}")
+            }
+        }
     }
 }

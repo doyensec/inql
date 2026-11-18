@@ -9,6 +9,68 @@ import inql.utils.withUpsertedHeader
 
 class Introspection {
     companion object {
+        /** Exact JSON body for Apollo Federation `_service { sdl }` (see PLAN: schema discovery fallback). */
+        private const val FEDERATION_SDL_REQUEST_BODY = """{"query":"query{_service{sdl}}","operationName":null}"""
+
+        /**
+         * POST the same [request] URL/headers with Federation SDL query; returns raw SDL or null.
+         */
+        fun sendFederationSdlQuery(request: HttpRequest): String? {
+            Logger.debug("Federation SDL fallback query to '${request.url()}'.")
+            val response = try {
+                Burp.Montoya.http().sendRequest(request.withBody(FEDERATION_SDL_REQUEST_BODY)).response()
+            } catch (e: Exception) {
+                Logger.info("Federation SDL request failed: ${e.message}")
+                return null
+            }
+
+            if (response.statusCode() >= 400) {
+                Logger.info("Federation SDL query failed, status: ${response.statusCode()}")
+                return null
+            }
+
+            val raw = response.bodyToString()
+            Logger.debug("Federation SDL response: $raw")
+
+            val gson = Gson()
+            val root: Map<*, *>
+            try {
+                root = gson.fromJson(raw, Map::class.java) ?: return null
+            } catch (e: Exception) {
+                Logger.info("Could not parse Federation SDL response as JSON: ${e.message}")
+                return null
+            }
+
+            if (root.containsKey("errors")) {
+                Logger.info("Federation SDL response contained errors")
+                (root["errors"] as? Collection<*>)?.forEach { Logger.info("Error: $it") }
+                return null
+            }
+
+            val data = root["data"] as? Map<*, *> ?: run {
+                Logger.info("Federation SDL response missing data")
+                return null
+            }
+            val service = data["_service"] as? Map<*, *> ?: run {
+                Logger.info("Federation SDL response missing data._service")
+                return null
+            }
+            val sdl = service["sdl"]
+            if (sdl == null) {
+                Logger.info("Federation SDL: data._service.sdl is null or absent")
+                return null
+            }
+            if (sdl !is String) {
+                Logger.info("Federation SDL: unexpected type for sdl")
+                return null
+            }
+            if (sdl.isBlank()) {
+                Logger.info("Federation SDL: empty SDL string")
+                return null
+            }
+            return sdl
+        }
+
         fun sendIntrospectionQuery(url: String, headers: Map<String, String>): String? {
             // val request = IntrospectionHttpRequest(method = "POST", url, headers)
             var request = HttpRequest.httpRequest()

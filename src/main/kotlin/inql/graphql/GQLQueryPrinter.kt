@@ -3,6 +3,7 @@ package inql.graphql
 import graphql.language.*
 import graphql.schema.*
 
+/** A composite field whose type is already being expanded above it is not expanded again. */
 class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLSchema.OperationType, val maxDepth: Int = 4, val padSize: Int = 4) {
     companion object {
         private val BUILTIN_SCALARS = setOf("Int", "Float", "String", "Boolean", "ID")
@@ -14,7 +15,7 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
         if (_sdl == null) {
             val sb = StringBuilder()
             sb.appendLine("${operationType.name.lowercase()} ${field.name} {")
-            printSingleField(field, sb, 1, maxDepth, padSize)
+            printSingleField(field, sb, 1, maxDepth, padSize, emptySet())
             sb.appendLine("}")
             _sdl = sb.toString()
         }
@@ -23,7 +24,14 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
 
 
     /* Field */
-    private fun printSingleField(type: GraphQLFieldDefinition, sb: StringBuilder, depth: Int = 1, maxDepth: Int = 4, padSize: Int = 4) {
+    private fun printSingleField(
+        type: GraphQLFieldDefinition,
+        sb: StringBuilder,
+        depth: Int,
+        maxDepth: Int,
+        padSize: Int,
+        expanding: Set<String>,
+    ) {
         val padding = " ".repeat(padSize * depth)
         val descriptionLines = printFieldComment(type)
         val name = type.name
@@ -51,18 +59,24 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
         // Handle object field
         sb.appendLinesWithPadding(descriptionLines, padding)
 
-        // If we reached maxDepth, just print the field commented out and return
+        // Past depth limit: omit composite fields (do not emit invalid/truncated selections).
         if (depth > maxDepth) {
             sb.appendLine("$padding$name$args # { Truncated by depth limit }")
             return
         }
+        val typeName = (innerType as GraphQLNamedType).name
+        if (typeName in expanding) {
+            sb.appendLine("$padding$name$args # { $typeName, expanded above }")
+            return
+        }
+        val inner = expanding + typeName
 
         // Otherwise open a new block and go deeper
         sb.appendLine("$padding$name$args {")
         when (innerType) {
             is GraphQLFieldsContainer -> {
                 for (innerField in innerType.fields.sortedBy { it.name }) {
-                    printSingleField(innerField, sb, depth + 1, maxDepth, padSize)
+                    printSingleField(innerField, sb, depth + 1, maxDepth, padSize, inner)
                 }
             }
 
@@ -71,23 +85,19 @@ class GQLQueryPrinter(val field: GraphQLFieldDefinition, val operationType: GQLS
                     if (unionInnerType !is GraphQLFieldsContainer) {
                         throw NotImplementedError("Unknown field type: $unionInnerType")
                     }
-                    printUnionType(unionInnerType, sb, depth + 1, maxDepth, padSize)
+                    printUnionType(unionInnerType, sb, depth + 1, maxDepth, padSize, inner)
                 }
-            }
-
-            else -> {
-                throw NotImplementedError("Unknown field type: $innerType")
             }
         }
         sb.appendLine("$padding}")
     }
 
-    private fun printUnionType(type: GraphQLFieldsContainer, sb: StringBuilder, depth: Int, maxDepth: Int, padSize: Int) {
+    private fun printUnionType(type: GraphQLFieldsContainer, sb: StringBuilder, depth: Int, maxDepth: Int, padSize: Int, expanding: Set<String>) {
         val padding = " ".repeat(padSize * depth)
         sb.appendLine("$padding... on ${type.name} {")
         sb.appendLine("${" ".repeat(padSize * (depth + 1))}__typename")
         for (field in type.fields.sortedBy { it.name }) {
-            printSingleField(field, sb, depth + 1, maxDepth, padSize)
+            printSingleField(field, sb, depth + 1, maxDepth, padSize, expanding + type.name)
         }
         sb.appendLine("$padding}")
     }

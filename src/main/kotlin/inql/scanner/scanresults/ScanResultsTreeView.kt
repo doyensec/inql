@@ -1,24 +1,63 @@
 package inql.scanner.scanresults
 
 import inql.Logger
+import inql.scanner.ScanResult
 import inql.ui.BorderPanel
+import inql.ui.FlatPanel
+import inql.ui.WrapLayout
 import java.awt.BorderLayout
+import java.awt.Dimension
+import java.awt.event.HierarchyEvent
+import javax.swing.BorderFactory
+import javax.swing.JButton
+import javax.swing.JLabel
 import javax.swing.JScrollPane
+import javax.swing.JTextField
 import javax.swing.JTree
+import javax.swing.SwingUtilities
+import javax.swing.Timer
 import javax.swing.UIManager
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 import javax.swing.event.TreeExpansionEvent
-import javax.swing.event.TreeWillExpandListener
 import javax.swing.event.TreeSelectionEvent
 import javax.swing.event.TreeSelectionListener
+import javax.swing.event.TreeWillExpandListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
 import javax.swing.tree.TreeSelectionModel
 
 class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelectionListener {
+    companion object {
+        private const val VERIFY_LABEL = "Verify with server"
+        private const val MIN_WIDTH = 280
+    }
 
     private val tree: JTree
+    private val treeModel: DefaultTreeModel
+    private val filterModel: ScanResultsTreeFilterModel
+    private val searchField = JTextField(24).also {
+        it.putClientProperty("JTextField.showClearButton", true)
+    }
+    private val mergeButton = JButton("Merge schema").apply {
+        toolTipText = "Merge this schema with another tab or a schema file"
+        isEnabled = false
+        addActionListener { view.openMergeDialog() }
+    }
+    private val verifyButton = JButton(VERIFY_LABEL).apply {
+        toolTipText = "Check this History schema against the server and open the verified copy in a new tab"
+        isVisible = false
+        addActionListener { view.toggleHistoryVerification() }
+    }
+    private val searchTimer = Timer(300) { applySearchFilter() }.apply { isRepeats = false }
+    private var expansionBeforeFilter: Set<List<String>>? = null
 
     private var root: DefaultMutableTreeNode
+    private var wantsDefaultExpansion = true
+    private var applyingDefaultExpansion = false
+    private var pendingSelectedPath: List<String>? = null
+
     private fun setupLookAndFeel() {
         UIManager.put("Tree.showDefaultIcons", true)
         UIManager.put("Tree.paintLines", true)
@@ -28,17 +67,39 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
     }
 
     private fun initUI() {
+        minimumSize = Dimension(MIN_WIDTH, 0)
+        val searchBar = FlatPanel().apply {
+            layout = WrapLayout(8, 6)
+            border = BorderFactory.createEmptyBorder(4, 0, 0, 0)
+            add(JLabel("Search:"))
+            add(searchField)
+            add(mergeButton)
+            add(verifyButton)
+        }
+
         val nestedPanel = BorderPanel()
         nestedPanel.add(BorderLayout.CENTER, this.tree)
         val scrollPane = JScrollPane()
         scrollPane.viewport.add(nestedPanel)
         this.add(BorderLayout.CENTER, scrollPane)
+        this.add(BorderLayout.SOUTH, searchBar)
+
+        searchField.document.addDocumentListener(object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = searchTimer.restart()
+            override fun removeUpdate(e: DocumentEvent) = searchTimer.restart()
+            override fun changedUpdate(e: DocumentEvent) = searchTimer.restart()
+        })
     }
 
     init {
         this.setupLookAndFeel()
-        this.tree = JTree(DefaultMutableTreeNode()).also {
+        this.root = DefaultMutableTreeNode("No results yet")
+        this.treeModel = DefaultTreeModel(this.root)
+        this.filterModel = ScanResultsTreeFilterModel(this.treeModel)
+        this.tree = JTree(this.filterModel).also {
             it.isRootVisible = false
+            it.showsRootHandles = true
+            it.cellRenderer = ScanResultsTreeCellRenderer()
             it.addTreeSelectionListener(this)
             it.selectionModel.selectionMode = TreeSelectionModel.SINGLE_TREE_SELECTION
             it.expandsSelectedPaths = true
@@ -48,47 +109,390 @@ class ScanResultsTreeView(val view: ScanResultsView) : BorderPanel(), TreeSelect
             override fun treeWillExpand(event: TreeExpansionEvent) {
                 val node = event.path.lastPathComponent
                 if (node is LazyTreeNodeWithCustomLabel) {
-                    node.ensureLoaded(tree.model as DefaultTreeModel)
+                    node.ensureLoaded(treeModel)
                 }
             }
-            override fun treeWillCollapse(event: TreeExpansionEvent) {}
+
+            override fun treeWillCollapse(event: TreeExpansionEvent) {
+                if (!applyingDefaultExpansion) {
+                    wantsDefaultExpansion = false
+                }
+            }
         })
 
         tree.addTreeSelectionListener { e ->
             val node = e.path.lastPathComponent
             if (node is LazyLeafTreeNode) {
-                node.ensureLoaded(tree.model as DefaultTreeModel)
+                node.ensureLoaded(treeModel)
                 node.setSelectionRefreshCallback {
                     view.selectionChangeListener(node as DefaultMutableTreeNode)
                 }
             }
+            triggerCycleDetectionLoad(node)
         }
 
-        this.root = DefaultMutableTreeNode("No results yet")
-        this.tree.model = DefaultTreeModel(this.root)
         this.initUI()
+        addHierarchyListener { e ->
+            val changed = (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong()) != 0L
+            if (changed && isDisplayable) {
+                scheduleApplyTreeState()
+            }
+        }
     }
 
-    fun refresh() {
+    fun setVerificationRunning(running: Boolean) {
+        verifyButton.text = if (running) "Cancel verification" else VERIFY_LABEL
+    }
+
+    fun refreshKeepingSchemaCorrections(scanResultUuid: String) {
+        wantsDefaultExpansion = false
+        refresh(preserveSchemaCorrectionsFor = scanResultUuid)
+    }
+
+    fun release() {
+        pendingSelectedPath = null
+        searchField.text = ""
+        filterModel.filter = ""
+        expansionBeforeFilter = null
+        root.removeAllChildren()
+        treeModel.nodeStructureChanged(root)
+    }
+
+    fun syncScanResult(updated: ScanResult): Boolean {
+        wantsDefaultExpansion = false
+        val expandedPaths = captureExpandedPaths()
+        val selectedPath = captureSelectedPath()
+
+        val model = treeModel
+        for (i in 0 until root.childCount) {
+            val node = root.getChildAt(i) as? ScanResultTreeNode ?: continue
+            if (node.scanResult.uuid != updated.uuid) continue
+
+            val previousLabel = nodeLabel(node)
+            node.reloadSchemaBranches(updated)
+            model.nodeStructureChanged(node)
+            model.nodeChanged(node)
+            filterModel.reloadFromSource()
+            if (filterModel.filter.isNotEmpty()) {
+                expandFilteredTree()
+            }
+
+            val currentLabel = nodeLabel(node)
+            val restoredExpansion = remapFirstLabel(expandedPaths, previousLabel, currentLabel)
+            pendingSelectedPath = selectedPath?.let { labels ->
+                remapFirstLabel(linkedSetOf(labels), previousLabel, currentLabel).firstOrNull()
+            }
+            scheduleApplyTreeState(restoredExpansion)
+            return true
+        }
+        return false
+    }
+
+    private fun selectSchemaCorrectionsNode(scanResultUuid: String) {
+        for (i in 0 until root.childCount) {
+            val scanResultNode = root.getChildAt(i) as? DefaultMutableTreeNode ?: continue
+            val result = scanResultNode.userObject as? inql.scanner.ScanResult ?: continue
+            if (result.uuid != scanResultUuid) continue
+
+            val scanPath = TreePath(scanResultNode.path)
+            tree.expandPath(scanPath)
+            tree.makeVisible(scanPath)
+
+            for (j in 0 until scanResultNode.childCount) {
+                val child = scanResultNode.getChildAt(j) as? DefaultMutableTreeNode ?: continue
+                if (child.userObject !is SchemaCorrectionsEntry) continue
+                val childPath = TreePath(child.path)
+                tree.selectionPath = childPath
+                view.selectionChangeListener(child)
+                return
+            }
+        }
+    }
+
+    fun refresh(preserveSchemaCorrectionsFor: String? = null) {
+        mergeButton.isEnabled = view.scannerTab.scanResults.isNotEmpty()
+        verifyButton.isVisible = view.scannerTab.canVerifyHistory()
+        setVerificationRunning(view.scannerTab.isVerifyingHistory)
+        val expandedPaths = if (wantsDefaultExpansion) emptySet() else captureExpandedPaths()
+        if (expandedPaths.isNotEmpty()) {
+            wantsDefaultExpansion = false
+        }
+
+        pendingSelectedPath = if (preserveSchemaCorrectionsFor == null) captureSelectedPath() else null
+
         this.root.userObject = this.view.scannerTab.host
         this.root.removeAllChildren()
         for (result in this.view.scannerTab.scanResults) {
             this.root.add(ScanResultTreeNode(result))
         }
-        this.tree.model = DefaultTreeModel(this.root)
-        for (i in 0 until this.tree.rowCount) {
-            this.tree.expandRow(i)
+        val model = treeModel
+        model.nodeStructureChanged(root)
+        filterModel.reloadFromSource()
+        if (filterModel.filter.isNotEmpty()) {
+            expandFilteredTree()
+        }
+
+        scheduleApplyTreeState(expandedPaths)
+        if (preserveSchemaCorrectionsFor != null) {
+            SwingUtilities.invokeLater { selectSchemaCorrectionsNode(preserveSchemaCorrectionsFor) }
+        }
+    }
+
+    fun ensureDefaultTreeExpansion() {
+        if (!wantsDefaultExpansion || root.childCount == 0) return
+        scheduleApplyTreeState()
+    }
+
+    fun repairTreeDisplay() {
+        if (!isDisplayable || root.childCount == 0) return
+        scheduleApplyTreeState()
+    }
+
+    private fun scheduleApplyTreeState(savedExpansion: Set<List<String>>? = null) {
+        SwingUtilities.invokeLater {
+            applyTreeState(savedExpansion ?: if (wantsDefaultExpansion) emptySet() else captureExpandedPaths())
+        }
+    }
+
+    private fun applyTreeState(savedExpansion: Set<List<String>>, retry: Int = 0) {
+        if (root.childCount == 0) return
+
+        if (!isDisplayable) {
+            if (retry < 10) {
+                SwingUtilities.invokeLater { applyTreeState(savedExpansion, retry + 1) }
+            }
+            return
+        }
+
+        val model = treeModel
+
+        if (wantsDefaultExpansion) {
+            expandScanResultNodes()
+            if (scanResultNodesAreExpanded()) {
+                wantsDefaultExpansion = false
+            }
+        } else if (savedExpansion.isNotEmpty()) {
+            restoreExpandedPaths(savedExpansion, model)
+        }
+
+        pendingSelectedPath?.let { selectedPath ->
+            restoreSelection(selectedPath, model)
+            pendingSelectedPath = null
+        }
+
+        refreshDisclosureHandles(model)
+        tree.revalidate()
+        tree.repaint()
+
+        if (wantsDefaultExpansion && !scanResultNodesAreExpanded() && retry < 10) {
+            SwingUtilities.invokeLater { applyTreeState(savedExpansion, retry + 1) }
+        } else {
+            scheduleDisclosureHandleRefresh(model)
+        }
+    }
+
+    private fun scheduleDisclosureHandleRefresh(model: DefaultTreeModel) {
+        SwingUtilities.invokeLater {
+            if (!isDisplayable) return@invokeLater
+            refreshDisclosureHandles(model)
+            SwingUtilities.invokeLater {
+                if (!isDisplayable) return@invokeLater
+                tree.repaint()
+            }
+        }
+    }
+
+    private fun refreshDisclosureHandles(model: DefaultTreeModel) {
+        for (i in 0 until root.childCount) {
+            refreshDirectoryNodes(root.getChildAt(i) as DefaultMutableTreeNode, model)
+        }
+        tree.invalidate()
+        tree.revalidate()
+        tree.repaint()
+    }
+
+    private fun refreshDirectoryNodes(node: DefaultMutableTreeNode, model: DefaultTreeModel) {
+        if (!node.isLeaf) {
+            model.nodeChanged(node)
+        }
+        for (i in 0 until node.childCount) {
+            refreshDirectoryNodes(node.getChildAt(i) as DefaultMutableTreeNode, model)
+        }
+    }
+
+    private fun scanResultNodesAreExpanded(): Boolean {
+        if (root.childCount == 0) return false
+        for (i in 0 until root.childCount) {
+            val child = root.getChildAt(i) as DefaultMutableTreeNode
+            if (child.isLeaf) return false
+            if (!tree.isExpanded(TreePath(child.path))) return false
+        }
+        return true
+    }
+
+    private fun nodeLabel(node: Any): String {
+        return when (node) {
+            is TreeNodeWithCustomLabel -> node.label
+            is DefaultMutableTreeNode -> node.toString()
+            else -> node.toString()
+        }
+    }
+
+    private fun pathToLabels(path: TreePath): List<String> {
+        return path.path.map { nodeLabel(it) }.drop(1)
+    }
+
+    private fun captureExpandedPaths(): Set<List<String>> {
+        val expanded = linkedSetOf<List<String>>()
+        val enumeration = tree.getExpandedDescendants(TreePath(root)) ?: return expanded
+        while (enumeration.hasMoreElements()) {
+            val labels = pathToLabels(enumeration.nextElement())
+            if (labels.isNotEmpty()) expanded.add(labels)
+        }
+        return expanded
+    }
+
+    private fun captureSelectedPath(): List<String>? {
+        val path = tree.selectionPath ?: return null
+        val labels = pathToLabels(path)
+        return labels.ifEmpty { null }
+    }
+
+    private fun remapFirstLabel(
+        paths: Set<List<String>>,
+        oldLabel: String,
+        newLabel: String,
+    ): Set<List<String>> {
+        if (oldLabel == newLabel) return paths
+        return paths.map { labels ->
+            if (labels.isNotEmpty() && labels[0] == oldLabel) {
+                listOf(newLabel) + labels.drop(1)
+            } else {
+                labels
+            }
+        }.toSet()
+    }
+
+    private fun findNodeByLabels(labels: List<String>): DefaultMutableTreeNode? {
+        var current: DefaultMutableTreeNode = root
+        for (label in labels) {
+            var found: DefaultMutableTreeNode? = null
+            for (i in 0 until current.childCount) {
+                val child = current.getChildAt(i) as DefaultMutableTreeNode
+                if (nodeLabel(child) == label) {
+                    found = child
+                    break
+                }
+            }
+            if (found == null) return null
+            current = found
+        }
+        return current
+    }
+
+    private fun restoreExpandedPaths(expandedPaths: Set<List<String>>, model: DefaultTreeModel) {
+        for (labels in expandedPaths) {
+            val node = findNodeByLabels(labels) ?: continue
+            tree.expandPath(TreePath(node.path))
+            if (node is LazyTreeNodeWithCustomLabel) {
+                node.ensureLoaded(model)
+            }
+        }
+        refreshDisclosureHandles(model)
+    }
+
+    private fun triggerCycleDetectionLoad(node: Any) {
+        if (node !is DefaultMutableTreeNode) return
+        when (val entry = node.userObject) {
+            is CycleDetectionEntry -> entry.ensureLoaded { view.selectionChangeListener(node) }
+            is SchemaCorrectionsEntry -> if (node.isLeaf) view.selectionChangeListener(node)
+            is RequestTemplateEntry -> if (node.isLeaf) view.selectionChangeListener(node)
+        }
+    }
+
+    private fun expandScanResultNodes() {
+        applyingDefaultExpansion = true
+        try {
+            for (i in 0 until root.childCount) {
+                val scanResultNode = root.getChildAt(i) as DefaultMutableTreeNode
+                val path = TreePath(scanResultNode.path)
+                tree.expandPath(path)
+                tree.makeVisible(path)
+            }
+            for (row in 0 until root.childCount) {
+                tree.expandRow(row)
+            }
+            refreshDisclosureHandles(treeModel)
+        } finally {
+            applyingDefaultExpansion = false
+        }
+    }
+
+    private fun restoreSelection(selectedPath: List<String>?, model: DefaultTreeModel) {
+        if (selectedPath == null) return
+        val node = findNodeByLabels(selectedPath) ?: return
+        tree.selectionPath = TreePath(node.path)
+        when (node) {
+            is LazyLeafTreeNode -> {
+                node.ensureLoaded(model)
+                node.setSelectionRefreshCallback {
+                    view.selectionChangeListener(node)
+                }
+            }
+            else -> {
+                triggerCycleDetectionLoad(node)
+                if (node.isLeaf) view.selectionChangeListener(node)
+            }
         }
     }
 
     override fun valueChanged(e: TreeSelectionEvent) {
         try {
-            this.tree.repaint() // For some reason, sometimes the UI doesn't update
+            this.tree.repaint()
         } catch (e: Exception) {
             Logger.warning("Caught exception while repainting tree")
         }
         val node = (this.tree.lastSelectedPathComponent ?: return) as DefaultMutableTreeNode
-        if (!node.isLeaf) return // We don't care about folders
+        if (!node.isLeaf) return
         this.view.selectionChangeListener(node)
+    }
+
+    private fun applySearchFilter() {
+        val text = searchField.text ?: ""
+        val hadFilter = filterModel.filter.isNotEmpty()
+        val hasFilter = text.isNotBlank()
+
+        if (!hasFilter && hadFilter) {
+            filterModel.filter = ""
+            expansionBeforeFilter?.let { restoreExpandedPaths(it, treeModel) }
+            expansionBeforeFilter = null
+            tree.revalidate()
+            tree.repaint()
+            return
+        }
+
+        if (hasFilter && !hadFilter) {
+            expansionBeforeFilter = captureExpandedPaths()
+        }
+
+        filterModel.filter = text
+        if (hasFilter) {
+            expandFilteredTree()
+        }
+        tree.revalidate()
+        tree.repaint()
+    }
+
+    private fun expandFilteredTree() {
+        expandFilteredNode(root)
+    }
+
+    private fun expandFilteredNode(node: DefaultMutableTreeNode) {
+        if (filterModel.getChildCount(node) == 0) return
+        tree.expandPath(TreePath(node.path))
+        for (i in 0 until filterModel.getChildCount(node)) {
+            val child = filterModel.getChild(node, i) as DefaultMutableTreeNode
+            expandFilteredNode(child)
+        }
     }
 }

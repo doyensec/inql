@@ -1,0 +1,939 @@
+{
+  "features": {
+    "introspection": {
+      "label": "Introspection",
+      "riskWhen": "enabled",
+      "risk": "Full schema disclosure through introspection queries."
+    },
+    "fieldSuggestions": {
+      "label": "Field Suggestions",
+      "riskWhen": "enabled",
+      "risk": "\"Did you mean ...\" errors leak the schema even when introspection is disabled."
+    },
+    "debugMode": {
+      "label": "Debug Mode",
+      "riskWhen": "enabled",
+      "risk": "Stack traces and internal details leak through error responses."
+    },
+    "batchRequests": {
+      "label": "Batch Requests",
+      "riskWhen": "enabled",
+      "risk": "Many operations per HTTP request can bypass rate limiting and brute-force protections."
+    },
+    "persistedQueries": {
+      "label": "Automatic Persisted Queries",
+      "riskWhen": "enabled",
+      "risk": "Operations can be registered and replayed by hash, including over GET (CSRF, cache abuse)."
+    },
+    "depthLimit": {
+      "label": "Query Depth Limit",
+      "riskWhen": "absent",
+      "risk": "Deeply nested or circular queries are allowed."
+    },
+    "costAnalysis": {
+      "label": "Query Cost Analysis",
+      "riskWhen": "absent",
+      "risk": "Expensive queries are not rejected."
+    }
+  },
+  "engines": {
+    "absinthe-graphql": {
+      "name": "Absinthe",
+      "language": [
+        "Elixir"
+      ],
+      "source": "https://github.com/absinthe-graphql/absinthe",
+      "docs": "https://hexdocs.pm/absinthe/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "agoo": {
+      "name": "Agoo",
+      "language": [
+        "Ruby"
+      ],
+      "source": "https://github.com/ohler55/agoo",
+      "docs": "https://rubydoc.info/gems/agoo",
+      "features": {
+        "fieldSuggestions": {
+          "status": "not_supported"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": [
+        {
+          "id": "CVE-2022-30288",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-30288",
+          "description": "Agoo versions 2.11.1 and below do not support request validations meaning cycle fragment requests lead to unbounded results causing instances of Agoo to crash."
+        }
+      ]
+    },
+    "apollo": {
+      "name": "Apollo",
+      "language": [
+        "JavaScript",
+        "Node.js",
+        "TypeScript"
+      ],
+      "source": "https://github.com/apollographql/apollo-server",
+      "docs": "https://www.apollographql.com/docs/apollo-server/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled",
+          "note": "Supported via external libraries"
+        },
+        "costAnalysis": {
+          "status": "disabled",
+          "note": "Supported via external libraries"
+        },
+        "persistedQueries": {
+          "status": "disabled"
+        },
+        "introspection": {
+          "status": "enabled",
+          "note": "Enabled if NODE_ENV is not set to 'production'"
+        },
+        "debugMode": {
+          "status": "enabled",
+          "note": "exception.stacktrace exists if NODE_ENV is not set to 'production' or 'test'"
+        },
+        "batchRequests": {
+          "status": "enabled"
+        }
+      },
+      "vulnerabilities": [
+        {
+          "id": "CVE-2021-41249",
+          "url": "https://github.com/apollographql/apollo-server/security/advisories/GHSA-qm7x-rc44-rrqw",
+          "description": "Cross-site Scripting Vulnerability in GraphQL Playground (distributed by Apollo Server)"
+        },
+        {
+          "id": "GHSA-w42g-7vfc-xf37",
+          "url": "https://github.com/apollographql/apollo-server/security/advisories/GHSA-w42g-7vfc-xf37",
+          "description": "Schema validation rules are not passed to the subscription server, including rules that restrict introspection"
+        }
+      ]
+    },
+    "ariadne": {
+      "name": "Ariadne",
+      "language": [
+        "Python"
+      ],
+      "source": "https://github.com/mirumee/ariadne",
+      "docs": "https://ariadnegraphql.org/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "aws-appsync": {
+      "name": "AWS AppSync",
+      "language": [],
+      "source": "https://aws.amazon.com/appsync/",
+      "docs": "https://docs.aws.amazon.com/appsync/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "ballerina": {
+      "name": "Ballerina GraphQL",
+      "language": [
+        "Ballerina",
+        "Java"
+      ],
+      "source": "https://github.com/ballerina-platform/module-ballerina-graphql",
+      "docs": "https://github.com/ballerina-platform/module-ballerina-graphql",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "caliban": {
+      "name": "Caliban",
+      "language": [
+        "Scala"
+      ],
+      "source": "https://github.com/ghostdogpr/caliban",
+      "docs": "https://ghostdogpr.github.io/caliban/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "dgraph": {
+      "name": "Dgraph",
+      "language": [
+        "Go"
+      ],
+      "source": "https://github.com/dgraph-io/dgraph",
+      "docs": "https://dgraph.io/docs/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "disabled"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "dianajl": {
+      "name": "Diana.jl",
+      "language": [
+        "Julia"
+      ],
+      "source": "https://github.com/neomatrixcode/Diana.jl",
+      "docs": "https://diana.nicepage.io/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "directus": {
+      "name": "Directus",
+      "language": [
+        "TypeScript"
+      ],
+      "source": "https://github.com/directus/directus",
+      "docs": "https://directus.io/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "flutter": {
+      "name": "gql-dart (Flutter)",
+      "language": [
+        "Dart"
+      ],
+      "source": "https://github.com/gql-dart/gql",
+      "docs": "https://github.com/gql-dart/gql",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "gqlgen": {
+      "name": "gqlgen",
+      "language": [
+        "Go"
+      ],
+      "source": "https://github.com/99designs/gqlgen",
+      "docs": "https://gqlgen.com/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "disabled"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphene": {
+      "name": "Graphene",
+      "language": [
+        "Python"
+      ],
+      "source": "https://github.com/graphql-python/graphene",
+      "docs": "https://graphene-python.org/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphql-dotnet": {
+      "name": "GraphQL.NET",
+      "language": [
+        "C#",
+        ".NET"
+      ],
+      "source": "https://github.com/graphql-dotnet/graphql-dotnet",
+      "docs": "https://graphql-dotnet.github.io/docs/getting-started/introduction/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphql-go": {
+      "name": "graphql-go",
+      "language": [
+        "Go"
+      ],
+      "source": "https://github.com/graphql-go/graphql",
+      "docs": "https://pkg.go.dev/github.com/graphql-go/graphql",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphql-java": {
+      "name": "GraphQL Java",
+      "language": [
+        "Java"
+      ],
+      "source": "https://github.com/graphql-java/graphql-java",
+      "docs": "https://www.graphql-java.com/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphql-php": {
+      "name": "graphql-php",
+      "language": [
+        "PHP"
+      ],
+      "source": "https://github.com/webonyx/graphql-php",
+      "docs": "https://webonyx.github.io/graphql-php/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "graphql_yoga": {
+      "name": "GraphQL Yoga",
+      "language": [
+        "TypeScript"
+      ],
+      "source": "https://github.com/dotansimha/graphql-yoga",
+      "docs": "https://www.graphql-yoga.com/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "disabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "hasura": {
+      "name": "Hasura",
+      "language": [
+        "Haskell"
+      ],
+      "source": "https://github.com/hasura/graphql-engine",
+      "docs": "https://hasura.io/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "hotchocolate": {
+      "name": "Hot Chocolate",
+      "language": [
+        "C#",
+        ".NET"
+      ],
+      "source": "https://github.com/ChilliCream/graphql-platform",
+      "docs": "https://chillicream.com/docs/hotchocolate/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "hypergraphql": {
+      "name": "HyperGraphQL",
+      "language": [
+        "Java"
+      ],
+      "source": "https://github.com/hypergraphql/hypergraphql",
+      "docs": "https://www.hypergraphql.org/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "inigo": {
+      "name": "Inigo",
+      "language": [
+        "Go"
+      ],
+      "source": "https://inigo.io/",
+      "docs": "https://docs.inigo.io/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "jaal": {
+      "name": "Jaal",
+      "language": [
+        "Go"
+      ],
+      "source": "https://github.com/appointy/jaal",
+      "docs": "https://github.com/appointy/jaal",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "disabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "juniper": {
+      "name": "Juniper",
+      "language": [
+        "Rust"
+      ],
+      "source": "https://github.com/graphql-rust/juniper",
+      "docs": "https://graphql-rust.github.io/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "not_supported"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "lacinia": {
+      "name": "Lacinia",
+      "language": [
+        "Clojure"
+      ],
+      "source": "https://github.com/walmartlabs/lacinia",
+      "docs": "https://lacinia.readthedocs.io/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "lighthouse": {
+      "name": "Lighthouse",
+      "language": [
+        "PHP"
+      ],
+      "source": "https://github.com/nuwave/lighthouse",
+      "docs": "https://lighthouse-php.com/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "disabled"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "disabled"
+        },
+        "batchRequests": {
+          "status": "enabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "mercurius": {
+      "name": "Mercurius",
+      "language": [
+        "JavaScript",
+        "Node.js",
+        "TypeScript"
+      ],
+      "source": "https://github.com/mercurius-js/mercurius",
+      "docs": "https://mercurius.dev/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "morpheus-graphql": {
+      "name": "Morpheus GraphQL",
+      "language": [
+        "Haskell"
+      ],
+      "source": "https://github.com/morpheusgraphql/morpheus-graphql",
+      "docs": "https://morpheusgraphql.com/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "pg_graphql": {
+      "name": "pg_graphql",
+      "language": [
+        "Rust"
+      ],
+      "source": "https://github.com/supabase/pg_graphql",
+      "docs": "https://supabase.github.io/pg_graphql/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "ruby-graphql": {
+      "name": "GraphQL Ruby",
+      "language": [
+        "Ruby"
+      ],
+      "source": "https://github.com/rmosolgo/graphql-ruby",
+      "docs": "https://graphql-ruby.org/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "disabled"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "enabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "sangria": {
+      "name": "Sangria",
+      "language": [
+        "Scala"
+      ],
+      "source": "https://github.com/sangria-graphql/sangria",
+      "docs": "https://sangria-graphql.github.io/learn/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "strawberry": {
+      "name": "Strawberry",
+      "language": [
+        "Python"
+      ],
+      "source": "https://github.com/strawberry-graphql/strawberry",
+      "docs": "https://strawberry.rocks/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "tailcall": {
+      "name": "Tailcall",
+      "language": [
+        "Rust"
+      ],
+      "source": "https://github.com/tailcallhq/tailcall",
+      "docs": "https://tailcall.run/",
+      "features": {},
+      "vulnerabilities": []
+    },
+    "tartiflette": {
+      "name": "Tartiflette",
+      "language": [
+        "Python"
+      ],
+      "source": "https://github.com/tartiflette/tartiflette",
+      "docs": "https://tartiflette.io/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "not_supported"
+        },
+        "depthLimit": {
+          "status": "not_supported"
+        },
+        "costAnalysis": {
+          "status": "not_supported"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "not_supported"
+        }
+      },
+      "vulnerabilities": []
+    },
+    "wpgraphql": {
+      "name": "WPGraphQL",
+      "language": [
+        "PHP"
+      ],
+      "source": "https://github.com/wp-graphql/wp-graphql",
+      "docs": "https://www.wpgraphql.com/",
+      "features": {
+        "fieldSuggestions": {
+          "status": "enabled"
+        },
+        "depthLimit": {
+          "status": "disabled"
+        },
+        "costAnalysis": {
+          "status": "disabled"
+        },
+        "persistedQueries": {
+          "status": "not_supported"
+        },
+        "introspection": {
+          "status": "enabled"
+        },
+        "debugMode": {
+          "status": "not_supported"
+        },
+        "batchRequests": {
+          "status": "disabled"
+        }
+      },
+      "vulnerabilities": [
+        {
+          "id": "CVE-2019-9881",
+          "url": "https://www.cvedetails.com/cve/CVE-2019-9881/",
+          "description": "The createComment mutation in the WPGraphQL 0.2.3 plugin for WordPress allows unauthenticated users to post comments on any article, even when 'allow comment' is disabled."
+        },
+        {
+          "id": "CVE-2019-9880",
+          "url": "https://www.cvedetails.com/cve/CVE-2019-9880/",
+          "description": "An issue was discovered in the WPGraphQL 0.2.3 plugin for WordPress. By querying the 'users' RootQuery, it is possible, for an unauthenticated attacker, to retrieve all WordPress users details such as email address, role, and username."
+        },
+        {
+          "id": "CVE-2019-9879",
+          "url": "https://www.cvedetails.com/cve/CVE-2019-9879/",
+          "description": "The WPGraphQL 0.2.3 plugin for WordPress allows remote attackers to register a new user with admin privileges, whenever new user registrations are allowed. This is related to the registerUser mutation."
+        }
+      ]
+    }
+  }
+}

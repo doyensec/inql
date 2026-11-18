@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken
 import graphql.GraphQL
 import graphql.introspection.IntrospectionQuery
 import graphql.introspection.IntrospectionResultToSchema
+import graphql.language.Document
 import graphql.schema.GraphQLFieldDefinition
 import graphql.schema.GraphQLSchema
 import graphql.schema.idl.*
@@ -17,7 +18,7 @@ import java.lang.reflect.Type
 /*
     Simple wrapper class around GraphQLSchema that adds a few convenience methods
  */
-class GQLSchema(jsonOrSdlSchema: String) {
+class GQLSchema {
     enum class OperationType {
         QUERY, MUTATION, SUBSCRIPTION
     }
@@ -26,7 +27,7 @@ class GQLSchema(jsonOrSdlSchema: String) {
     private var _sdlSchema: String? = null
     val schema: GraphQLSchema
 
-    init {
+    constructor(jsonOrSdlSchema: String) {
         val schemaParser = SchemaParser()
         var typeDefinitionRegistry: TypeDefinitionRegistry
 
@@ -41,7 +42,7 @@ class GQLSchema(jsonOrSdlSchema: String) {
                 introspectionSchema = introspectionSchema["data"] as Map<String, Any>
             }
 
-            if (!introspectionSchema.containsKey("__schema") && introspectionSchema["__schema"] !is Map<*, *>) {
+            if (!introspectionSchema.containsKey("__schema") || introspectionSchema["__schema"] !is Map<*, *>) {
                 throw RuntimeException("Could not identify schema.")
             }
 
@@ -64,14 +65,29 @@ class GQLSchema(jsonOrSdlSchema: String) {
             throw e
         }
 
-        // TypeDefinitionRegistry -> GraphQLSchema
-        val schemaGenerator = SchemaGenerator()
-        this.schema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, RuntimeWiring.MOCKED_WIRING)
+        this.schema = buildSchema(typeDefinitionRegistry)
     }
 
-    val queries = schema.queryType.fields.associateBy { it.name }
-    val mutations = if (schema.isSupportingMutations) schema.mutationType.fields.associateBy { it.name } else emptyMap()
-    val subscriptions = if (schema.isSupportingSubscriptions) schema.subscriptionType.fields.associateBy { it.name } else emptyMap()
+    constructor(sdlDocument: Document) {
+        this.schema = buildSchema(SchemaParser().buildRegistry(sdlDocument))
+    }
+
+    /** Wraps an already-built executable schema without re-parsing SDL/JSON. */
+    constructor(schema: GraphQLSchema, sdlSchema: String? = null, jsonSchema: String? = null) {
+        this.schema = schema
+        this._sdlSchema = sdlSchema
+        this._jsonSchema = jsonSchema
+    }
+
+    private fun buildSchema(registry: TypeDefinitionRegistry): GraphQLSchema =
+        SchemaGenerator().makeExecutableSchema(registry, SchemaInspectionRuntimeWiring.build(registry))
+
+    val queries: Map<String, GraphQLFieldDefinition>
+        get() = schema.queryType.fields.associateBy { it.name }
+    val mutations: Map<String, GraphQLFieldDefinition>
+        get() = if (schema.isSupportingMutations) schema.mutationType.fields.associateBy { it.name } else emptyMap()
+    val subscriptions: Map<String, GraphQLFieldDefinition>
+        get() = if (schema.isSupportingSubscriptions) schema.subscriptionType.fields.associateBy { it.name } else emptyMap()
     private val queriesSdlCache = mutableMapOf<String, String>()
 
     val sdlSchema: String get() {
@@ -92,33 +108,42 @@ class GQLSchema(jsonOrSdlSchema: String) {
         return _jsonSchema!!
     }
 
-    private fun getOperationAsText(operation: GraphQLFieldDefinition, type: OperationType, skipCache: Boolean = false): String {
+    private fun getOperationAsText(
+        operation: GraphQLFieldDefinition,
+        type: OperationType,
+        skipCache: Boolean = false,
+        maxDepth: Int? = null,
+    ): String {
         // Check cache first
-        if (!skipCache && queriesSdlCache.containsKey(operation.name)) {
-            return queriesSdlCache[operation.name]!!
-        }
-
-        // Get config
         val config = Config.getInstance()
-        val depth = config.getInt("codegen.depth")!!
-        val pad = config.getInt("codegen.pad")!!
+        val depth = maxDepth ?: config.codegenDepth()
+        val pad = config.codegenPad()
+        val cacheKey = "${operation.name}:$depth:$pad"
+        if (!skipCache && queriesSdlCache.containsKey(cacheKey)) {
+            return queriesSdlCache[cacheKey]!!
+        }
 
         // Generate text
         val sdl = GQLQueryPrinter(operation, type, depth, pad).printSDL()
         if (!skipCache) {
-            queriesSdlCache[operation.name] = sdl
+            queriesSdlCache[cacheKey] = sdl
         }
         return sdl
     }
 
-    fun getOperationAsText(operationName: String, type: OperationType, skipCache: Boolean = false): String {
+    fun getOperationAsText(
+        operationName: String,
+        type: OperationType,
+        skipCache: Boolean = false,
+        maxDepth: Int? = null,
+    ): String {
         val operation = when(type) {
             OperationType.QUERY -> this.queries[operationName]
             OperationType.MUTATION -> this.mutations[operationName]
             OperationType.SUBSCRIPTION -> this.subscriptions[operationName]
         }
 
-        return getOperationAsText(operation!!, type, skipCache)
+        return getOperationAsText(operation!!, type, skipCache, maxDepth)
     }
 
     fun getQueryAsText(operationName: String, skipCache: Boolean = false) = getOperationAsText(operationName,

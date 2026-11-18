@@ -3,17 +3,25 @@ package inql
 import burp.Burp
 import burp.api.montoya.persistence.PersistedObject
 import inql.attacker.Attacker
+import inql.attackvector.AttackVectorScanner
 import inql.fingerprinter.Fingerprinter
 import inql.externaltools.ExternalToolsService
+import inql.history.HistoryTracker
+import inql.savestate.LoadsDataFromProject
 import inql.savestate.SavesAndLoadData
 import inql.savestate.SavesDataToProject
 import inql.scanner.Scanner
 import inql.ui.InQLTabbedPane
 import inql.ui.SendToInqlHandler
 import inql.ui.StyledPayloadEditor
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JTabbedPane
+
+object InQLHolder {
+    lateinit var instance: InQL
+}
 
 class InQL : InQLTabbedPane(), SavesAndLoadData {
 
@@ -24,8 +32,10 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
     val scanner = Scanner(this)
     val attacker = Attacker(this)
     val fingerprinter = Fingerprinter(this)
+    val attackVectorScanner = AttackVectorScanner(this)
 
     init {
+        InQLHolder.instance = this
         Burp.Montoya.logging().raiseInfoEvent("InQL Started")
 
         val logLevel = config.getString("logging.level") ?: "DEBUG"
@@ -40,6 +50,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         this.addTab("Scanner", this.scanner)
         this.addTab("Batch Queries", this.attacker)
         this.addTab("Engine Fingerprinting", this.fingerprinter)
+        this.addTab("Attack Vector Scanner", this.attackVectorScanner)
 
         // Register the extension main tab
         Burp.Montoya.userInterface().registerSuiteTab("InQL", this)
@@ -47,11 +58,21 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         // Register context menu handler
         Burp.Montoya.userInterface().registerContextMenuItemsProvider(SendToInqlHandler(this))
 
+        val historyEnabled = this.config.getBoolean("history.tracking_enabled") == true
+
         // Reload data from the project file
         if (!this.dataPresentInProjectFile()) {
             this.saveToProjectFile(false) // initialize main object
+            if (historyEnabled) {
+                HistoryTracker.start(this)
+            }
         } else {
-            this.loadFromProjectFileAsync()
+            LoadsDataFromProject.coroutineScope.launch {
+                this@InQL.loadFromProjectFile()
+                if (historyEnabled) {
+                    HistoryTracker.start(this@InQL)
+                }
+            }
         }
 
         // Initialize ExternalToolsService to make it ready to spawn the webserver and register the interceptor when they are needed
@@ -64,10 +85,12 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         if (this.config.getBoolean("proxy.highlight_enabled") == true) {
             ProxyRequestHighlighter.start()
         }
+
     }
 
     fun unload() = runBlocking {
         ProxyRequestHighlighter.stop()
+        HistoryTracker.stop()
         scanner.stop()
     }
 
@@ -123,7 +146,9 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     fun focusTab(tab: Component) {
         (this.parent as JTabbedPane).selectedComponent = this
-        this.tabbedPane.selectedComponent = tab
+        if (this.tabbedPane.indexOfComponent(tab) >= 0) {
+            this.tabbedPane.selectedComponent = tab
+        }
     }
 
     override val saveStateKey: String

@@ -39,12 +39,6 @@ interface LoadsDataFromProject : BurpDeserializable {
         Logger.info("[$key] Load from project completed")
         return true
     }
-
-    fun loadFromProjectFileAsync() {
-        coroutineScope.launch {
-            this@LoadsDataFromProject.loadFromProjectFile()
-        }
-    }
 }
 
 interface SavesDataToProject : BurpSerializable {
@@ -127,9 +121,10 @@ interface SavesDataToProject : BurpSerializable {
         this.saveToProjectFile(false)
     }
 
-    fun deleteChildObjectAsync(obj: SavesDataToProject) {
+    fun deleteChildObjectAsync(obj: SavesDataToProject, onComplete: (() -> Unit)? = null) {
         coroutineScope.launch {
             this@SavesDataToProject.deleteChildObject(obj)
+            onComplete?.invoke()
         }
     }
 }

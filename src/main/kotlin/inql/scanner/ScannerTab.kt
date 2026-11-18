@@ -12,10 +12,14 @@ import inql.bruteforcer.Bruteforcer
 import inql.exceptions.EmptyOrIncorrectWordlistException
 import inql.graphql.GQLSchema
 import inql.graphql.Introspection
+import inql.graphql.SchemaSdlMerger
 import inql.savestate.SavesAndLoadData
 import inql.Config
 import inql.savestate.SavesDataToProject
 import inql.savestate.getSaveStateKeys
+import inql.history.HistoryHostKey
+import inql.history.verification.HistorySchemaVerifier
+import inql.scanner.SchemaDiscoverySource
 import inql.scanner.scanconfig.ScanConfigView
 import inql.scanner.scanresults.ScanResultsView
 import inql.ui.EditableTab
@@ -24,6 +28,7 @@ import inql.utils.withUpsertedHeaders
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.awt.event.HierarchyEvent
 import java.io.File
 import java.net.URI
 import java.net.URISyntaxException
@@ -31,6 +36,12 @@ import javax.swing.BoxLayout
 import javax.swing.JLabel
 import javax.swing.JOptionPane
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
+
+sealed interface MergeSource {
+    data class Tab(val tab: ScannerTab) : MergeSource
+    data class File(val path: String) : MergeSource
+}
 
 class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), SavesAndLoadData {
     companion object {
@@ -82,7 +93,10 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     val scanResultsView = ScanResultsView(this)
 
     private var bruteforcerJob: Job? = null
+    private var mergeJob: Job? = null
+    private var verificationJob: Job? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var recoverSchemaOnRestore = false
 
     var url: String
         get() = this.scanConfigView.urlField.text
@@ -109,6 +123,17 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             this.scanConfigView.requestTemplate = r
         }
 
+    fun applyRequestTemplate(request: HttpRequest) {
+        val normalized = request.withBody("")
+        requestTemplate = normalized
+        for (index in scanResults.indices) {
+            val updated = scanResults[index].withUpdatedRequestTemplate(normalized)
+            scanResults[index] = updated
+            scanner.updateChildObjectAsync(updated)
+        }
+        scanner.updateChildObjectAsync(this)
+    }
+
     private fun showView(card: String) {
         if (!setOf<String>(
                 SCAN_CONFIG_VIEW,
@@ -122,10 +147,16 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
     fun showResultsView() {
         this.showView(SCAN_RESULT_VIEW)
+        if (scanResults.isNotEmpty()) {
+            SwingUtilities.invokeLater {
+                scanResultsView.ensureDefaultTreeExpansion()
+            }
+        }
     }
 
     fun cancel() {
         bruteforcerJob?.cancel()
+        verificationJob?.cancel()
         this.scanConfigView.setBusy(false)
         this.scanConfigView.setBruteforcerRunning(false)
     }
@@ -142,6 +173,15 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
 
         Burp.Montoya.userInterface().applyThemeToComponent(scanConfigView)
         Burp.Montoya.userInterface().applyThemeToComponent(scanResultsView)
+
+        addHierarchyListener { e ->
+            val changed = (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong()) != 0L
+            if (changed && isDisplayable && scanResults.isNotEmpty()) {
+                SwingUtilities.invokeLater {
+                    scanResultsView.ensureDefaultTreeExpansion()
+                }
+            }
+        }
     }
 
     fun loadFromProfile(p: Profile) {
@@ -292,17 +332,21 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             return
         }
 
-        // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+        val sr = ScanResult(
+            this.host!!,
+            this.requestTemplate,
+            schema,
+            schema.jsonSchema,
+            schema.sdlSchema,
+            schemaDiscoverySource = SchemaDiscoverySource.BRUTEFORCE,
+        )
 
-        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
-        // and multiple scans at the same time for the same ScannerTab are not allowed
-        this.scanResults.add(sr)
-
-        // Update this tab in burp's project file
-        this.setTabTitle(host!!)
-        this.scanner.updateChildObjectAsync(this)
-        this.scanCompleted()
+        withContext(Dispatchers.Main) {
+            val hostKey = hostKey() ?: return@withContext
+            scanner.applyScanResult(hostKey, SchemaDiscoverySource.BRUTEFORCE, requestTemplate, sr, focus = true)
+            scanConfigView.setBusy(false)
+            scanConfigView.setBruteforcerRunning(false)
+        }
     }
 
     private suspend fun analyze() {
@@ -330,16 +374,32 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             try {
                 jsonSchema = Introspection.sendIntrospectionQuery(this.requestTemplate)
             } catch (e: Exception) {
-                scanFailed("Could not parse introspection response from the endpoint")
-                return
+                Logger.info("Introspection failed: ${e.message}")
+                jsonSchema = null
             }
-            if (jsonSchema == null) {
+            val federationFallback =
+                Config.getInstance().getBoolean("schema.federation_sdl_fallback") != false
+            if (jsonSchema == null && federationFallback) {
+                sdlSchema = Introspection.sendFederationSdlQuery(this.requestTemplate)
+                if (sdlSchema != null) {
+                    Logger.info(
+                        "Standard introspection failed. Successfully recovered schema via Apollo Federation _service{sdl}.",
+                    )
+                }
+            }
+            if (jsonSchema == null && sdlSchema == null) {
                 scanFailed("Introspection seems disabled for this endpoint")
                 return
             }
         }
 
-        
+        val schemaDiscoverySource: SchemaDiscoverySource = when {
+            this.fileSchema != null && this.fileSchema!!.isNotBlank() -> SchemaDiscoverySource.FILE
+            jsonSchema != null -> SchemaDiscoverySource.INTROSPECTION
+            sdlSchema != null -> SchemaDiscoverySource.FEDERATION_SDL_FALLBACK
+            else -> SchemaDiscoverySource.INTROSPECTION
+        }
+
         val schemaToParse = jsonSchema ?: sdlSchema
         val schema: GQLSchema?
         try {
@@ -355,31 +415,206 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
             return
         }
 
-        // Create a scan result
-        val sr = ScanResult(this.host!!, this.requestTemplate, schema, schema.jsonSchema, schema.sdlSchema)
+        val sr = ScanResult(
+            this.host!!,
+            this.requestTemplate,
+            schema,
+            schema.jsonSchema,
+            schema.sdlSchema,
+            schemaDiscoverySource = schemaDiscoverySource,
+        )
 
-        // This shouldn't cause an issue with concurrency since this list is only used in this specific ScannerTab
-        // and multiple scans at the same time for the same ScannerTab are not allowed
-        this.scanResults.add(sr)
+        withContext(Dispatchers.Main) {
+            scanResults.add(sr)
+            val hostKey = hostKey() ?: return@withContext
+            setTabTitle(Scanner.sourceTabTitle(schemaDiscoverySource, hostKey))
+            scanner.updateChildObjectAsync(this@ScannerTab)
+            scanCompleted()
+            scanResultsView.ensureDefaultTreeExpansion()
+        }
+    }
 
-        // Update this tab in burp's project file
-        this.setTabTitle(host!!)
-        this.scanner.updateChildObjectAsync(this)
-        this.scanCompleted()
+    private fun hostKey(): String? =
+        (HistoryHostKey.fromRequest(requestTemplate) ?: host)?.let { HistoryHostKey.normalize(it) }
+
+    fun primaryScanResult(): ScanResult? =
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))
+            ?.let { (source, _) -> scanResults.find { it.schemaDiscoverySource == source } }
+            ?: scanResults.singleOrNull()
+            ?: scanResults.lastOrNull()
+
+    val isVerifyingHistory: Boolean
+        get() = verificationJob?.isCompleted == false
+
+    private fun historyScanResult(): ScanResult? =
+        primaryScanResult()?.takeIf { it.schemaDiscoverySource == SchemaDiscoverySource.HISTORY }
+
+    fun canVerifyHistory(): Boolean = historyScanResult() != null
+
+    fun launchHistoryVerification(template: HttpRequest) {
+        if (isVerifyingHistory) {
+            Logger.debug("History verification already running, ignoring duplicate launch request")
+            return
+        }
+        val history = historyScanResult() ?: run {
+            ErrorDialog("Verification failed: this tab has no History schema")
+            return
+        }
+        val hostKey = hostKey() ?: HistoryHostKey.normalize(history.host)
+        if (host != null) normalizeHeaders()
+        val requestTemplate = template.withPath(template.path().substringBefore('?'))
+        if (!confirmHistoryVerification(requestTemplate)) return
+        val historySchema = history.effectiveGraphQLSchema()
+        scanResultsView.setVerificationRunning(true)
+        verificationJob = coroutineScope.launch {
+            val job = coroutineContext[Job]
+            try {
+                val outcome = HistorySchemaVerifier(inql).verify(requestTemplate, hostKey, historySchema)
+                val sr = ScanResult(
+                    history.host,
+                    requestTemplate,
+                    outcome.schema,
+                    sdlSchema = outcome.schema.sdlSchema,
+                    schemaDiscoverySource = SchemaDiscoverySource.HISTORY_VERIFIED,
+                )
+                Logger.info("History verification for $hostKey finished:\n${outcome.summary.describe()}")
+                withContext(Dispatchers.Main) {
+                    scanner.applyScanResult(hostKey, SchemaDiscoverySource.HISTORY_VERIFIED, requestTemplate, sr, focus = true)
+                    JOptionPane.showMessageDialog(
+                        Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                        "Verified schema for $hostKey opened in a new tab.\n\n${outcome.summary.describe()}",
+                        "InQL History Verification",
+                        JOptionPane.INFORMATION_MESSAGE,
+                    )
+                }
+            } catch (e: CancellationException) {
+                Logger.info("History verification for $hostKey cancelled")
+                throw e
+            } catch (e: HistorySchemaVerifier.VerificationFailedException) {
+                ErrorDialog("History verification failed: ${e.message}")
+            } catch (e: Exception) {
+                Logger.debug(e.stackTraceToString())
+                ErrorDialog("History verification failed: ${e.message ?: e.toString()}")
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main) {
+                    if (verificationJob === job) {
+                        verificationJob = null
+                        scanResultsView.setVerificationRunning(false)
+                    }
+                }
+            }
+        }
+    }
+
+    fun cancelHistoryVerification() {
+        verificationJob?.cancel()
+    }
+
+    private fun confirmHistoryVerification(requestTemplate: HttpRequest): Boolean {
+        val config = Config.getInstance()
+        val panel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
+            add(JLabel("This action will send multiple requests to ${requestTemplate.url()}."))
+            add(JLabel(" "))
+            add(JLabel("Depth limit: ${config.getInt("bruteforcer.depth_limit")}"))
+            add(JLabel("Bucket size: ${config.getInt("bruteforcer.bucket_size")}"))
+            add(JLabel("Number of threads: ${config.getInt("bruteforcer.concurrency_limit")}"))
+        }
+        val result = JOptionPane.showOptionDialog(
+            Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+            panel,
+            "Verify with server",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            arrayOf("Verify", "Cancel"),
+            "Verify",
+        )
+        return result == JOptionPane.YES_OPTION
+    }
+
+    fun mergeSchemaWith(source: MergeSource) {
+        if (mergeJob?.isActive == true) {
+            Logger.debug("Schema merge already running, ignoring duplicate launch request")
+            return
+        }
+        val primary = primaryScanResult() ?: run {
+            ErrorDialog("Merge failed: this tab has no schema")
+            return
+        }
+        val primaryLabel = getTabTitle()
+        val (sourceLabel, loadSecondary) = when (source) {
+            is MergeSource.Tab -> {
+                val result = source.tab.primaryScanResult()
+                    ?: run {
+                        ErrorDialog("Merge failed: the selected tab has no schema")
+                        return
+                    }
+                source.tab.getTabTitle() to { result.effectiveGraphQLSchema() }
+            }
+            is MergeSource.File -> File(source.path).name to { GQLSchema(File(source.path).readText()).schema }
+        }
+
+        mergeJob = coroutineScope.launch {
+            val secondary = try {
+                loadSecondary()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ErrorDialog("Merge failed: could not load schema from $sourceLabel: ${e.message}")
+                return@launch
+            }
+            val result = SchemaSdlMerger.merge(primary.effectiveGraphQLSchema(), secondary)
+            val merged = result.schema
+            if (merged == null) {
+                Logger.error("Merged schema failed validation:\n${result.errors.joinToString("\n") { "- $it" }}")
+                Logger.debug("Merged SDL:\n${result.sdl}")
+                ErrorDialog("Merged schema failed validation, see error log for details", false)
+                return@launch
+            }
+            result.conflicts.forEach { Logger.info("Schema merge conflict: $it") }
+            val sr = ScanResult(
+                primary.host,
+                requestTemplate,
+                merged,
+                sdlSchema = merged.sdlSchema,
+                schemaDiscoverySource = SchemaDiscoverySource.MERGED,
+            )
+
+            withContext(Dispatchers.Main) {
+                scanner.applyScanResult(
+                    hostKey() ?: HistoryHostKey.normalize(primary.host),
+                    SchemaDiscoverySource.MERGED,
+                    requestTemplate,
+                    sr,
+                    focus = true,
+                )
+                JOptionPane.showMessageDialog(
+                    Burp.Montoya.userInterface().swingUtils().suiteFrame(),
+                    "Merged $primaryLabel with $sourceLabel: +${result.addedTypes} types, " +
+                        "+${result.addedFields} fields, ${result.conflicts.size} conflicts " +
+                        "(primary kept; see extension output)",
+                    "InQL Schema Merge",
+                    JOptionPane.INFORMATION_MESSAGE,
+                )
+            }
+        }
     }
 
     private fun scanCompleted() {
-        this.scanConfigView.setBusy(false) // Do we need this?
-        this.scanConfigView.setBruteforcerRunning(false)
-        this.showView(SCAN_RESULT_VIEW)
-        this.scanResultsView.refresh()
-        this.scanner.introspectionCache.putIfNewer(url = this.url, scanResult = this.scanResults.last())
+        scanConfigView.setBusy(false)
+        scanConfigView.setBruteforcerRunning(false)
+        showResultsView()
+        scanResultsView.refresh()
+        scanner.introspectionCache.putIfNewer(url = url, scanResult = scanResults.last())
     }
 
-    private fun scanFailed(reason: String?, logToError: Boolean = true) {
-        if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
-        this.scanConfigView.setBusy(false)
-        this.scanConfigView.setBruteforcerRunning(false)
+    private suspend fun scanFailed(reason: String?, logToError: Boolean = true) {
+        withContext(Dispatchers.Main) {
+            if (!reason.isNullOrBlank()) ErrorDialog("Scan failed: $reason", logToError)
+            scanConfigView.setBusy(false)
+            scanConfigView.setBruteforcerRunning(false)
+        }
     }
 
     fun getTabTitle(): String {
@@ -399,9 +634,35 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         title.text = text
     }
 
+    fun referencedHosts(): Set<String> {
+        val hosts = linkedSetOf<String>()
+        if (url.isNotBlank()) {
+            HistoryHostKey.fromUrl(url)?.let { hosts.add(HistoryHostKey.normalize(it)) }
+        }
+        HistoryHostKey.fromRequest(requestTemplate)?.let {
+            hosts.add(HistoryHostKey.normalize(it))
+        }
+        for (result in scanResults) {
+            hosts.add(HistoryHostKey.normalize(result.host))
+        }
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.let { (_, host) ->
+            hosts.add(HistoryHostKey.normalize(host))
+        }
+        return hosts
+    }
+
     fun onClose() {
-        this.cancel()
-        if (this.scanResults.isNotEmpty()) this.scanner.deleteChildObjectAsync(this)
+        cancel()
+        coroutineScope.cancel()
+        scanResultsView.release()
+        scanner.onTabClosed(this)
+        if (scanResults.isNotEmpty()) {
+            scanner.deleteChildObjectAsync(this) {
+                scanResults.clear()
+            }
+        } else {
+            scanResults.clear()
+        }
     }
 
     override val saveStateKey: String
@@ -432,17 +693,36 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         val resultsIdLst = obj.getStringList("results")
         if (!resultsIdLst.isNullOrEmpty()) {
             for (resultId in resultsIdLst) {
-                this.scanResults.add(ScanResult.Deserializer(resultId).get() ?: continue)
+                val result = ScanResult.Deserializer(resultId).get()
+                if (result == null) {
+                    Logger.warning("[$saveStateKey] Failed to load persisted scan result: $resultId")
+                    continue
+                }
+                scanResults.add(result)
+            }
+            if (scanResults.isEmpty()) {
+                recoverSchemaOnRestore = true
             }
         }
 
         // Set the tab title AFTER setting the linked profile to prevent double suffix
         this.setTabTitle(obj.getString("tabTitle"))
 
-        // Set the UI to show the results
-        if (this.scanResults.isNotEmpty()) {
-            this.showResultsView()
-            this.scanResultsView.refresh()
+    }
+
+    fun restoreResultsViewIfNeeded() {
+        if (scanResults.isEmpty()) return
+        showResultsView()
+        scanResultsView.refresh()
+        scanResultsView.ensureDefaultTreeExpansion()
+    }
+
+    fun recoverHostKeyIfNeeded(): String? {
+        if (!recoverSchemaOnRestore) return null
+        Scanner.parseSourceTabTitle(Scanner.tabTitleForSourceParsing(this))?.second?.let { return it }
+        if (url.isNotBlank()) {
+            runCatching { HistoryHostKey.fromUrl(url) }.getOrNull()?.let { return HistoryHostKey.normalize(it) }
         }
+        return null
     }
 }
