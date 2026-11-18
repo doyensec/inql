@@ -1,14 +1,16 @@
 <p>This Burp extension is designed to assist in your GraphQL security testing efforts.</p>
 
-<p>The main tool provided by InQL v6.0 is a customizable scanner to analyze a GraphQL endpoint or a local
+<p>The main tool provided by InQL v6.2.0 is a customizable scanner to analyze a GraphQL endpoint or a local
 introspection schema file. It generates all possible queries, mutations, and subscriptions, presenting them in an organized view
 for thorough analysis. Scanner results can be sent to Burp's Repeater or Intruder tools for further testing.</p>
 
-<p>Here are some other features that make InQL v6.0 an indispensable tool for your auditing needs:</p>
+<p>Here are some other features that make InQL an indispensable tool for your auditing needs:</p>
 
 <ul>
 	<li>Points of interest analysis for identification of PII, authentication, authorization, and other sensitive data in GraphQL schema.</li>
-	<li>The new Attacker component for batch GraphQL attacks, handy for testing rate limit bypasses and DoS vectors.</li>
+	<li>Batch Queries component for alias and array batching attacks with Intruder-style attack modes and multiple payload sources, handy for testing rate limit bypasses and DoS vectors.</li>
+	<li>Attack Vector Scanner that checks an endpoint for common GraphQL issues, such as introspection exposure, field suggestions, batching, depth and complexity limits, GET-based queries and mutations.</li>
+	<li>Schema reconstruction from Burp's history when introspection is disabled.</li>
 	<li>Identification of GraphQL endpoints and development console such as GraphiQL, and GraphQL Voyager</li>
 	<li>Integration of a custom GraphQL tab in Burp's native HTTP message editor, visualizing GraphQL payload.</li>
 	<li>Circular references detection, allowing to easily identify queries potentially vulnerable to DoS attacks.</li>
