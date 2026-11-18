@@ -14,6 +14,8 @@ data class CycleResult(
     val entrypoint: String get() = pathFieldNames.firstOrNull() ?: ""
     val depth: Int get() = pathFieldNames.size
 
+    fun operationName(): String = operationType.name.lowercase()
+
     /** Path as shown in the scanner table and export (arrow separators). */
     fun pathPreview(): String = pathFieldNames.joinToString(" -> ")
 }
