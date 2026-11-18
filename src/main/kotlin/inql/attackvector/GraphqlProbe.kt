@@ -214,10 +214,10 @@ object GraphqlProbe {
      */
     fun indicatesIntrospectionUnavailable(text: String): Boolean {
         if (indicatesIntrospectionDisabled(text)) return true
-        val t = text.lowercase()
-        if (!t.contains("__schema")) return false
+        // Case-sensitive: an unknown field "on type __Schema" proves `__schema` exists.
+        if (!text.contains("__schema")) return false
         return containsAny(
-            t,
+            text.lowercase(),
             listOf(
                 "doesn't exist",
                 "does not exist",

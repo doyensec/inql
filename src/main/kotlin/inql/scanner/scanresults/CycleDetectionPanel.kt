@@ -59,14 +59,18 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         setShowGrid(false)
         autoResizeMode = JTable.AUTO_RESIZE_LAST_COLUMN
         columnModel.getColumn(0).apply {
+            minWidth = 80
+            preferredWidth = 100
+        }
+        columnModel.getColumn(1).apply {
             minWidth = 120
             preferredWidth = 400
         }
-        columnModel.getColumn(1).apply {
+        columnModel.getColumn(2).apply {
             minWidth = 48
             preferredWidth = 60
         }
-        columnModel.getColumn(2).apply {
+        columnModel.getColumn(3).apply {
             minWidth = 120
             preferredWidth = 400
         }
@@ -89,7 +93,7 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         add(pageSizeCombo)
     }
 
-    private val loadingLabel = JLabel("Scanning schema for cycles…", JLabel.CENTER).apply {
+    private val loadingLabel = JLabel("Scanning schema for cycles...", JLabel.CENTER).apply {
         border = BorderFactory.createEmptyBorder(24, 8, 24, 8)
     }
 
@@ -289,9 +293,9 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
     }
 
     private inner class CycleTableModel : AbstractTableModel() {
-        private val columnBases = arrayOf("Entrypoint", "Depth", "Path Preview")
+        private val columnBases = arrayOf("Operation", "Entrypoint", "Depth", "Path Preview")
 
-        private var sortColumn: Int = 0
+        private var sortColumn: Int = 1
         private var sortAscending: Boolean = true
 
         var filter: String = ""
@@ -335,7 +339,8 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
                 all
             } else {
                 all.filter { c ->
-                    c.entrypoint.lowercase().contains(q) ||
+                    c.operationName().contains(q) ||
+                        c.entrypoint.lowercase().contains(q) ||
                         c.pathPreview().lowercase().contains(q)
                 }
             }
@@ -347,13 +352,17 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
         private fun refreshSortedRows() {
             val pathKey: (CycleResult) -> String = { it.pathFieldNames.joinToString("/") }
             val base: Comparator<CycleResult> = when (sortColumn) {
-                0 -> compareBy<CycleResult, String>(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
+                0 -> compareBy<CycleResult> { it.operationType }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
                     .thenBy { it.depth }
                     .thenBy(String.CASE_INSENSITIVE_ORDER, pathKey)
-                1 -> compareBy<CycleResult> { it.depth }
+                1 -> compareBy<CycleResult, String>(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
+                    .thenBy { it.depth }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER, pathKey)
+                2 -> compareBy<CycleResult> { it.depth }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
                     .thenBy(String.CASE_INSENSITIVE_ORDER, pathKey)
-                2 -> compareBy<CycleResult, String>(String.CASE_INSENSITIVE_ORDER, pathKey)
+                3 -> compareBy<CycleResult, String>(String.CASE_INSENSITIVE_ORDER, pathKey)
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
                 else -> compareBy<CycleResult, String>(String.CASE_INSENSITIVE_ORDER) { it.entrypoint }
             }
@@ -392,16 +401,17 @@ class CycleDetectionPanel(private val view: ScanResultsView) : BorderPanel(8) {
             return remaining.coerceIn(0, pageSize)
         }
 
-        override fun getColumnCount(): Int = 3
+        override fun getColumnCount(): Int = columnBases.size
 
         override fun getColumnName(column: Int): String = columnBases[column]
 
         override fun getValueAt(rowIndex: Int, columnIndex: Int): Any? {
             val c = cycleAt(rowIndex) ?: return null
             return when (columnIndex) {
-                0 -> c.entrypoint
-                1 -> c.depth
-                2 -> c.pathPreview()
+                0 -> c.operationName()
+                1 -> c.entrypoint
+                2 -> c.depth
+                3 -> c.pathPreview()
                 else -> null
             }
         }

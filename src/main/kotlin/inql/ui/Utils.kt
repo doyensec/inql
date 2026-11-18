@@ -75,6 +75,67 @@ open class FlowPanel(val alignment: Int, val gap: Int = 5) : FlatPanel() {
     }
 }
 
+class WrapLayout(private val hgap: Int, private val rowGap: Int) : LayoutManager {
+    private var lastSize: Dimension? = null
+
+    override fun addLayoutComponent(name: String?, comp: Component?) {}
+
+    override fun removeLayoutComponent(comp: Component?) {}
+
+    override fun preferredLayoutSize(target: Container): Dimension = layoutSize(target, preferred = true)
+
+    override fun minimumLayoutSize(target: Container): Dimension = layoutSize(target, preferred = false)
+
+    override fun layoutContainer(target: Container) = synchronized(target.treeLock) {
+        val insets = target.insets
+        var y = insets.top
+        for (row in rows(target, preferred = true)) {
+            val rowHeight = row.maxOf { it.second.height }
+            var x = insets.left + hgap
+            for ((component, size) in row) {
+                component.setBounds(x, y + (rowHeight - size.height) / 2, size.width, size.height)
+                x += size.width + hgap
+            }
+            y += rowHeight + rowGap
+        }
+        val size = preferredLayoutSize(target)
+        if (size != lastSize) {
+            lastSize = size
+            SwingUtilities.invokeLater { target.revalidate() }
+        }
+    }
+
+    private fun layoutSize(target: Container, preferred: Boolean): Dimension = synchronized(target.treeLock) {
+        val rows = rows(target, preferred)
+        val insets = target.insets
+        val width = rows.maxOfOrNull { row -> row.sumOf { it.second.width } + hgap * (row.size - 1) } ?: 0
+        val height = rows.sumOf { row -> row.maxOf { it.second.height } } + rowGap * maxOf(0, rows.size - 1)
+        Dimension(width + insets.left + insets.right + hgap * 2, height + insets.top + insets.bottom)
+    }
+
+    private fun rows(target: Container, preferred: Boolean): List<List<Pair<Component, Dimension>>> {
+        var container: Container = target
+        while (container.width == 0 && container.parent != null) container = container.parent
+        val available = container.width.takeIf { it > 0 } ?: Int.MAX_VALUE
+        val maxWidth = maxOf(0, available - target.insets.left - target.insets.right - hgap * 2)
+        val rows = mutableListOf<MutableList<Pair<Component, Dimension>>>()
+        var rowWidth = 0
+        for (component in target.components) {
+            if (!component.isVisible) continue
+            val size = Dimension(if (preferred) component.preferredSize else component.minimumSize)
+            size.width = minOf(size.width, maxWidth)
+            if (rows.isEmpty() || (rowWidth > 0 && rowWidth + hgap + size.width > maxWidth)) {
+                rows += mutableListOf<Pair<Component, Dimension>>()
+                rowWidth = 0
+            }
+            if (rowWidth > 0) rowWidth += hgap
+            rowWidth += size.width
+            rows.last() += component to size
+        }
+        return rows
+    }
+}
+
 open class BoxPanel(val axis: Int, val gap: Int = 5, vararg components: Component) : FlatPanel() {
     init {
         if (axis < BoxLayout.X_AXIS || axis > BoxLayout.PAGE_AXIS) throw Exception("BoxPanel called with wrong axis value: $axis")

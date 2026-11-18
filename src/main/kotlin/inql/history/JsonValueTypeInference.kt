@@ -1,5 +1,7 @@
 package inql.history
 
+import inql.graphql.RESERVED_LITERALS
+import inql.graphql.isGraphQLName
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -72,7 +74,11 @@ internal object JsonValueTypeInference {
                     }
                 }
             }
-            is String -> registry.registerEnumValues(baseType, listOf(value))
+            is String -> if (isGraphQLName(value) && value !in RESERVED_LITERALS) {
+                registry.registerEnumValues(baseType, listOf(value))
+            } else {
+                registry.markNonEnumScalar(baseType)
+            }
             else -> registerObjectFields(registry, baseType, value)
         }
     }

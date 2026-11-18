@@ -219,7 +219,10 @@ class ScanResultTreeNode(scanResult: ScanResult) :
         val nodes = mutableListOf<DefaultMutableTreeNode>()
 
         val schemaSupplier = { result.effectiveParsedSchema() }
-        val historyDisplayDepth = if (result.schemaDiscoverySource == SchemaDiscoverySource.HISTORY) {
+        val historyDisplayDepth = if (
+            result.schemaDiscoverySource == SchemaDiscoverySource.HISTORY ||
+            result.schemaDiscoverySource == SchemaDiscoverySource.HISTORY_VERIFIED
+        ) {
             Config.getInstance().historyDisplayDepth()
         } else {
             null

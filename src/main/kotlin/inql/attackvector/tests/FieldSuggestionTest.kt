@@ -49,22 +49,20 @@ object FieldSuggestionTest : ScannerTest {
         } catch (_: Exception) {
             null
         }
-        val fieldName = payload?.let { findTopLevelFieldName(it.query) } ?: return null
+        val (operation, fieldName) = payload?.let { findTopLevelField(it.query, it.operationName) } ?: return null
         val typo = misspell(fieldName)
-        val (response, evidence) = context.http.sendQueryExchange("query { $typo }")
+        val (response, evidence) = context.http.sendQueryExchange("$operation { $typo }")
         return classify(response, evidence, realFieldName = fieldName)
     }
 
-    private fun findTopLevelFieldName(query: String): String? {
+    /** The misspelled field is only suggested against the root type it belongs to, so the probe keeps the template's operation type. */
+    private fun findTopLevelField(query: String, operationName: String?): Pair<String, String>? {
         return try {
-            Parser().parseDocument(query).definitions
-                .filterIsInstance<OperationDefinition>()
-                .firstOrNull()
-                ?.selectionSet
-                ?.selections
-                ?.filterIsInstance<Field>()
-                ?.firstOrNull()
-                ?.name
+            val definitions = Parser().parseDocument(query).definitions.filterIsInstance<OperationDefinition>()
+            val definition = definitions.firstOrNull { operationName != null && it.name == operationName } ?: definitions.firstOrNull()
+            val field = definition?.selectionSet?.selections?.filterIsInstance<Field>()
+                ?.firstOrNull { !it.name.startsWith("__") } ?: return null
+            definition.operation.name.lowercase() to field.name
         } catch (_: Exception) {
             null
         }

@@ -27,11 +27,6 @@ class HistorySchemaService(private val inql: InQL) {
         private const val MAX_FINGERPRINTS_PER_HOST = 2000
     }
 
-    private data class HistoryEntry(
-        val request: HttpRequest,
-        val response: HttpResponse?,
-    )
-
     private data class HostState(
         val registry: SdlTypeRegistry,
         var corrections: SchemaCorrections,
@@ -54,7 +49,7 @@ class HistorySchemaService(private val inql: InQL) {
         if (!shouldProcessUrl(request.url())) return
 
         val host = HistoryHostKey.fromRequest(request) ?: return
-        val fingerprint = requestFingerprint(request)
+        val fingerprint = HistoryTraffic.fingerprint(request)
         if (isDuplicate(host, fingerprint)) return
 
         val operations = Utils.getGraphQLOperations(request)
@@ -138,7 +133,7 @@ class HistorySchemaService(private val inql: InQL) {
     }
 
     private suspend fun runBulkExtraction(filterHostKey: String, freshStart: Boolean = false) {
-        val historyItems = collectHistoryForHost(filterHostKey)
+        val historyItems = HistoryTraffic.entriesForHost(filterHostKey)
         if (historyItems.isEmpty()) {
             Logger.info("No proxy history or site map entries found for host: $filterHostKey")
             return
@@ -204,27 +199,6 @@ class HistorySchemaService(private val inql: InQL) {
         }
     }
 
-    private fun collectHistoryForHost(filterHostKey: String): List<HistoryEntry> {
-        val results = LinkedHashMap<String, HistoryEntry>()
-
-        fun addEntry(request: HttpRequest, response: HttpResponse?) {
-            val requestKey = HistoryHostKey.fromRequest(request) ?: return
-            if (!HistoryHostKey.matches(requestKey, filterHostKey)) return
-            val key = requestFingerprint(request)
-            results.putIfAbsent(key, HistoryEntry(request, response))
-        }
-
-        for (item in Burp.Montoya.proxy().history()) {
-            addEntry(item.finalRequest(), item.originalResponse())
-        }
-
-        for (item in Burp.Montoya.siteMap().requestResponses()) {
-            addEntry(item.request(), item.response())
-        }
-
-        return results.values.toList()
-    }
-
     private fun getOrCreateHostState(host: String): HostState {
         hostStates[host]?.let { return it }
 
@@ -257,10 +231,6 @@ class HistorySchemaService(private val inql: InQL) {
         debounceJobs.remove(host)
         extractionJobs[host]?.cancel()
         extractionJobs.remove(host)
-    }
-
-    private fun requestFingerprint(request: HttpRequest): String {
-        return "${request.method()}:${request.url()}:${request.bodyToString().hashCode()}"
     }
 
     private fun isDuplicate(host: String, fingerprint: String): Boolean {

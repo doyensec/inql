@@ -12,51 +12,99 @@ import java.util.*
 class Browser {
 
     companion object {
-        private fun getChromiumExecutableNameForOS(): String {
-            val os = System.getProperty("os.name").lowercase()
-            return  if (os.contains("win")) {
-                "chrome.exe"
-            } else if (os.contains("mac")) {
-                "Chromium.app/Contents/MacOS/Chromium"
-            } else {
-                "chrome"
-            }
-        }
-        fun getInternalBrowserPath(): String? {
-            val executableName: String = getChromiumExecutableNameForOS()
+        // A Burp browser version directory is named like "119.0.6045.159".
+        private val VERSION_DIR_REGEX = Regex("^\\d+(\\.\\d+)+\$")
 
-            // Check in Burp jar's folder
-            val burpPath = Burp.findBurpJarPath()?.let { File(it) } ?: return null
-            var browserDir = File(burpPath.parent, "burpbrowser")
-            if (!browserDir.isDirectory) {
-                // Search in the data directory instead
-                browserDir = File(Burp.getBurpDataDir(), "burpbrowser")
-                if (!browserDir.isDirectory) {
-                    Logger.debug("Cannot find chromium")
-                    return null
+        /**
+         * All directories where Burp may have placed its embedded browser ("burpbrowser"),
+         * depending on how Burp was installed. We search every one of them rather than
+         * committing to the first that merely exists, because an empty/stale "burpbrowser"
+         * folder in one location must not stop us from finding the real browser in another.
+         */
+        private fun getBrowserSearchRoots(): List<File> {
+            val roots = mutableListOf<File>()
+
+            // Next to the Burp jar (standalone / installer layouts that co-locate the browser)
+            Burp.findBurpJarPath()?.let { File(it).parentFile }?.let { roots.add(File(it, "burpbrowser")) }
+
+            // Burp's data directory (~/.BurpSuite on *nix, %APPDATA%/BurpSuite on Windows)
+            Burp.getBurpDataDir()?.let { roots.add(File(it, "burpbrowser")) }
+
+            // Default PortSwigger installer locations under the user's home directory
+            System.getProperty("user.home")?.let { home ->
+                for (name in listOf("BurpSuitePro", "BurpSuiteCommunity", ".BurpSuite")) {
+                    roots.add(File(home, "$name${File.separator}burpbrowser"))
                 }
             }
 
-            val versions = browserDir.listFiles { it -> it.isDirectory && File(it, executableName).isFile }
+            return roots.filter { it.isDirectory }.distinctBy { it.absolutePath }
+        }
 
-            if (versions == null || versions.isEmpty()) {
-                Logger.debug("Cannot find chromium executable in burpbrowser dir")
+        /**
+         * Locate the browser executable inside a single version directory. The binary name and
+         * nesting differ per OS. On macOS the bundle name is NOT hard-coded: Burp historically
+         * shipped "Chromium.app" but renamed the embedded browser to "Burp Browser" in Burp Suite
+         * 2026.7.2, so we scan for any .app bundle and return its executable.
+         */
+        private fun getBrowserExecutableInVersionDir(versionDir: File): File? {
+            val os = System.getProperty("os.name").lowercase()
+            return when {
+                os.contains("win") -> File(versionDir, "chrome.exe").takeIf { it.isFile }
+                os.contains("mac") -> {
+                    val macOsDir = versionDir.listFiles { f -> f.isDirectory && f.name.endsWith(".app") }
+                        ?.map { File(it, "Contents${File.separator}MacOS") }
+                        ?.firstOrNull { it.isDirectory }
+                        ?: return null
+                    macOsDir.listFiles { f -> f.isFile && f.canExecute() }?.firstOrNull()
+                }
+                else -> File(versionDir, "chrome").takeIf { it.isFile }
+            }
+        }
+
+        /** Parse a version directory name ("119.0.6045.159") into comparable numeric segments. */
+        private fun versionDirFor(executable: File): File? {
+            var dir: File? = executable.parentFile
+            while (dir != null) {
+                if (dir.name.matches(VERSION_DIR_REGEX)) return dir
+                dir = dir.parentFile
+            }
+            return null
+        }
+
+        private fun versionSortKey(executable: File): List<Int> =
+            versionDirFor(executable)?.name?.split(".")?.mapNotNull { it.toIntOrNull() } ?: emptyList()
+
+        private val versionComparator = Comparator<File> { a, b ->
+            val va = versionSortKey(a)
+            val vb = versionSortKey(b)
+            for (i in 0 until maxOf(va.size, vb.size)) {
+                val diff = va.getOrElse(i) { 0 } - vb.getOrElse(i) { 0 }
+                if (diff != 0) return@Comparator diff
+            }
+            0
+        }
+
+        fun getInternalBrowserPath(): String? {
+            val candidates = mutableListOf<File>()
+            for (root in getBrowserSearchRoots()) {
+                val versionDirs = root.listFiles { f -> f.isDirectory } ?: continue
+                for (versionDir in versionDirs) {
+                    getBrowserExecutableInVersionDir(versionDir)?.let { candidates.add(it) }
+                }
+            }
+
+            if (candidates.isEmpty()) {
+                Logger.debug("Cannot find Burp's embedded browser executable in any known location")
                 return null
             }
 
-            // Take latest version if multiple
-            versions.sortDescending()
-            return File(versions.first(), executableName).absolutePath
+            // Prefer the highest version (compared numerically, not lexicographically)
+            return candidates.maxWithOrNull(versionComparator)?.absolutePath
         }
 
         private fun getChromiumVersionFromPath(path: String): String? {
-            val executableName: String = getChromiumExecutableNameForOS()
-            val directory = File(path.removeSuffix(executableName))
-            // Expected string like 119.0.6045.159
-            if (directory.isDirectory && directory.name.matches(Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+\$"))) {
-                return directory.name
-            }
-            return null
+            // Expected version dir name like 119.0.6045.159
+            return versionDirFor(File(path))?.name
         }
 
         private fun getBurpProxyPort(): Int {

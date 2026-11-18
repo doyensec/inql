@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import inql.Config
 import inql.InQL
 import inql.Logger
+import inql.ui.ErrorDialog
 import inql.utils.get
 import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
@@ -54,9 +55,28 @@ class ExternalToolsService private constructor(){
             Logger.info("Should use internal browser? $useInternalBrowser")
 
             if (useInternalBrowser) {
-                Browser.launchEmbedded(url)
+                if (Browser.launchEmbedded(url)) return
+                // Burp's bundled Chromium may be missing (e.g. not downloaded, or installed
+                // in a non-standard location), in which case the embedded launch fails. Fall
+                // back to the external browser so the URL still opens instead of failing silently.
+                Logger.warning("Embedded browser launch failed, falling back to external browser")
+                if (!Browser.launchExternal(url)) {
+                    ErrorDialog(
+                        "InQL could not open the browser.\n\n" +
+                            "Burp's embedded browser could not be found, and launching an external " +
+                            "browser also failed. Install/download Burp's embedded browser " +
+                            "(Settings → Suite → Embedded browser), or configure an external " +
+                            "browser in InQL's settings.",
+                    )
+                }
             } else {
-                Browser.launchExternal(url)
+                if (!Browser.launchExternal(url)) {
+                    ErrorDialog(
+                        "InQL could not open the external browser.\n\n" +
+                            "Configure an external browser command in InQL's settings, or enable " +
+                            "Burp's embedded browser.",
+                    )
+                }
             }
         }
 

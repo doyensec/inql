@@ -170,6 +170,18 @@ class ScanResultsView(val scannerTab: ScannerTab) : BorderPanel(0) {
         SchemaMergeDialog(scannerTab).isVisible = true
     }
 
+    fun toggleHistoryVerification() {
+        if (scannerTab.isVerifyingHistory) {
+            scannerTab.cancelHistoryVerification()
+            return
+        }
+        scannerTab.launchHistoryVerification(effectiveRequestTemplate())
+    }
+
+    fun setVerificationRunning(running: Boolean) {
+        treeView.setVerificationRunning(running)
+    }
+
     fun effectiveRequestTemplate(): HttpRequest {
         commitRequestTemplateEdits()
         return scannerTab.requestTemplate

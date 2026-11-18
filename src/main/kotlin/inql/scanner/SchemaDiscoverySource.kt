@@ -19,6 +19,9 @@ enum class SchemaDiscoverySource {
     /** Schema reconstructed passively from Proxy / History traffic. */
     HISTORY,
 
+    /** Copy of a [HISTORY] schema checked against the server. */
+    HISTORY_VERIFIED,
+
     /** Schema produced by merging two schemas from other tabs / files. */
     MERGED,
     ;
@@ -31,6 +34,7 @@ enum class SchemaDiscoverySource {
             FEDERATION_SDL_FALLBACK -> "Federation SDL"
             BRUTEFORCE -> "Bruteforced"
             HISTORY -> "History"
+            HISTORY_VERIFIED -> "History (verified)"
             MERGED -> "Merged"
         }
 }

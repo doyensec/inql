@@ -30,12 +30,14 @@ internal class SdlTypeRegistry {
     private val enumTypes = linkedSetOf<String>()
     private val enumValues = linkedMapOf<String, LinkedHashSet<String>>()
     private val scalarTypes = linkedSetOf<String>()
+    private val nonEnumTypes = linkedSetOf<String>()
     private val rootTypeNames = setOf("Query", "Mutation", "Subscription")
     private val builtInScalars = setOf("String", "Int", "Float", "Boolean", "ID")
     /** Connection fields that are metadata/scalars, not entity lists. */
     private val connectionMetadataFieldNames = setOf(
         "pageinfo", "totalcount", "total_count", "aggregate", "edge",
     )
+    private val connectionListFieldNames = setOf("nodes", "elements")
     private var typeAliases: Map<String, String> = emptyMap()
     private var blockedTypeNames: Set<String> = emptySet()
     private val alternateReturnTypes = linkedMapOf<Pair<String, String>, LinkedHashSet<String>>()
@@ -171,7 +173,7 @@ internal class SdlTypeRegistry {
     }
 
     fun registerEnumValues(typeName: String, values: Collection<String>) {
-        if (!isUserDefinedType(typeName)) return
+        if (!isUserDefinedType(typeName) || typeName in nonEnumTypes) return
         val filtered = values.filter { it != "PLACEHOLDER" && it != "_inql_placeholder" }
         if (filtered.isEmpty()) {
             ensureEnumStub(typeName)
@@ -186,7 +188,7 @@ internal class SdlTypeRegistry {
     }
 
     fun ensureEnumStub(typeName: String) {
-        if (!isUserDefinedType(typeName)) return
+        if (!isUserDefinedType(typeName) || typeName in nonEnumTypes) return
         if (typeName in inputTypes && inputTypes[typeName]!!.keys.any { !isSchemaPlaceholderField(it) }) return
         enumTypes.add(typeName)
         inputTypes.remove(typeName)
@@ -393,10 +395,10 @@ internal class SdlTypeRegistry {
             field.name == "edges" -> {
                 field.children.find { it.name == "node" }?.let { node ->
                     val nodeShape = relayNodeShape(node) ?: return@let
-                    wireRelayEdges(connectionType, nodeShape)
+                    wireRelayEdges(connectionType, nodeShape)?.let { edgeName -> addEdgeFields(edgeName, field) }
                 }
             }
-            isConnectionListField(field) -> {
+            field.name in connectionListFieldNames && hasConnectionListContent(field) -> {
                 wireRelayListField(connectionType, field)
             }
             field.name.equals("pageInfo", ignoreCase = true) -> {
@@ -407,17 +409,20 @@ internal class SdlTypeRegistry {
                 }
                 mergeField(connectionType, "pageInfo", "$pageInfoName!", emptyMap())
             }
-            field.name.equals("total_count", ignoreCase = true) ||
-                field.name.equals("totalcount", ignoreCase = true) -> {
+            !field.hasSubselection && (
+                field.name.equals("total_count", ignoreCase = true) ||
+                    field.name.equals("totalcount", ignoreCase = true)
+                ) -> {
                 val returnType = field.scalarReturnType ?: "Int"
                 mergeField(connectionType, field.name, returnType, field.arguments)
             }
-            isConnectionMetadataField(field.name) -> {
+            !field.hasSubselection && isConnectionMetadataField(field.name) -> {
                 val returnType = field.scalarReturnType ?: "String"
                 mergeField(connectionType, field.name, returnType, field.arguments)
             }
             field.hasSubselection -> {
-                val childType = field.objectTypeName?.takeIf { isUserDefinedOutputType(it) } ?: return
+                val childType = field.objectTypeName?.takeIf { isUserDefinedOutputType(it) }?.let { resolveTypeAlias(it) }
+                    ?: childTypeName(connectionType, field.name)
                 if (field.children.isNotEmpty()) {
                     addFields(childType, field.children)
                 } else {
@@ -453,7 +458,8 @@ internal class SdlTypeRegistry {
     private fun findDirectConnectionListField(
         children: List<QueryAstToSchema.FieldNode>,
     ): QueryAstToSchema.FieldNode? {
-        children.find { it.name == "nodes" && hasConnectionListContent(it) }?.let { return it }
+        children.find { it.name in connectionListFieldNames && hasConnectionListContent(it) }?.let { return it }
+        if (children.none { isConnectionMetadataField(it.name) }) return null
         return children.firstOrNull { isConnectionListField(it) }
     }
 
@@ -570,6 +576,7 @@ internal class SdlTypeRegistry {
             ensureOutputType(edgeName)
             mergeField(edgeName, "node", resolvedNodeType, emptyMap())
             mergeField(connectionName, "edges", "[$edgeName!]!", emptyMap())
+            field.children.find { it.name == "edges" }?.let { addEdgeFields(edgeName, it) }
         } else {
             mergeField(connectionName, shape.listFieldName, "[$resolvedNodeType!]!", emptyMap())
         }
@@ -584,17 +591,22 @@ internal class SdlTypeRegistry {
         }
 
         mergeField(parentType, field.name, connectionName, field.arguments)
-        registerRelayConnectionExtraFields(connectionName, field.children)
+        registerRelayConnectionExtraFields(connectionName, field.children, shape.listFieldName.takeIf { !shape.viaEdges })
     }
 
     private fun registerRelayConnectionExtraFields(
         connectionType: String,
         children: List<QueryAstToSchema.FieldNode>,
+        listFieldName: String?,
     ) {
         for (child in children) {
             if (child.name.startsWith("__")) continue
-            if (child.name == "edges" || isConnectionListField(child)) continue
+            if (child.name == "edges" || child.name == listFieldName) continue
             if (child.name.equals("pageInfo", ignoreCase = true)) continue
+            if (child.hasSubselection) {
+                processConnectionField(connectionType, child)
+                continue
+            }
             val returnType = child.scalarReturnType
                 ?: queryEvidencedScalarType(child, evidencedParent = true)
                 ?: continue
@@ -671,8 +683,8 @@ internal class SdlTypeRegistry {
         }
     }
 
-    private fun wireRelayEdges(connectionType: String, nodeShape: RelayNodeShape) {
-        val nodeType = resolvedRelayNodeType(connectionType, nodeShape) ?: return
+    private fun wireRelayEdges(connectionType: String, nodeShape: RelayNodeShape): String? {
+        val nodeType = resolvedRelayNodeType(connectionType, nodeShape) ?: return null
         val edgeName = "${nodeType}Edge"
         ensureOutputType(edgeName)
         mergeField(edgeName, "node", nodeType, emptyMap())
@@ -680,6 +692,12 @@ internal class SdlTypeRegistry {
         if (nodeShape.inlineFragments.isEmpty()) {
             addFields(nodeType, nodeShape.fields, evidencedParent = true)
         }
+        return edgeName
+    }
+
+    private fun addEdgeFields(edgeName: String, edgesField: QueryAstToSchema.FieldNode) {
+        val extra = edgesField.children.filter { it.name != "node" && !it.name.startsWith("__") }
+        if (extra.isNotEmpty()) addFields(edgeName, extra, evidencedParent = true)
     }
 
     private fun resolvedRelayNodeType(
@@ -823,6 +841,7 @@ internal class SdlTypeRegistry {
                     ?: continue
                 if (best.second == 0) continue
                 if (evidencedFieldCount(currentBase) >= best.second) continue
+                if (connectionWiredNodeType(currentBase) == best.first) continue
 
                 field.returnType = rewriteBaseType(field.returnType, currentBase, best.first)
                 ensureOutputType(best.first)
@@ -898,6 +917,16 @@ internal class SdlTypeRegistry {
                 }
             }
         }
+    }
+
+    fun markNonEnumScalar(typeName: String) {
+        if (!isUserDefinedType(typeName) || GraphQLTypeInference.isBuiltInScalar(typeName)) return
+        if (inputTypes[typeName]?.keys?.any { !isSchemaPlaceholderField(it) } == true) return
+        nonEnumTypes += typeName
+        inputTypes.remove(typeName)
+        enumTypes.remove(typeName)
+        enumValues.remove(typeName)
+        scalarTypes.add(typeName)
     }
 
     private fun ensureInputStub(typeName: String) {
