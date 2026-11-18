@@ -2,11 +2,12 @@ Uuid: 296e9a0730384be4b2fffef7b4e19b1f
 ExtensionType: 1
 Name: InQL - GraphQL Scanner
 RepoName: inql
-ScreenVersion: 6.0.0
-SerialVersion: 15
-MinPlatformVersion: 2
+ScreenVersion: 6.1.2
+SerialVersion: 27
+MinPlatformVersion: 8
 ProOnly: False
 Author: Doyensec
-ShortDescription: InQL - A Burp Extension for GraphQL Security Testing
+ShortDescription: Analyzes GraphQL schemas, detects vulnerabilities, and integrates with Burp Suite for testing and query generation.
 EntryPoint: InQL.jar
 BuildCommand: task all
+SupportedProducts: Pro, Community
