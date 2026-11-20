@@ -8,6 +8,15 @@ import inql.ui.Label
 import inql.ui.MultilineLabel
 import inql.ui.SimpleDocumentListener
 import inql.ui.committedInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.swing.Swing
+import kotlinx.coroutines.withContext
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Component
@@ -102,6 +111,10 @@ class PayloadsPanel : BorderPanel(4) {
     private var rebuildingVariableRows = false
     private var suppressPayloadSetListener = false
     private var lastRefreshError: String? = null
+
+    /** Payload counting may read a large wordlist from disk, so it runs off the EDT; labels are updated on the EDT. */
+    private val countScope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
+    private var countJob: Job? = null
 
     var onRefreshRequested: (() -> Unit)? = null
 
@@ -309,39 +322,62 @@ class PayloadsPanel : BorderPanel(4) {
         payloadSetSnapshots[key] = sharedPayloadEditor.snapshot()
     }
 
+    /**
+     * Recomputes the payload / item / HTTP request counts. The UI state is captured on the calling (EDT) thread,
+     * the counting itself (which may read a large payload file) runs on [Dispatchers.IO], and the labels are
+     * updated back on the EDT. A newer call cancels a count that is still in progress.
+     */
     private fun updateCounts() {
-        val selected = selectedRows()
-        val payloadCount = currentPayloadCount()
-        val requestCount = if (selected.isEmpty()) {
-            0L
-        } else if (usesSharedPayload()) {
-            BatchRequestBuilder.estimateItemCount(
-                selectedAttackType(),
-                selected.size,
-                listOf(payloadCount),
-            )
+        val selectedCount = selectedRows().size
+        val attackType = selectedAttackType()
+        val batchSize = batchSize()
+        val currentSource = sharedPayloadEditor.snapshot().sourceOrNull()
+        val variableSources = if (selectedCount == 0 || attackType.usesSharedPayloadSet) {
+            emptyList()
         } else {
-            val counts = selected.map { row ->
+            selectedRows().map { row ->
                 val snapshot = if (row.variable.key == currentPayloadSetKey) {
                     sharedPayloadEditor.snapshot()
                 } else {
                     payloadSetSnapshots[row.variable.key]
                 }
-                PayloadSource.countOrZero(snapshot?.sourceOrNull())
+                snapshot?.sourceOrNull()
             }
-            BatchRequestBuilder.estimateItemCount(selectedAttackType(), selected.size, counts)
         }
-        payloadCountLabel.text = "Payload count: ${BatchRequestBuilder.formatCount(payloadCount)}"
-        requestCountLabel.text = "Items: ${BatchRequestBuilder.formatCount(requestCount)}"
-        val httpRequests = BatchRequestBuilder.requestCount(requestCount, batchSize())
-        httpRequestCountLabel.text = "HTTP requests: ${BatchRequestBuilder.formatCount(httpRequests)}"
+
+        countJob?.cancel()
+        if (currentSource is PayloadSource.FilePath || variableSources.any { it is PayloadSource.FilePath }) {
+            payloadCountLabel.text = "Payload count: counting..."
+        }
+        countJob = countScope.launch {
+            val (payloadCount, requestCount) = withContext(Dispatchers.IO) {
+                val isCancelled = { !isActive }
+                val payloadCount = PayloadSource.countOrZero(currentSource, isCancelled)
+                val requestCount = when {
+                    selectedCount == 0 -> 0L
+                    attackType.usesSharedPayloadSet ->
+                        BatchRequestBuilder.estimateItemCount(attackType, selectedCount, listOf(payloadCount))
+                    else -> BatchRequestBuilder.estimateItemCount(
+                        attackType,
+                        selectedCount,
+                        variableSources.map { PayloadSource.countOrZero(it, isCancelled) },
+                    )
+                }
+                payloadCount to requestCount
+            }
+            payloadCountLabel.text = "Payload count: ${BatchRequestBuilder.formatCount(payloadCount)}"
+            requestCountLabel.text = "Items: ${BatchRequestBuilder.formatCount(requestCount)}"
+            val httpRequests = BatchRequestBuilder.requestCount(requestCount, batchSize)
+            httpRequestCountLabel.text = "HTTP requests: ${BatchRequestBuilder.formatCount(httpRequests)}"
+        }
+    }
+
+    /** Cancels any pending payload count. Called when the extension is unloaded. */
+    fun stop() {
+        countScope.cancel()
     }
 
     private fun batchSize(): Int = batchSizeSpinner.committedInt()
-
-    private fun currentPayloadCount(): Long {
-        return PayloadSource.countOrZero(sharedPayloadEditor.snapshot().sourceOrNull())
-    }
 
     private fun selectedAttackType(): IntruderAttackType {
         return IntruderAttackType.fromLabel(attackTypeCombo.getSelectedItem()).effectiveFor(selectedRows().size)

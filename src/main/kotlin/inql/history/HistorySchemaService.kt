@@ -163,8 +163,9 @@ class HistorySchemaService(private val inql: InQL) {
                 processed++
 
                 val req = item.request
+                // No scope check here: bulk extraction is started explicitly by the user for a chosen host, so the
+                // "in-scope only" setting (which governs passive background learning) does not apply.
                 if (!Utils.isGraphQLRequest(req)) continue
-                if (!shouldProcessUrl(req.url())) continue
                 if (state.requestTemplate == null) {
                     state.requestTemplate = req.withBody("")
                 }

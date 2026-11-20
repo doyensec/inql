@@ -17,6 +17,9 @@ sealed class PayloadSource {
     companion object {
         const val MAX_LINE_CHARS = 8192
         const val MAX_GENERATED = 100_000
+        private const val CANCEL_CHECK_LINES = 4096L
+
+        private class CountCancelledException : RuntimeException()
 
         /** Line counts of payload files, valid while the file's size and modification time are unchanged. */
         private val fileLineCounts = ConcurrentHashMap<String, Triple<Long, Long, Long>>()
@@ -24,9 +27,13 @@ sealed class PayloadSource {
         /** The payloads of a simple list: lines that are not empty after trailing whitespace is removed. */
         fun words(lines: List<String>): List<String> = lines.map { it.trimEnd() }.filter { it.isNotEmpty() }
 
-        fun count(source: PayloadSource): Long {
+        /**
+         * Number of payloads [source] produces. [isCancelled] is polled while reading a payload file, so a count that
+         * is no longer needed stops early instead of reading a large wordlist to the end.
+         */
+        fun count(source: PayloadSource, isCancelled: () -> Boolean = { false }): Long {
             return when (source) {
-                is FilePath -> countFileLines(source.path)
+                is FilePath -> countFileLines(source.path, isCancelled)
                 is NumberRange -> {
                     if (source.from > source.to) 0L
                     else source.to.toLong() - source.from.toLong() + 1L
@@ -37,10 +44,10 @@ sealed class PayloadSource {
             }
         }
 
-        fun countOrZero(source: PayloadSource?): Long {
+        fun countOrZero(source: PayloadSource?, isCancelled: () -> Boolean = { false }): Long {
             if (source == null) return 0
             return try {
-                count(source)
+                count(source, isCancelled)
             } catch (_: Exception) {
                 0
             }
@@ -56,8 +63,10 @@ sealed class PayloadSource {
             }
         }
 
-        /** Counted on the UI thread whenever the payload settings change, so the result is cached per file. */
-        private fun countFileLines(path: String): Long {
+        /**
+         * Counted (off the UI thread) whenever the payload settings change, so the result is cached per file.
+         */
+        private fun countFileLines(path: String, isCancelled: () -> Boolean): Long {
             val file = File(path)
             if (!file.isFile) return 0
             val modified = file.lastModified()
@@ -66,8 +75,11 @@ sealed class PayloadSource {
                 if (cachedModified == modified && cachedLength == length) return count
             }
             var count = 0L
+            var lines = 0L
             file.bufferedReader().use { reader ->
                 reader.lineSequence().forEach { line ->
+                    // Abandoned counts are not cached; the caller discards the result.
+                    if (++lines % CANCEL_CHECK_LINES == 0L && isCancelled()) throw CountCancelledException()
                     val trimmed = line.trim()
                     if (trimmed.isNotEmpty() && trimmed.length <= MAX_LINE_CHARS) {
                         count++

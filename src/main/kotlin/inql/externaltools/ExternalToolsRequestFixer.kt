@@ -14,6 +14,7 @@ import inql.graphql.Utils.getGraphQLQuery
 import inql.scanner.IntrospectionCache
 import inql.utils.get
 import inql.utils.withUpsertedHeader
+import java.util.concurrent.ConcurrentHashMap
 
 class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRequestHandler, ProxyResponseHandler {
     companion object {
@@ -56,8 +57,9 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
         }
     }
 
-    private val corsRequests = HashSet<Int>()
-    private val introspectionRequests = HashMap<Int, String>()
+    // Burp calls proxy handlers from multiple threads concurrently, so these must be thread-safe.
+    private val corsRequests: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+    private val introspectionRequests = ConcurrentHashMap<Int, String>()
 
     // Part of ProxyRequestHandler interface, executed first on every request coming through Burp's Proxy tool
     override fun handleRequestReceived(request: InterceptedRequest): ProxyRequestReceivedAction {
@@ -159,18 +161,16 @@ class ExternalToolsRequestFixer(val inql: InQL, val webServerPort: Int): ProxyRe
         var response: HttpResponse = interceptedResponse
         val msgId = interceptedResponse.messageId()
 
-        // Fix CORS if marked
-        if (this.corsRequests.contains(msgId)) {
+        // Fix CORS if marked (remove() is atomic: check and clear in one step)
+        if (this.corsRequests.remove(msgId)) {
             response = fixCORSHeaders(interceptedResponse.initiatingRequest(), response)
-            this.corsRequests.remove(msgId)
         }
 
         // Reply with introspection if marked
-        if (this.introspectionRequests.containsKey(msgId)) {
+        this.introspectionRequests.remove(msgId)?.let { schema ->
             response = response
-                .withBody(this.introspectionRequests[msgId])
+                .withBody(schema)
                 .withUpsertedHeader("Content-Type", "application/json")
-            this.introspectionRequests.remove(msgId)
         }
 
         return ProxyResponseToBeSentAction.continueWith(response)

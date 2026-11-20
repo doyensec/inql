@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.swing.Swing
@@ -33,11 +35,12 @@ import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 import javax.swing.JTabbedPane
 import javax.swing.JTextField
+import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 
 class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAndLoadData {
 
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val attacks = ArrayList<Attack>()
     private val urlField = JTextField()
     private val sendButton = JButton("Send").also {
@@ -308,6 +311,13 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
         this.resultsPanel.showRun(entry.run, hasHistoryRow = true)
     }
 
+    /** Cancels any running batch attack and background work. Called when the extension is unloaded. */
+    fun stop() {
+        this.runningJob?.cancel()
+        this.payloadsPanel.stop()
+        this.coroutineScope.cancel()
+    }
+
     fun loadFromRequest(req: HttpRequest) {
         this.url = req.url()
         this.request = req
@@ -332,7 +342,9 @@ class Attacker(private val inql: InQL) : BorderPanel(), ActionListener, SavesAnd
     override fun burpDeserialize(obj: PersistedObject) {
         this.url = obj.getString("url")
         this.request = obj.getHttpRequest("request")
-        this.payloadsPanel.refreshFromRequest(this.request)
+        // Project loading runs on a background coroutine; the payloads panel must only be touched on the EDT.
+        val loadedRequest = this.request
+        SwingUtilities.invokeLater { this.payloadsPanel.refreshFromRequest(loadedRequest) }
         val attackIdLst = obj.getStringList("attacks")
         if (!attackIdLst.isNullOrEmpty()) {
             Logger.debug("Loading ${attackIdLst.size} Attacks from project file")

@@ -11,6 +11,7 @@ import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse
 import inql.graphql.GraphQLRequestTransformException
 import inql.graphql.GraphQLRequestTransformer
 import inql.graphql.GraphQLTransportFormat
+import inql.graphql.Utils
 import inql.history.HistoryHostKey
 import inql.history.HistoryTracker
 import inql.Config
@@ -27,6 +28,8 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.*
+import javax.swing.event.MenuEvent
+import javax.swing.event.MenuListener
 
 open class MenuAction(val name: String, val keyStroke: KeyStroke?, val action: (ActionEvent) -> Unit) :
     AbstractAction(name) {
@@ -236,20 +239,45 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         this.extractGraphQLSchemaFromHost()
     }
 
-    private fun typeRenameSubmenu(actions: List<MenuAction>): JMenu? {
-        if (actions.isEmpty()) return null
+    /**
+     * "Add type correction" submenu. [provideMenuItems] runs on the EDT on every right-click, so only a cheap
+     * byte-level check is done there; the response body is parsed only when the user actually opens the submenu.
+     */
+    private fun typeRenameSubmenu(request: HttpRequest, response: HttpResponse): JMenu? {
+        if (!GraphQLTypeSuggestionParser.mightContainTypeRenameSuggestions(response.body())) return null
         return JMenu("Add type correction").also { submenu ->
-            for (action in actions) {
-                submenu.add(BurpMenuItem(action))
-            }
+            submenu.addMenuListener(object : MenuListener {
+                private var populated = false
+
+                override fun menuSelected(e: MenuEvent) {
+                    if (populated) return
+                    populated = true
+                    val actions = typeRenameActionsFromResponse(request, response)
+                    if (actions.isEmpty()) {
+                        submenu.add(JMenuItem("No type suggestions found").also { it.isEnabled = false })
+                    } else {
+                        for (action in actions) {
+                            submenu.add(BurpMenuItem(action))
+                        }
+                    }
+                    submenu.popupMenu.pack()
+                }
+
+                override fun menuDeselected(e: MenuEvent) {}
+                override fun menuCanceled(e: MenuEvent) {}
+            })
         }
     }
 
+    /**
+     * "Transform Request to:" submenu. Shown based on a cheap byte-level check only; the request is parsed when
+     * the user picks a target format, and [transformRequestInEditor] reports requests that cannot be parsed.
+     */
     private fun transformRequestSubmenu(
         editor: MessageEditorHttpRequestResponse,
     ): JMenu? {
         val request = editor.requestResponse().request()
-        if (GraphQLRequestTransformer.parsePayload(request) == null) return null
+        if (!Utils.mightBeGraphQLRequest(request)) return null
 
         return JMenu("Transform Request to:").also { submenu ->
             for (format in GraphQLTransportFormat.entries.filter { it.showInTransformMenu() }) {
@@ -293,7 +321,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
     }
 
     private fun sendToInqlComponents(
-        typeRenameActions: List<MenuAction> = emptyList(),
+        typeRenameMenu: JMenu? = null,
         messageEditor: MessageEditorHttpRequestResponse? = null,
     ): MutableList<Component> {
         return mutableListOf<Component>(
@@ -308,7 +336,7 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
             if (this@SendToInqlHandler.selectedHost != null) {
                 this.add(BurpMenuItem(extractHistorySchemaAction))
             }
-            typeRenameSubmenu(typeRenameActions)?.let { add(it) }
+            typeRenameMenu?.let { add(it) }
             messageEditor?.let { editor ->
                 transformRequestSubmenu(editor)?.let { submenu ->
                     add(JSeparator())
@@ -420,13 +448,13 @@ class SendToInqlHandler(inql: InQL) : SendFromInqlHandler(inql), ContextMenuItem
         }
         val request = this.requestFromContext(event) ?: return null
         this.request = request
-        val typeRenameActions = responseFromContext(event)?.let { response ->
-            typeRenameActionsFromResponse(request, response)
-        } ?: emptyList()
+        val typeRenameMenu = responseFromContext(event)?.let { response ->
+            typeRenameSubmenu(request, response)
+        }
         val messageEditor = event.messageEditorRequestResponse()
             .filter { it.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.REQUEST }
             .orElse(null)
-        return this.sendToInqlComponents(typeRenameActions, messageEditor)
+        return this.sendToInqlComponents(typeRenameMenu, messageEditor)
     }
 
     override fun provideMenuItems(event: AuditIssueContextMenuEvent?): MutableList<Component> {
