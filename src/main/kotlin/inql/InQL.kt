@@ -15,7 +15,6 @@ import inql.ui.InQLTabbedPane
 import inql.ui.SendToInqlHandler
 import inql.ui.StyledPayloadEditor
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.awt.Component
 import javax.swing.JTabbedPane
 
@@ -45,7 +44,7 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         Burp.Montoya.userInterface().registerHttpRequestEditorProvider(StyledPayloadEditor.getProvider(this))
 
         // Register Burp Scanner Checks
-        Burp.Montoya.scanner().registerScanCheck(BurpScannerCheck())
+        BurpScannerCheck.register(Burp.Montoya.scanner())
 
         this.addTab("Scanner", this.scanner)
         this.addTab("Batch Queries", this.attacker)
@@ -58,18 +57,18 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
         // Register context menu handler
         Burp.Montoya.userInterface().registerContextMenuItemsProvider(SendToInqlHandler(this))
 
-        val historyEnabled = this.config.getBoolean("history.tracking_enabled") == true
-
         // Reload data from the project file
         if (!this.dataPresentInProjectFile()) {
             this.saveToProjectFile(false) // initialize main object
-            if (historyEnabled) {
+            if (this.historyTrackingEnabled()) {
                 HistoryTracker.start(this)
             }
         } else {
             LoadsDataFromProject.coroutineScope.launch {
                 this@InQL.loadFromProjectFile()
-                if (historyEnabled) {
+                // Re-read the setting: the user may have toggled it while the project was loading.
+                // HistoryTracker.start() is a no-op if the extension was unloaded in the meantime.
+                if (this@InQL.historyTrackingEnabled()) {
                     HistoryTracker.start(this@InQL)
                 }
             }
@@ -88,10 +87,15 @@ class InQL : InQLTabbedPane(), SavesAndLoadData {
 
     }
 
-    fun unload() = runBlocking {
+    private fun historyTrackingEnabled() = this.config.getBoolean("history.tracking_enabled") == true
+
+    fun unload() {
         ProxyRequestHighlighter.stop()
-        HistoryTracker.stop()
+        HistoryTracker.shutdown()
         scanner.stop()
+        attacker.stop()
+        fingerprinter.stop()
+        attackVectorScanner.stop()
     }
 
     fun getAvailableProfileId(name: String): String {

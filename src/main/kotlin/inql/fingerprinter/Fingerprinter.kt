@@ -21,7 +21,7 @@ import javax.swing.*
 
 class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
 
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var fingerPrinterJob: Job? = null
     private lateinit var graphQLClient: ThrottledClient
     private val resultsPane = JEditorPane()
@@ -122,6 +122,12 @@ class Fingerprinter(private val inql: InQL) : BorderPanel(), ActionListener {
 
     fun cancel() {
         fingerPrinterJob?.cancel()
+    }
+
+    /** Cancels any running fingerprinting and the coroutine scope. Called when the extension is unloaded. */
+    fun stop() {
+        cancel()
+        coroutineScope.cancel()
     }
 
     private suspend fun run() {

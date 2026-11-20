@@ -117,7 +117,7 @@ class Scanner(val inql: InQL) : EditableTabbedPane(), SavesAndLoadData {
 
     fun stop() {
         this.getScannerTabs().forEach {
-            it.cancel()
+            it.stop()
         }
     }
 

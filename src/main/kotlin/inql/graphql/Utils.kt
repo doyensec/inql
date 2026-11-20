@@ -38,6 +38,31 @@ object Utils {
         return looksLikeGraphQLDocument(stripBom(document.trim()))
     }
 
+    /**
+     * Cheap pre-filter for [getGraphQLOperations], safe to call on Burp's proxy or UI threads: it never decodes
+     * or parses the body, it only scans the raw bytes. A `true` result only means the request is worth parsing.
+     * A `false` result means [getGraphQLOperations] would find no valid GraphQL document (the only requests it
+     * rejects that the full parser accepts are bodies like `mutation Foo` with no selection set, which are not
+     * valid GraphQL anyway).
+     */
+    fun mightBeGraphQLRequest(request: HttpRequest): Boolean {
+        return try {
+            when (request.method().uppercase()) {
+                // GET requests are only parsed from the `query` URL parameter.
+                "GET" -> request.url().contains("query=", ignoreCase = true)
+                // Every GraphQL document has a selection set (`{`); URL-encoded and multipart bodies carry a
+                // `query` field name instead.
+                "POST" -> {
+                    val body = request.body()
+                    body.length() > 0 && (body.indexOf("{", true) >= 0 || body.indexOf("query", false) >= 0)
+                }
+                else -> false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun getGraphQLOperations(request: HttpRequest): List<GraphQLOperation> {
         return try {
             when (request.method().uppercase()) {

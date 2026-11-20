@@ -2,97 +2,101 @@ package inql
 
 import burp.Burp
 import burp.api.montoya.core.HighlightColor
-import burp.api.montoya.proxy.ProxyHttpRequestResponse
+import burp.api.montoya.core.Registration
+import burp.api.montoya.proxy.http.InterceptedRequest
+import burp.api.montoya.proxy.http.ProxyRequestHandler
+import burp.api.montoya.proxy.http.ProxyRequestReceivedAction
+import burp.api.montoya.proxy.http.ProxyRequestToBeSentAction
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import inql.graphql.Utils
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 
-
-class ProxyRequestHighlighter private constructor(){
+/**
+ * Highlights GraphQL requests in Burp's Proxy history and annotates them with the operation name.
+ *
+ * Implemented as a Montoya [ProxyRequestHandler]: each request is inspected once, as it passes through the
+ * proxy (after any Intercept edits), and the annotations are attached via [ProxyRequestToBeSentAction.continueWith].
+ * There is no polling of the proxy history and no background queue.
+ */
+class ProxyRequestHighlighter private constructor() : ProxyRequestHandler {
     companion object {
-        private lateinit var instance: ProxyRequestHighlighter
+        /** Requests with bodies larger than this are not parsed inline on the proxy thread. */
+        private const val MAX_INLINE_BODY_BYTES = 1024 * 1024
+
+        // Written by the lifecycle thread (extension load, settings hook, unload), read by Burp's proxy threads.
+        @Volatile
+        private var instance: ProxyRequestHighlighter? = null
+
+        @Synchronized
         fun start() {
-            if (!this::instance.isInitialized) {
-                this.instance = ProxyRequestHighlighter()
-            } else {
-                Logger.error("Cannot start Request Highlighter more than once, something's wrong")
-                throw Exception("Cannot start Request Highlighter more than once, something's wrong")
+            if (instance != null) {
+                Logger.warning("Proxy Request Highlighter is already running")
+                return
             }
+            instance = ProxyRequestHighlighter()
         }
 
+        @Synchronized
         fun stop() {
-            if (this::instance.isInitialized) this.instance.stop()
+            instance?.stop()
+            instance = null
         }
     }
 
-    private var pollingDelay = 1000L // 1 sec
-    private val color: HighlightColor = HighlightColor.highlightColor(Config.getInstance().getString("proxy.highlight_color"))
-    private val pollingScope = CoroutineScope(Dispatchers.IO)
-    private val processingScope = CoroutineScope(Dispatchers.Default)
-    private val highlightChannel = Channel<ProxyHttpRequestResponse>(Channel.UNLIMITED)
+    private val color: HighlightColor =
+        HighlightColor.highlightColor(Config.getInstance().getString("proxy.highlight_color"))
     private val gson = Gson()
-
-    private var oldIdx = 0
-    private val newIdx = {
-        Burp.Montoya.proxy().history().size - 1
-    }
+    private val registration: Registration = Burp.Montoya.proxy().registerRequestHandler(this)
 
     init {
-        this.oldIdx = this.newIdx()
-
-        this.pollingScope.launch {
-            this@ProxyRequestHighlighter.poll()
-        }
-        this.processingScope.launch {
-            for (req in highlightChannel) {
-                handleRequest(req)
-                yield()
-            }
-        }
-
         Logger.debug("Proxy Request Highlighter started")
     }
 
     private fun stop() {
-        pollingScope.cancel()
-        processingScope.cancel()
-        highlightChannel.close()
+        registration.deregister()
+        Logger.debug("Proxy Request Highlighter stopped")
     }
 
-    private suspend fun poll() {
-        while (true) {
-            delay(this.pollingDelay)
-
-            val newIdx = this.newIdx()
-            if (newIdx == this.oldIdx) continue
-
-            for (idx in this.oldIdx + 1..newIdx) {
-                highlightChannel.send(Burp.Montoya.proxy().history()[idx])
-            }
-            this.oldIdx = newIdx
-        }
+    override fun handleRequestReceived(interceptedRequest: InterceptedRequest): ProxyRequestReceivedAction {
+        return ProxyRequestReceivedAction.continueWith(interceptedRequest)
     }
 
-    private fun handleRequest(req: ProxyHttpRequestResponse) {
-        if (!Utils.isGraphQLRequest(req.finalRequest())) return
-
-        req.annotations().setHighlightColor(this.color)
-        var operationName: String? = null
-        try {
-            operationName = this.gson.fromJson(req.finalRequest().bodyToString(), JsonObject::class.java).get("operationName").asString
-        } catch (_: Exception) {
-            // Do nothing
+    /**
+     * Annotates at the "to be sent" stage, i.e. after any edits made in Proxy > Intercept, so the highlight and the
+     * operation name match the request that actually went to the server.
+     */
+    override fun handleRequestToBeSent(interceptedRequest: InterceptedRequest): ProxyRequestToBeSentAction {
+        val annotations = try {
+            annotate(interceptedRequest)
+        } catch (e: Exception) {
+            // Never let an exception escape into Burp's proxy pipeline.
+            Logger.warning("Proxy Request Highlighter failed to process a request: ${e.message}")
+            null
         }
-
-        val note: String = if (operationName.isNullOrEmpty()) {
-            "GraphQL"
+        return if (annotations != null) {
+            ProxyRequestToBeSentAction.continueWith(interceptedRequest, annotations)
         } else {
-            "GraphQL: $operationName"
+            ProxyRequestToBeSentAction.continueWith(interceptedRequest)
         }
-
-        req.annotations().setNotes(note)
     }
 
+    private fun annotate(request: InterceptedRequest): burp.api.montoya.core.Annotations? {
+        if (request.body().length() > MAX_INLINE_BODY_BYTES) return null
+        if (!Utils.mightBeGraphQLRequest(request)) return null
+        if (!Utils.isGraphQLRequest(request)) return null
+
+        val operationName = try {
+            this.gson.fromJson(request.bodyToString(), JsonObject::class.java)
+                ?.get("operationName")
+                ?.takeIf { it.isJsonPrimitive }
+                ?.asString
+        } catch (_: Exception) {
+            null
+        }
+        val note = if (operationName.isNullOrEmpty()) "GraphQL" else "GraphQL: $operationName"
+
+        val annotations = request.annotations().withHighlightColor(this.color)
+        // Don't overwrite notes added by the user or by another extension.
+        return if (annotations.notes().isNullOrEmpty()) annotations.withNotes(note) else annotations
+    }
 }

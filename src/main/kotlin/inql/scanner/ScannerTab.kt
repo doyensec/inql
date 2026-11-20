@@ -95,7 +95,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     private var bruteforcerJob: Job? = null
     private var mergeJob: Job? = null
     private var verificationJob: Job? = null
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var scanJob: Job? = null
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var recoverSchemaOnRestore = false
 
     var url: String
@@ -155,6 +156,7 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
     }
 
     fun cancel() {
+        scanJob?.cancel()
         bruteforcerJob?.cancel()
         verificationJob?.cancel()
         this.scanConfigView.setBusy(false)
@@ -207,7 +209,8 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         if (this.scanConfigView.verifyAndReturnUrl() == null) return
         this.normalizeHeaders()
         this.scanConfigView.setBusy(true)
-        CoroutineScope(Dispatchers.IO).launch {
+        scanJob?.cancel()
+        scanJob = coroutineScope.launch {
             this@ScannerTab.analyze()
         }
     }
@@ -651,9 +654,14 @@ class ScannerTab(val scanner: Scanner, val id: Int) : JPanel(CardLayout()), Save
         return hosts
     }
 
-    fun onClose() {
+    /** Cancels all running work and the coroutine scope without touching saved data. Called on extension unload. */
+    fun stop() {
         cancel()
         coroutineScope.cancel()
+    }
+
+    fun onClose() {
+        stop()
         scanResultsView.release()
         scanner.onTabClosed(this)
         if (scanResults.isNotEmpty()) {

@@ -24,6 +24,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.swing.Swing
@@ -53,7 +55,7 @@ import kotlin.coroutines.coroutineContext
 
 class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListener {
 
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var scanJob: Job? = null
     @Volatile private var scanGeneration = 0
 
@@ -342,6 +344,12 @@ class AttackVectorScanner(private val inql: InQL) : BorderPanel(), ActionListene
             applyCancelledScanState()
             setScanning(false)
         }
+    }
+
+    /** Cancels any running scan and the coroutine scope. Called when the extension is unloaded. */
+    fun stop() {
+        scanJob?.cancel()
+        coroutineScope.cancel()
     }
 
     private fun applyCancelledScanState() {

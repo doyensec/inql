@@ -2,17 +2,49 @@ package inql
 
 import burp.Burp
 import burp.api.montoya.core.Marker
+import burp.api.montoya.http.Http
 import burp.api.montoya.http.message.HttpRequestResponse
+import burp.api.montoya.http.message.requests.HttpRequest
 import burp.api.montoya.scanner.AuditResult
 import burp.api.montoya.scanner.ConsolidationAction
 import burp.api.montoya.scanner.ScanCheck
+import burp.api.montoya.scanner.Scanner
+import burp.api.montoya.scanner.scancheck.ActiveScanCheck
+import burp.api.montoya.scanner.scancheck.PassiveScanCheck
+import burp.api.montoya.scanner.scancheck.ScanCheckType
 import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint
 import burp.api.montoya.scanner.audit.issues.AuditIssue
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity
 
-class BurpScannerCheck : ScanCheck {
+/**
+ * GraphQL detection checks for Burp Scanner.
+ *
+ * - Passive check ([Passive], [ScanCheckType.PER_REQUEST]): looks for GraphQL / GraphQL console markers in responses.
+ * - Active check ([Active], [ScanCheckType.PER_HOST]): requests a fixed list of well-known GraphQL paths and runs the
+ *   passive check on the responses. The probed paths don't depend on the insertion point, so it runs once per host.
+ *
+ * On Burp versions without the typed scan check API (before 2025.6) [register] falls back to the deprecated
+ * `registerScanCheck` with [Legacy].
+ */
+class BurpScannerCheck private constructor() {
     companion object {
+        private const val PASSIVE_CHECK_NAME = "InQL: GraphQL technology and console detection"
+        private const val ACTIVE_CHECK_NAME = "InQL: GraphQL endpoint discovery"
+
+        /** Registers the passive and active checks with Burp Scanner. */
+        @Suppress("DEPRECATION")
+        fun register(scanner: Scanner) {
+            val checks = BurpScannerCheck()
+            try {
+                checks.registerTyped(scanner)
+            } catch (e: LinkageError) {
+                // NoSuchMethodError / NoClassDefFoundError: Burp predates the typed scan check API (2025.6).
+                Logger.debug("Typed scan check API unavailable, using legacy registerScanCheck: ${e.message}")
+                scanner.registerScanCheck(checks.Legacy())
+            }
+        }
+
         val TECH_CHECKS = arrayOf(
             """{"data":{"__schema":{""",
             "graphql-ws",
@@ -56,27 +88,30 @@ class BurpScannerCheck : ScanCheck {
         return matches
     }
 
-    override fun activeAudit(
+    private fun activeAudit(
         baseRequestResponse: HttpRequestResponse,
-        auditInsertionPoint: AuditInsertionPoint,
+        sendRequest: (HttpRequest) -> HttpRequestResponse,
     ): AuditResult {
         val issues = ArrayList<AuditIssue>()
 
-        if (baseRequestResponse.statusCode() !in 200..299) return AuditResult.auditResult()
-
+        // No status check on the base response: the probes only replace the path, so they are meaningful whatever
+        // the base request returned. With PER_HOST this runs once per host, so skipping a non-2xx base request
+        // would skip the whole host. Each probe's own response is still filtered for 2xx by passiveAudit().
         for (url in URLS) {
             // replace the path inside the old bytearray for the new request
             val newReq = baseRequestResponse.request().withPath(url)
-            val result = Burp.Montoya.http().sendRequest(newReq)
+            val result = sendRequest(newReq)
             issues.addAll(this.passiveAudit(result).auditIssues())
         }
         return AuditResult.auditResult(issues)
     }
 
-    override fun passiveAudit(baseRequestResponse: HttpRequestResponse): AuditResult {
+    private fun passiveAudit(baseRequestResponse: HttpRequestResponse): AuditResult {
         val issues = ArrayList<AuditIssue>()
 
-        if (baseRequestResponse.statusCode() !in 200..299) return AuditResult.auditResult(issues)
+        if (baseRequestResponse.response() == null || baseRequestResponse.response().statusCode() !in 200..299) {
+            return AuditResult.auditResult(issues)
+        }
 
         for (check in TECH_CHECKS) {
             // look for matches of our passive check grep string
@@ -92,7 +127,7 @@ class BurpScannerCheck : ScanCheck {
                         GraphQL supports reading, writing (mutating) and subscribing to changes to data (realtime updates).
                         """.trimIndent(),
                         "<ul><li><a href='https://graphql.org/'>GraphQL</a></li></ul>",
-                        baseRequestResponse.url(),
+                        baseRequestResponse.request().url(),
                         AuditIssueSeverity.INFORMATION,
                         AuditIssueConfidence.FIRM,
                         "Not posing any imminent security risk.",
@@ -127,7 +162,7 @@ class BurpScannerCheck : ScanCheck {
                         <pre>  );</pre></br>
                         <pre>}</pre>
                         """.trimIndent(),
-                        baseRequestResponse.url(),
+                        baseRequestResponse.request().url(),
                         AuditIssueSeverity.LOW,
                         AuditIssueConfidence.FIRM,
                         "Not posing any imminent security risk.",
@@ -147,7 +182,8 @@ class BurpScannerCheck : ScanCheck {
         return AuditResult.auditResult(issues)
     }
 
-    override fun consolidateIssues(newIssue: AuditIssue, existingIssue: AuditIssue): ConsolidationAction {
+    /** Reports each issue once per host:port. */
+    private fun consolidate(existingIssue: AuditIssue, newIssue: AuditIssue): ConsolidationAction {
         return if (existingIssue.httpService().host() == newIssue.httpService().host() &&
             existingIssue.httpService().port() == newIssue.httpService().port()
         ) {
@@ -155,5 +191,49 @@ class BurpScannerCheck : ScanCheck {
         } else {
             ConsolidationAction.KEEP_BOTH
         }
+    }
+
+    private inner class Passive : PassiveScanCheck {
+        override fun checkName(): String = PASSIVE_CHECK_NAME
+
+        override fun doCheck(baseRequestResponse: HttpRequestResponse): AuditResult =
+            passiveAudit(baseRequestResponse)
+
+        override fun consolidateIssues(existingIssue: AuditIssue, newIssue: AuditIssue): ConsolidationAction =
+            consolidate(existingIssue, newIssue)
+    }
+
+    private inner class Active : ActiveScanCheck {
+        override fun checkName(): String = ACTIVE_CHECK_NAME
+
+        override fun doCheck(
+            baseRequestResponse: HttpRequestResponse,
+            insertionPoint: AuditInsertionPoint?,
+            http: Http,
+        ): AuditResult = activeAudit(baseRequestResponse) { http.sendRequest(it) }
+
+        override fun consolidateIssues(existingIssue: AuditIssue, newIssue: AuditIssue): ConsolidationAction =
+            consolidate(existingIssue, newIssue)
+    }
+
+    /** Adapter for Burp versions that only support the deprecated [Scanner.registerScanCheck]. */
+    @Suppress("DEPRECATION")
+    private inner class Legacy : ScanCheck {
+        override fun activeAudit(
+            baseRequestResponse: HttpRequestResponse,
+            auditInsertionPoint: AuditInsertionPoint,
+        ): AuditResult = activeAudit(baseRequestResponse) { Burp.Montoya.http().sendRequest(it) }
+
+        override fun passiveAudit(baseRequestResponse: HttpRequestResponse): AuditResult =
+            this@BurpScannerCheck.passiveAudit(baseRequestResponse)
+
+        // Note: the legacy interface passes (newIssue, existingIssue).
+        override fun consolidateIssues(newIssue: AuditIssue, existingIssue: AuditIssue): ConsolidationAction =
+            consolidate(existingIssue, newIssue)
+    }
+
+    private fun registerTyped(scanner: Scanner) {
+        scanner.registerPassiveScanCheck(Passive(), ScanCheckType.PER_REQUEST)
+        scanner.registerActiveScanCheck(Active(), ScanCheckType.PER_HOST)
     }
 }
