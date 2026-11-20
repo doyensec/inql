@@ -1,5 +1,7 @@
 package inql.schema.corrections
 
+import burp.api.montoya.core.ByteArray
+
 /**
  * Parses high-confidence GraphQL validation hints such as unknown-type "Did you mean" messages.
  */
@@ -13,6 +15,15 @@ object GraphQLTypeSuggestionParser {
         """Unknown\s+type\s+\\?["']?(?<wrong>[_A-Za-z][_0-9A-Za-z]*)\\?["']?\s*\.?\s*Did you mean\s+\\?["']?(?<suggested>[_A-Za-z][_0-9A-Za-z]*)\\?["']?\??""",
         RegexOption.IGNORE_CASE,
     )
+
+    /**
+     * Cheap check that never decodes or parses the body, so callers on the UI thread can skip the full JSON parse
+     * when it returns `false`.
+     */
+    fun mightContainTypeRenameSuggestions(responseBody: ByteArray): Boolean {
+        // Only "mean" is searched: the JSON body may encode the spaces of "Did you mean" (e.g. as \u0020).
+        return responseBody.length() > 0 && responseBody.indexOf("mean", false) >= 0
+    }
 
     fun parseTypeRenameSuggestions(responseBody: String?): List<TypeRenameSuggestion> {
         return GraphQLErrorResponseParser.errorMessages(responseBody)
